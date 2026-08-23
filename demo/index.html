@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Deliberately hostile host page (embeddable-widget skill: "Testing" - "a plain HTML file with one
+  script tag, deliberately styled hostilely to prove isolation"). Every rule below exists to break
+  a widget that leaks style, pollutes globals, or blocks on load - if the chat bubble in the corner
+  still opens, still looks right, and this page's own look is still exactly this ugly, isolation
+  holds.
+
+  Serve this directory so `Origin` is real and cross-origin against the API (`5-01`'s per-site
+  CORS), not `file://`: the demo site's own AllowedOrigins (ago-deploy/seed/create-demo-tenant.sh)
+  is exactly `http://localhost:8080`, so serve from that port, e.g. `npx serve -l 8080 demo`.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hostile host page - AGO Chat widget demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      /* Global resets and !important rules a real shop's stylesheet might carry - the exact kind
+         of thing Shadow DOM must keep out of the widget. */
+      * {
+        box-sizing: content-box !important;
+        font-family: "Comic Sans MS", cursive !important;
+      }
+
+      body {
+        margin: 0;
+        background: repeating-linear-gradient(45deg, #ffef00, #ffef00 10px, #ff00aa 10px, #ff00aa 20px);
+        color: lime !important;
+        font-size: 22px !important;
+        line-height: 3 !important;
+      }
+
+      button {
+        background: red !important;
+        color: yellow !important;
+        border: 5px dashed blue !important;
+        font-size: 30px !important;
+        text-transform: uppercase !important;
+      }
+
+      div {
+        border: 3px solid magenta !important;
+        padding: 12px !important;
+      }
+
+      h1,
+      p {
+        text-shadow: 3px 3px 0 red, -3px -3px 0 blue !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>A very normal shop</h1>
+    <p>
+      This page exists to be a bad neighbour: global element selectors, <code>!important</code>
+      everywhere, a colliding global named <code>AgoChat</code>, and a fake <code>jQuery</code>-style
+      <code>$</code> function. If the chat bubble in the corner still renders correctly and this
+      text is still exactly this ugly, the widget's isolation holds.
+    </p>
+    <div>
+      <button type="button" onclick="alert('host page button - unrelated to the widget')">
+        Host page's own button
+      </button>
+    </div>
+
+    <script>
+      // A fake global some other host-page script might define - the widget must never touch it,
+      // call it, or overwrite it (embeddable-widget skill: "never touch window.$, prototypes, or
+      // existing globals").
+      window.$ = () => {
+        throw new Error("the widget must never call the host page's own $ function");
+      };
+    </script>
+
+    <!--
+      The same embed snippet, included twice - a real, common shop mistake (a snippet pasted into
+      both a header partial and a page template). index.ts's "already embedded" guard checks
+      `window.AgoChat` before doing anything else, so the second tag's execution is a no-op: one
+      widget, not two fighting over the same Shadow DOM host and localStorage keys.
+    -->
+    <script src="../dist/ago-chat.js" data-site="demo_site" data-api="http://localhost:5009" async></script>
+    <script src="../dist/ago-chat.js" data-site="demo_site" data-api="http://localhost:5009" async></script>
+  </body>
+</html>

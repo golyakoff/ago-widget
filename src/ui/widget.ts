@@ -1,0 +1,285 @@
+import type { MessageDto } from "../protocol/types.js";
+import type { WidgetConfig } from "../config.js";
+import { WidgetStorage } from "../storage.js";
+import { getOrCreateVisitorSession } from "../session.js";
+import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
+import { newClientMessageId } from "../protocol/dedup.js";
+import { createShadowHost } from "./shadow-root.js";
+import { FocusTrap } from "./focus-trap.js";
+import { logWidgetError } from "../errors.js";
+
+interface PendingSend {
+  clientMessageId: string;
+  bubble: HTMLDivElement;
+}
+
+/**
+ * Assembles the widget's whole visible surface inside one Shadow DOM root. This is intentionally
+ * one class rather than a component framework: the panel has a fixed, small set of views (closed,
+ * connecting, open) and pulling in a UI framework's runtime for that would blow the bundle budget
+ * a hand-rolled ~200 lines of DOM code does not (embeddable-widget skill's Bundle budget rule).
+ */
+export class ChatWidget {
+  private readonly storage: WidgetStorage;
+  private readonly host: HTMLDivElement;
+  private readonly root: ShadowRoot;
+  private readonly panel: HTMLDivElement;
+  private readonly toggle: HTMLButtonElement;
+  private readonly closeButton: HTMLButtonElement;
+  private readonly messages: HTMLDivElement;
+  private readonly status: HTMLDivElement;
+  private readonly input: HTMLTextAreaElement;
+  private readonly sendButton: HTMLButtonElement;
+  private readonly focusTrap: FocusTrap;
+
+  private connection: VisitorConnection | null = null;
+  private connectPromise: Promise<void> | null = null;
+  private conversationId: string | null = null;
+  private isOpen = false;
+  private isConnected = false;
+  private readonly pendingSends: PendingSend[] = [];
+
+  constructor(private readonly config: WidgetConfig) {
+    this.storage = new WidgetStorage(config.siteKey);
+    const { host, root } = createShadowHost();
+    this.host = host;
+    this.root = root;
+
+    const container = document.createElement("div");
+    container.className = "ago-root";
+
+    this.toggle = document.createElement("button");
+    this.toggle.type = "button";
+    this.toggle.className = "ago-toggle";
+    this.toggle.setAttribute("aria-haspopup", "dialog");
+    this.toggle.setAttribute("aria-expanded", "false");
+    this.toggle.setAttribute("aria-label", "Open chat");
+    this.toggle.textContent = "💬";
+    this.toggle.addEventListener("click", () => this.toggleOpen());
+
+    this.panel = document.createElement("div");
+    this.panel.className = "ago-panel";
+    this.panel.setAttribute("role", "dialog");
+    this.panel.setAttribute("aria-modal", "false");
+    this.panel.setAttribute("aria-label", "Chat");
+    this.panel.hidden = true;
+    this.panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.close();
+      }
+    });
+
+    const header = document.createElement("div");
+    header.className = "ago-header";
+    const title = document.createElement("h1");
+    title.textContent = "Chat with us";
+    this.closeButton = document.createElement("button");
+    this.closeButton.type = "button";
+    this.closeButton.className = "ago-close";
+    this.closeButton.setAttribute("aria-label", "Close chat");
+    this.closeButton.textContent = "✕";
+    this.closeButton.addEventListener("click", () => this.close());
+    header.append(title, this.closeButton);
+
+    this.messages = document.createElement("div");
+    this.messages.className = "ago-messages";
+    // aria-live for incoming messages (embeddable-widget skill's accessibility baseline) -
+    // "polite" so a message does not interrupt whatever the visitor is doing right now.
+    this.messages.setAttribute("aria-live", "polite");
+    this.messages.setAttribute("role", "log");
+
+    this.status = document.createElement("div");
+    this.status.className = "ago-status";
+    this.status.textContent = "Connecting…";
+
+    const composer = document.createElement("form");
+    composer.className = "ago-composer";
+    composer.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.sendCurrentMessage();
+    });
+
+    this.input = document.createElement("textarea");
+    this.input.className = "ago-input";
+    this.input.rows = 1;
+    this.input.setAttribute("aria-label", "Message");
+    this.input.placeholder = "Type a message…";
+    this.input.disabled = true;
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        this.sendCurrentMessage();
+      }
+    });
+    this.input.addEventListener("input", () => this.updateSendButtonEnabled());
+
+    this.sendButton = document.createElement("button");
+    this.sendButton.type = "submit";
+    this.sendButton.className = "ago-send";
+    this.sendButton.textContent = "Send";
+    this.sendButton.disabled = true;
+
+    composer.append(this.input, this.sendButton);
+    this.panel.append(header, this.messages, this.status, composer);
+    container.append(this.panel, this.toggle);
+    this.root.appendChild(container);
+
+    this.focusTrap = new FocusTrap(this.panel);
+  }
+
+  mount(parent: HTMLElement): void {
+    parent.appendChild(this.host);
+  }
+
+  private toggleOpen(): void {
+    if (this.isOpen) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+
+  private open(): void {
+    this.isOpen = true;
+    this.panel.hidden = false;
+    this.toggle.setAttribute("aria-expanded", "true");
+    this.toggle.setAttribute("aria-label", "Close chat");
+    this.focusTrap.activate();
+    this.closeButton.focus();
+
+    if (this.connectPromise === null) {
+      this.connectPromise = this.connect();
+    }
+  }
+
+  private close(): void {
+    this.isOpen = false;
+    this.panel.hidden = true;
+    this.toggle.setAttribute("aria-expanded", "false");
+    this.toggle.setAttribute("aria-label", "Open chat");
+    this.focusTrap.deactivate();
+    this.toggle.focus();
+  }
+
+  /** Lazy-init on first open, not on page load (embeddable-widget skill: "nothing heavy before
+   * first interaction"). Session + connection failures degrade to a status message, never a throw
+   * that could escape to the host page. */
+  private async connect(): Promise<void> {
+    try {
+      const session = await getOrCreateVisitorSession(this.config, this.storage);
+      const connection = new VisitorConnection(this.config, session, this.storage);
+      connection.onMessage((message) => this.handleIncoming(message));
+      connection.onStateChange((state) => this.renderConnectionState(state));
+      this.connection = connection;
+
+      const joinResult = await connection.start();
+      this.conversationId = joinResult.conversationId;
+      for (const message of joinResult.history) {
+        this.appendMessageBubble(message);
+      }
+
+      this.renderConnectionState("connected");
+    } catch (error) {
+      logWidgetError(error);
+      this.status.textContent = "Chat is unavailable right now. Please try again later.";
+    }
+  }
+
+  private renderConnectionState(state: ConnectionState): void {
+    this.isConnected = state === "connected";
+    this.input.disabled = !this.isConnected;
+    this.updateSendButtonEnabled();
+    this.status.textContent =
+      state === "connecting"
+        ? "Connecting…"
+        : state === "reconnecting"
+          ? "Reconnecting…"
+          : state === "disconnected"
+            ? "Disconnected. Trying to reconnect…"
+            : "";
+  }
+
+  /** Re-evaluated on every keystroke, not just once at connect time - a textarea starts empty
+   * and the button must react to the visitor actually typing something (found live, 5-09: the
+   * button was otherwise permanently disabled since nothing re-ran this check after connect). */
+  private updateSendButtonEnabled(): void {
+    this.sendButton.disabled = !this.isConnected || this.input.value.trim().length === 0;
+  }
+
+  private sendCurrentMessage(): void {
+    const body = this.input.value.trim();
+    if (body.length === 0 || this.connection === null || this.conversationId === null) {
+      return;
+    }
+
+    this.input.value = "";
+    this.sendButton.disabled = true;
+
+    const clientMessageId = newClientMessageId();
+    const bubble = this.renderBubble("Visitor", body, "sending");
+    this.pendingSends.push({ clientMessageId, bubble });
+
+    this.connection
+      .sendMessage(this.conversationId, body)
+      .then(() => {
+        bubble.classList.remove("ago-message--pending");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof NotConnectedError) {
+          this.markBubbleFailed(bubble, "Not sent - reconnecting. It will not be retried automatically.");
+        } else if (error instanceof SendOutcomeUnknownError) {
+          this.markBubbleFailed(bubble, "Not sure this was sent - the connection dropped mid-request.");
+        } else {
+          this.markBubbleFailed(bubble, "Failed to send.");
+        }
+
+        logWidgetError(error);
+      })
+      .finally(() => {
+        this.updateSendButtonEnabled();
+      });
+  }
+
+  private markBubbleFailed(bubble: HTMLDivElement, message: string): void {
+    bubble.classList.remove("ago-message--pending");
+    const note = document.createElement("div");
+    note.className = "ago-status";
+    note.textContent = message;
+    bubble.appendChild(note);
+  }
+
+  /**
+   * A `MessageDto` from this visitor reconciles the oldest pending optimistic bubble instead of
+   * appending a second one - see `protocol/dedup.ts`'s `newClientMessageId` doc comment for why
+   * this widget cannot yet correlate the two through the wire protocol itself. Any other visitor
+   * DTO (no pending entry - e.g. sent from another tab of the same visitor) and any operator DTO
+   * render as a genuinely new incoming message.
+   */
+  private handleIncoming(message: MessageDto): void {
+    if (message.authorKind === "Visitor" && this.pendingSends.length > 0) {
+      const pending = this.pendingSends.shift()!;
+      pending.bubble.remove();
+    }
+
+    this.appendMessageBubble(message);
+  }
+
+  private appendMessageBubble(message: MessageDto): void {
+    this.renderBubble(message.authorKind, message.body);
+  }
+
+  private renderBubble(authorKind: "Visitor" | "Operator", body: string, state?: "sending"): HTMLDivElement {
+    const bubble = document.createElement("div");
+    bubble.className = `ago-message ago-message--${authorKind.toLowerCase()}`;
+    if (state === "sending") {
+      bubble.classList.add("ago-message--pending");
+    }
+
+    // textContent, never innerHTML: `body` is untrusted content typed by the other participant
+    // (a visitor's or operator's own keyboard input), never treated as markup.
+    bubble.textContent = body;
+    this.messages.appendChild(bubble);
+    this.messages.scrollTop = this.messages.scrollHeight;
+    return bubble;
+  }
+}

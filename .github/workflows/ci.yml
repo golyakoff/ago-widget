@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # There is no real hosted deployment for this portfolio project to point a production
+      # bundle at (build.mjs's own guard refuses to guess one) - CI builds against the local
+      # cluster's own API origin, the same one docs/runbooks/local-dev.md uses, purely to prove
+      # the build succeeds and stays under the bundle-size budget on every push.
+      - name: Build
+        run: npm run build
+        env:
+          AGO_API_BASE_URL: "http://localhost:5009"

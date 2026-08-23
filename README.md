@@ -23,6 +23,8 @@ src/
                     degrades to "no widget" - never a broken host page
   config.ts         data-site / data-api parsing
   session.ts        POST /api/v1/visitor-sessions - rate-limit (429/Retry-After) handling
+  attachments.ts     presign/upload/confirm/download (5-10) - courtesy validation, real
+                     XHR upload progress, never a thrown exception on failure
   storage.ts         namespaced localStorage, scoped per site
   connection.ts      @microsoft/signalr wrapper: resume-by-sequence, jittered reconnect,
                      the sender's-own-echo dedup
@@ -50,10 +52,11 @@ built bundle, pointed at a different API origin without a second build.
 
 ## Bundle size
 
-**18.4 KB gzipped** (68.4 KB raw, minified), measured 2026-08-23 against a clean build of this
-commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`). `build.mjs` enforces a 45 KB
-gzipped budget on every build (CI included) - real headroom over the measured number, not a guess
-made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
+**19.9 KB gzipped** (73.7 KB raw, minified), measured 2026-08-23 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-09`'s 18.4 KB now that
+attachments (`5-10`) are included. `build.mjs` enforces a 45 KB gzipped budget on every build (CI
+included) - real headroom over the measured number, not a guess made in advance (`embeddable-widget`
+skill: "a hard ceiling, checked on every build").
 
 `@microsoft/signalr` is the only dependency and the large majority of this size. The `Open
 questions` section of `../ago-root/docs/backlog/5-09-widget-bootstrap-and-messaging.md` called for
@@ -72,11 +75,14 @@ The demo site (`ago-deploy/seed/create-demo-tenant.sh`) only allows the origin
 ```bash
 cd ago-widget
 AGO_API_BASE_URL=http://localhost:5009 npm run build
-npx serve -l 8080 demo
+npx serve -l 8080 .
 ```
 
-With the local cluster up (`../ago-root/docs/runbooks/local-dev.md`) and the demo tenant seeded,
-open `http://localhost:8080` - the chat bubble in the corner is the widget, running next to a page
+The whole repository, not just `demo/` - `demo/index.html` references `../dist/ago-chat.js`, and a
+static server rooted at `demo/` alone cannot serve a path outside its own root (found live: `serve -l
+8080 demo` 404s on the bundle). With the local cluster up
+(`../ago-root/docs/runbooks/local-dev.md`) and the demo tenant seeded, open
+`http://localhost:8080/demo/` - the chat bubble in the corner is the widget, running next to a page
 built specifically to break it (colliding CSS, a colliding `$` global, the same embed snippet
 included twice).
 
@@ -88,8 +94,16 @@ npm run lint
 npm test
 ```
 
-Unit tests cover the protocol layer only (`protocol/*.test.ts`, `storage.test.ts`) - sequence
-handling, the sender's-own-echo dedup, and jittered backoff, matching the skill's own testing bar.
-`connection.ts` and `ui/widget.ts` are exercised live against the demo page instead of mocked: a
-real `HubConnection` against a real `Ago.Chat.Api` is closer to what actually ships than a mocked
-SignalR client would prove.
+Unit tests cover the protocol layer only (`protocol/*.test.ts`, `storage.test.ts`,
+`attachments.test.ts`'s courtesy validation) - sequence handling, the sender's-own-echo dedup,
+jittered backoff, and the client-side size/type check, matching the skill's own testing bar.
+`connection.ts`, `ui/widget.ts`, and `attachments.ts`'s upload flow are exercised live against the
+demo page instead of mocked: a real `HubConnection` against a real `Ago.Chat.Api`, a real presigned
+upload against real MinIO, is closer to what actually ships than a mocked client would prove.
+
+**Known gap, not this repository's bug**: an operator-authored message (real-time push, not the
+widget's own send) does not reliably arrive live right now - `../ago-root/docs/backlog/5-11-fix-competing-consumer-queue-collision.md`
+has the diagnosis (a shared-queue bug in `Ago.Platform.Messaging.RabbitMq`). The widget's own
+rendering code is proven correct regardless (`5-10`'s own backlog file has the detail: the same
+messages render correctly once caught up via the resume-by-sequence path), but a live two-party demo
+against an unpatched cluster may show a delay until reconnect for the operator-authored side.

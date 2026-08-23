@@ -128,6 +128,32 @@ export const widgetStyles = /* css */ `
     border-bottom-left-radius: 0.125rem;
   }
 
+  .ago-message--system {
+    align-self: center;
+    background: transparent;
+    color: #6b7280;
+    font-size: 0.8125rem;
+    text-align: center;
+    max-width: 100%;
+  }
+
+  .ago-attachment-link {
+    display: block;
+    margin-top: 0.375rem;
+    color: inherit;
+  }
+
+  .ago-message--visitor .ago-attachment-link {
+    color: #fff;
+  }
+
+  .ago-attachment-image {
+    display: block;
+    max-width: 100%;
+    max-height: 12rem;
+    border-radius: 0.5rem;
+  }
+
   .ago-status {
     font-size: 0.8125rem;
     color: #6b7280;
@@ -161,8 +187,33 @@ export const widgetStyles = /* css */ `
     font: inherit;
   }
 
-  .ago-send:disabled {
+  .ago-send:disabled,
+  .ago-attach:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .ago-attach {
+    border: none;
+    background: transparent;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    line-height: 1;
+  }
+
+  .ago-file-input {
+    /* Visually hidden, not display:none - triggered via the visible ago-attach button, but a
+       hidden native input stays discoverable to assistive tech this way rather than vanishing
+       outright. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 `;

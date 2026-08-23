@@ -37,3 +37,20 @@ export interface ProblemDetails {
   status?: number;
   traceId?: string;
 }
+
+/** `POST /api/v1/conversations/{id}/attachments` (file-storage.md's Upload flow, steps 1-2). */
+export interface CreateAttachmentResponse {
+  attachmentId: string;
+  uploadUrl: string;
+  expiresAt: string;
+}
+
+/** `GET /api/v1/attachments/{id}` (`5-10`: gained `contentType`/`thumbnailUrl` alongside the
+ * presigned `url` a widget/console client already needed to decide how to render an attachment
+ * without guessing from the URL's own file extension). */
+export interface AttachmentDownloadInfo {
+  url: string;
+  contentType: string;
+  thumbnailUrl: string | null;
+  expiresAt: string;
+}

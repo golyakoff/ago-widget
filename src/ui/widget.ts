@@ -1,9 +1,10 @@
 import type { MessageDto } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
-import { WidgetStorage } from "../storage.js";
+import { WidgetStorage, type VisitorSession } from "../storage.js";
 import { getOrCreateVisitorSession } from "../session.js";
 import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
 import { newClientMessageId } from "../protocol/dedup.js";
+import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError } from "../errors.js";
@@ -30,10 +31,13 @@ export class ChatWidget {
   private readonly status: HTMLDivElement;
   private readonly input: HTMLTextAreaElement;
   private readonly sendButton: HTMLButtonElement;
+  private readonly attachButton: HTMLButtonElement;
+  private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
 
   private connection: VisitorConnection | null = null;
   private connectPromise: Promise<void> | null = null;
+  private session: VisitorSession | null = null;
   private conversationId: string | null = null;
   private isOpen = false;
   private isConnected = false;
@@ -119,7 +123,30 @@ export class ChatWidget {
     this.sendButton.textContent = "Send";
     this.sendButton.disabled = true;
 
-    composer.append(this.input, this.sendButton);
+    // A native file picker, not a drag-and-drop zone or a custom widget - the skill's
+    // accessibility baseline (keyboard reachable) is free with `<input type="file">` and would
+    // need to be rebuilt by hand for anything fancier, for a feature this item does not ask for.
+    this.fileInput = document.createElement("input");
+    this.fileInput.type = "file";
+    this.fileInput.className = "ago-file-input";
+    this.fileInput.accept = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+    this.fileInput.addEventListener("change", () => {
+      const file = this.fileInput.files?.[0];
+      this.fileInput.value = ""; // same file picked twice in a row still fires `change`
+      if (file) {
+        this.handleFileSelected(file);
+      }
+    });
+
+    this.attachButton = document.createElement("button");
+    this.attachButton.type = "button";
+    this.attachButton.className = "ago-attach";
+    this.attachButton.setAttribute("aria-label", "Attach a file");
+    this.attachButton.textContent = "📎";
+    this.attachButton.disabled = true;
+    this.attachButton.addEventListener("click", () => this.fileInput.click());
+
+    composer.append(this.attachButton, this.fileInput, this.input, this.sendButton);
     this.panel.append(header, this.messages, this.status, composer);
     container.append(this.panel, this.toggle);
     this.root.appendChild(container);
@@ -167,6 +194,7 @@ export class ChatWidget {
   private async connect(): Promise<void> {
     try {
       const session = await getOrCreateVisitorSession(this.config, this.storage);
+      this.session = session;
       const connection = new VisitorConnection(this.config, session, this.storage);
       connection.onMessage((message) => this.handleIncoming(message));
       connection.onStateChange((state) => this.renderConnectionState(state));
@@ -188,6 +216,7 @@ export class ChatWidget {
   private renderConnectionState(state: ConnectionState): void {
     this.isConnected = state === "connected";
     this.input.disabled = !this.isConnected;
+    this.attachButton.disabled = !this.isConnected;
     this.updateSendButtonEnabled();
     this.status.textContent =
       state === "connecting"
@@ -208,19 +237,32 @@ export class ChatWidget {
 
   private sendCurrentMessage(): void {
     const body = this.input.value.trim();
-    if (body.length === 0 || this.connection === null || this.conversationId === null) {
+    if (body.length === 0) {
       return;
     }
 
     this.input.value = "";
-    this.sendButton.disabled = true;
+    this.updateSendButtonEnabled();
+    this.dispatchSend(body);
+  }
 
-    const clientMessageId = newClientMessageId();
+  private dispatchSend(body: string, attachmentId?: string): void {
+    if (this.connection === null || this.conversationId === null) {
+      return;
+    }
+
+    const connection = this.connection;
+    const conversationId = this.conversationId;
+
     const bubble = this.renderBubble("Visitor", body, "sending");
-    this.pendingSends.push({ clientMessageId, bubble });
+    if (attachmentId) {
+      this.renderAttachmentInto(bubble, attachmentId);
+    }
 
-    this.connection
-      .sendMessage(this.conversationId, body)
+    this.pendingSends.push({ clientMessageId: newClientMessageId(), bubble });
+
+    connection
+      .sendMessage(conversationId, body, attachmentId)
       .then(() => {
         bubble.classList.remove("ago-message--pending");
       })
@@ -249,6 +291,61 @@ export class ChatWidget {
   }
 
   /**
+   * file-storage.md's Upload flow, steps 1-4, driven from the widget: presign, PUT with real
+   * progress, confirm - each step's own failure surfaces as a visible bubble state, never a thrown
+   * exception (embeddable-widget skill: "never break the host page"). Only step 5 (send the
+   * message) reuses `dispatchSend` - an attachment is just a message that happens to carry one.
+   */
+  private handleFileSelected(file: File): void {
+    const rejection = courtesyValidate(file);
+    if (rejection) {
+      this.renderSystemNote(rejection);
+      return;
+    }
+
+    if (this.connection === null || this.conversationId === null || this.session === null) {
+      return;
+    }
+
+    const conversationId = this.conversationId;
+    const session = this.session;
+    const body = this.input.value.trim() || file.name;
+    this.input.value = "";
+    this.updateSendButtonEnabled();
+
+    const bubble = this.renderBubble("Visitor", body, "sending");
+    const progress = document.createElement("div");
+    progress.className = "ago-status";
+    progress.textContent = "Uploading… 0%";
+    bubble.appendChild(progress);
+
+    this.uploadThenSend(file, body, conversationId, session, bubble, progress);
+  }
+
+  private uploadThenSend(
+    file: File,
+    body: string,
+    conversationId: string,
+    session: VisitorSession,
+    bubble: HTMLDivElement,
+    progress: HTMLDivElement,
+  ): void {
+    (async () => {
+      const created = await createAttachment(this.config, session.token, conversationId, file);
+      await uploadToPresignedUrl(created.uploadUrl, file, (fraction) => {
+        progress.textContent = `Uploading… ${Math.round(fraction * 100)}%`;
+      });
+      await confirmAttachment(this.config, session.token, created.attachmentId);
+
+      bubble.remove();
+      this.dispatchSend(body, created.attachmentId);
+    })().catch((error: unknown) => {
+      this.markBubbleFailed(bubble, "Couldn't send the attachment.");
+      logWidgetError(error);
+    });
+  }
+
+  /**
    * A `MessageDto` from this visitor reconciles the oldest pending optimistic bubble instead of
    * appending a second one - see `protocol/dedup.ts`'s `newClientMessageId` doc comment for why
    * this widget cannot yet correlate the two through the wire protocol itself. Any other visitor
@@ -265,7 +362,10 @@ export class ChatWidget {
   }
 
   private appendMessageBubble(message: MessageDto): void {
-    this.renderBubble(message.authorKind, message.body);
+    const bubble = this.renderBubble(message.authorKind, message.body);
+    if (message.attachmentId) {
+      this.renderAttachmentInto(bubble, message.attachmentId);
+    }
   }
 
   private renderBubble(authorKind: "Visitor" | "Operator", body: string, state?: "sending"): HTMLDivElement {
@@ -281,5 +381,60 @@ export class ChatWidget {
     this.messages.appendChild(bubble);
     this.messages.scrollTop = this.messages.scrollHeight;
     return bubble;
+  }
+
+  private renderSystemNote(text: string): void {
+    const note = document.createElement("div");
+    note.className = "ago-message ago-message--system";
+    note.textContent = text;
+    this.messages.appendChild(note);
+    this.messages.scrollTop = this.messages.scrollHeight;
+  }
+
+  /**
+   * Resolves a presigned URL for `attachmentId` and appends either an inline image or a plain
+   * download link - never a thrown exception if that lookup fails (a stale/expired attachment,
+   * the API unreachable), matching this widget's whole "never break the host page" posture.
+   *
+   * Both render as an `<a target="_blank" rel="noopener noreferrer">`: opening the URL is a
+   * top-level navigation to the storage origin, not this host page's origin, so it cannot execute
+   * anything in the host page's own context regardless of file-storage.md's still-open
+   * `Content-Disposition`/CSP gap on the presigned GET itself (`file-storage.md`, "not shipped by
+   * `5-03`") - that gap is a storage-origin content-spoofing risk, out of this widget's reach to
+   * fix, and unrelated to the host page it must never break.
+   */
+  private renderAttachmentInto(bubble: HTMLDivElement, attachmentId: string): void {
+    if (this.session === null) {
+      return;
+    }
+
+    getAttachmentDownload(this.config, this.session.token, attachmentId)
+      .then((info) => {
+        const link = document.createElement("a");
+        link.href = info.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.className = "ago-attachment-link";
+
+        if (info.contentType.startsWith("image/")) {
+          const img = document.createElement("img");
+          img.className = "ago-attachment-image";
+          img.src = info.thumbnailUrl ?? info.url;
+          img.alt = "Attachment";
+          link.appendChild(img);
+        } else {
+          link.textContent = "📎 Download attachment";
+        }
+
+        bubble.appendChild(link);
+        this.messages.scrollTop = this.messages.scrollHeight;
+      })
+      .catch((error: unknown) => {
+        logWidgetError(error);
+        const note = document.createElement("div");
+        note.className = "ago-status";
+        note.textContent = "Attachment unavailable.";
+        bubble.appendChild(note);
+      });
   }
 }

@@ -18,10 +18,10 @@ export class NotConnectedError extends Error {
 }
 
 /**
- * Thrown when an invoke was actually in flight and the outcome is unknown - `VisitorHub.SendMessageAsync`
- * has no `clientMessageId` parameter yet (see `protocol/dedup.ts`'s `newClientMessageId` doc comment),
- * so the server cannot tell a genuine retry from a second, real send. Auto-retrying here risks a
- * duplicate message; the caller must decide (surface "not sure it sent" rather than silently resend).
+ * Thrown when an invoke was actually in flight and the outcome is unknown. `VisitorHub.SendMessageAsync`
+ * does dedup by `clientMessageId` server-side (`5-07`) - a same-id retry would be safe in principle -
+ * but this widget does not yet build that retry path (`ui/widget.ts`'s send failure UI surfaces "not
+ * sure it sent" rather than resending); the caller must decide instead of this class silently resending.
  */
 export class SendOutcomeUnknownError extends Error {
   constructor(cause: unknown) {
@@ -122,14 +122,30 @@ export class VisitorConnection {
    * `NotConnectedError` is safe to retry once the widget observes "connected" again - nothing was
    * sent. `SendOutcomeUnknownError` is not: see that class's doc comment for why this widget does
    * not yet have a safe way to retry that case automatically.
+   *
+   * `clientMessageId` is required, not optional: `VisitorHub.SendMessageAsync` is a 4-parameter hub
+   * method (`5-07`) and this server's SignalR dispatcher does not fill a missing trailing argument
+   * from the C# default - found live (`8-02`), omitting it here made every real send fail with a
+   * generic "error on the server", never reaching `SendVisitorMessageHandler` at all.
    */
-  async sendMessage(conversationId: string, body: string, attachmentId?: string): Promise<number> {
+  async sendMessage(
+    conversationId: string,
+    body: string,
+    clientMessageId: string,
+    attachmentId?: string,
+  ): Promise<number> {
     if (this.connection.state !== signalR.HubConnectionState.Connected) {
       throw new NotConnectedError();
     }
 
     try {
-      return await this.connection.invoke<number>("SendMessageAsync", conversationId, body, attachmentId ?? null);
+      return await this.connection.invoke<number>(
+        "SendMessageAsync",
+        conversationId,
+        body,
+        attachmentId ?? null,
+        clientMessageId,
+      );
     } catch (error) {
       if (this.connection.state !== signalR.HubConnectionState.Connected) {
         throw new SendOutcomeUnknownError(error);

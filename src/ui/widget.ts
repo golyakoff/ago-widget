@@ -259,10 +259,11 @@ export class ChatWidget {
       this.renderAttachmentInto(bubble, attachmentId);
     }
 
-    this.pendingSends.push({ clientMessageId: newClientMessageId(), bubble });
+    const clientMessageId = newClientMessageId();
+    this.pendingSends.push({ clientMessageId, bubble });
 
     connection
-      .sendMessage(conversationId, body, attachmentId)
+      .sendMessage(conversationId, body, clientMessageId, attachmentId)
       .then(() => {
         bubble.classList.remove("ago-message--pending");
       })
@@ -347,10 +348,11 @@ export class ChatWidget {
 
   /**
    * A `MessageDto` from this visitor reconciles the oldest pending optimistic bubble instead of
-   * appending a second one - see `protocol/dedup.ts`'s `newClientMessageId` doc comment for why
-   * this widget cannot yet correlate the two through the wire protocol itself. Any other visitor
-   * DTO (no pending entry - e.g. sent from another tab of the same visitor) and any operator DTO
-   * render as a genuinely new incoming message.
+   * appending a second one - by queue order, not by matching `message.clientMessageId` against the
+   * id `dispatchSend` generated (see `protocol/dedup.ts`'s `newClientMessageId` doc comment for why
+   * that's still a gap, not a wire-protocol limitation). Any other visitor DTO (no pending entry -
+   * e.g. sent from another tab of the same visitor) and any operator DTO render as a genuinely new
+   * incoming message.
    */
   private handleIncoming(message: MessageDto): void {
     if (message.authorKind === "Visitor" && this.pendingSends.length > 0) {

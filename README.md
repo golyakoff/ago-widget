@@ -32,6 +32,13 @@ src/
   ui/                Shadow DOM host, the widget's own visible surface, focus trap, styles
 demo/
   index.html         a deliberately hostile host page - see its own comments
+public-demo/
+  index.html         `8-02`'s own friendly, presentable demo page for a stranger with only a URL -
+                     not demo/'s isolation test, a different page for a different purpose
+Dockerfile           builds this bundle + public-demo/index.html into one minimal nginx image
+                     (`8-02`, `../ago-root/docs/adr/0026-*`'s "no registry, build on the VPS"
+                     image-delivery mechanism) - `../ago-deploy/k8s/build-static-images.sh` builds
+                     it, `../ago-deploy/k8s/overlays/demo/demo-shop1-static.yaml` runs it
 ```
 
 ## Building

@@ -1,0 +1,205 @@
+<!doctype html>
+<!--
+  demo-shop2's own page - a second, independent tenant seeded specifically to demonstrate live
+  tenant isolation: its own site row, its own operator, its own Keycloak login, no data shared with
+  demo-shop1 (public-demo/index.html) beyond the platform code that serves both. Visually distinct
+  on purpose - same widget bundle, different page, different site - so the isolation is visible at a
+  glance, not just true underneath.
+
+  Served from its own nginx container (Dockerfile, DEMO_PAGE_DIR=public-demo-2 build arg) at
+  https://demo-shop2.reserve-me.ru - same-origin script/page, same as demo-shop1's own page.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AGO Chat - second tenant demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #e7ecf5;
+        --muted: #9aa5b8;
+        --accent: #2fd7b0;
+        --accent-dark: #23a889;
+        --paper: #171b26;
+        --canvas: #0e1119;
+        --line: #2a3040;
+        --warn-bg: #241d0f;
+        --warn-line: #7a5d1e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--canvas);
+        line-height: 1.55;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 56px 24px 96px;
+      }
+
+      h1 {
+        font-size: 2rem;
+        margin: 0 0 8px;
+      }
+
+      .tag {
+        color: var(--muted);
+        margin: 0 0 40px;
+        font-size: 1.05rem;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 24px 28px;
+        margin-bottom: 24px;
+      }
+
+      .card h2 {
+        margin-top: 0;
+        font-size: 1.15rem;
+      }
+
+      .card ol,
+      .card ul {
+        padding-left: 1.2em;
+      }
+
+      .card li {
+        margin-bottom: 6px;
+      }
+
+      code {
+        background: #1f2532;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 0.92em;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .credential-box {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-radius: 10px;
+        padding: 18px 22px;
+      }
+
+      .credential-box dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 16px;
+        margin: 12px 0 0;
+      }
+
+      .credential-box dt {
+        color: var(--muted);
+      }
+
+      .credential-box dd {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .console-link {
+        display: inline-block;
+        margin-top: 18px;
+        background: var(--accent);
+        color: #0e1119;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .console-link:hover {
+        background: var(--accent-dark);
+      }
+
+      footer {
+        margin-top: 48px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AGO Chat - tenant 2</h1>
+      <p class="tag">
+        A second, independent shop on the same platform - its own site, its own operator login,
+        nothing shared with the other demo tenant except the code.
+      </p>
+
+      <div class="card">
+        <h2>Why this page looks different</h2>
+        <p>
+          <a href="https://demo-shop1.reserve-me.ru">demo-shop1.reserve-me.ru</a> and this page are
+          two separate <em>sites</em> in the same running deployment - the platform's actual
+          multi-tenancy boundary, not a cosmetic one. Every row either tenant's visitors or
+          operators can reach is scoped to its own site id; there is no shared conversation queue,
+          no shared operator, no way for one tenant's login to see the other's data. The different
+          color scheme here is deliberate, so that boundary is visible at a glance and not just true
+          underneath.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Try it</h2>
+        <ol>
+          <li>Open the chat bubble in the bottom-right corner of this page and send a message.</li>
+          <li>
+            Open the operator console in a new tab (or a private/incognito window - the console's
+            own Keycloak session is a cookie, so a second identity needs a separate browser context):
+            <a href="https://console.reserve-me.ru" target="_blank" rel="noopener">
+              console.reserve-me.ru</a
+            >
+            - log in with the credential below, not demo-shop1's.
+          </li>
+          <li>
+            Find your message in the queue and reply. Then check demo-shop1's own operator login in
+            your original tab or window - it will not see this conversation at all.
+          </li>
+        </ol>
+      </div>
+
+      <div class="card credential-box">
+        <h2>Operator login for this tenant (throwaway, safe to publish)</h2>
+        <p>
+          A real, working credential against the console above - deliberately public, not a leaked
+          one. It only ever grants access to this tenant's own data, never demo-shop1's.
+        </p>
+        <dl>
+          <dt>Username</dt>
+          <dd>demo-operator-2</dd>
+          <dt>Password</dt>
+          <dd>demo-operator-2-password</dd>
+        </dl>
+        <a class="console-link" href="https://console.reserve-me.ru" target="_blank" rel="noopener"
+          >Open the operator console</a
+        >
+      </div>
+
+      <footer>
+        AGO Chat is a portfolio project demonstrating backend concurrency, realtime messaging, and
+        Clean Architecture end to end - source is public. This page and the widget it embeds are
+        both built and deployed as-is from that codebase, not a mockup.
+      </footer>
+    </main>
+
+    <script src="./ago-chat.js" data-site="demo_site2" async></script>
+  </body>
+</html>

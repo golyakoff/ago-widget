@@ -29,7 +29,9 @@ src/
   connection.ts      @microsoft/signalr wrapper: resume-by-sequence, jittered reconnect,
                      the sender's-own-echo dedup
   protocol/          pure, unit-tested: backoff.ts, dedup.ts, sequence.ts, types.ts
-  ui/                Shadow DOM host, the widget's own visible surface, focus trap, styles
+  ui/                Shadow DOM host, the widget's own visible surface, focus trap, styles,
+                     appearance.ts (11-03: parses the per-site color/position the handshake
+                     returns, never trusting the wire value blindly)
 demo/
   index.html         a deliberately hostile host page - see its own comments
 public-demo/
@@ -59,11 +61,11 @@ built bundle, pointed at a different API origin without a second build.
 
 ## Bundle size
 
-**19.9 KB gzipped** (73.7 KB raw, minified), measured 2026-08-23 against a clean build of this
-commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-09`'s 18.4 KB now that
-attachments (`5-10`) are included. `build.mjs` enforces a 45 KB gzipped budget on every build (CI
-included) - real headroom over the measured number, not a guess made in advance (`embeddable-widget`
-skill: "a hard ceiling, checked on every build").
+**20.5 KB gzipped** (75.7 KB raw, minified), measured 2026-08-24 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-10`'s 19.9 KB now that
+`11-03`'s per-site appearance (color/position, applied at bootstrap) is included. `build.mjs` enforces
+a 45 KB gzipped budget on every build (CI included) - real headroom over the measured number, not a
+guess made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
 
 `@microsoft/signalr` is the only dependency and the large majority of this size. The `Open
 questions` section of `../ago-root/docs/backlog/5-09-widget-bootstrap-and-messaging.md` called for
@@ -101,12 +103,26 @@ npm run lint
 npm test
 ```
 
-Unit tests cover the protocol layer only (`protocol/*.test.ts`, `storage.test.ts`,
-`attachments.test.ts`'s courtesy validation) - sequence handling, the sender's-own-echo dedup,
-jittered backoff, and the client-side size/type check, matching the skill's own testing bar.
-`connection.ts`, `ui/widget.ts`, and `attachments.ts`'s upload flow are exercised live against the
-demo page instead of mocked: a real `HubConnection` against a real `Ago.Chat.Api`, a real presigned
-upload against real MinIO, is closer to what actually ships than a mocked client would prove.
+Unit tests cover the protocol/pure-logic layer (`protocol/*.test.ts`, `storage.test.ts`,
+`attachments.test.ts`'s courtesy validation, `ui/appearance.test.ts`'s `11-03` color/position parsing)
+- sequence handling, the sender's-own-echo dedup, jittered backoff, the client-side size/type check,
+and the "malformed/missing config falls back to the built-in default, never throws" contract, matching
+the skill's own testing bar. `connection.ts`, `ui/widget.ts`, and `attachments.ts`'s upload flow are
+exercised live against the demo page instead of mocked: a real `HubConnection` against a real
+`Ago.Chat.Api`, a real presigned upload against real MinIO, is closer to what actually ships than a
+mocked client would prove.
+
+**`11-03`**: bootstrap now resolves the visitor's identity (`session.ts`'s `getOrCreateVisitorSession`)
+eagerly, right after mounting - not lazily on first open, the way `5-09` originally built it. Position
+has to be known before the closed launcher renders (it decides which corner the toggle button itself
+sits in), so the fetch could no longer wait for a click; `connect()` (built on first open) reuses the
+same promise rather than calling the endpoint a second time. The heavier part - the actual SignalR
+connection, joining a conversation, loading history - is exactly as lazy as before. See
+`session.ts`'s own doc comment for the reasoning and `storage.ts`'s `VisitorSession` doc comment for a
+real, named limitation this surfaces: a *returning* visitor's cached color/position is not refreshed
+on a fresh page load either, since re-requesting through this same endpoint would mint a second
+visitor identity to get it - fixing that needs a session endpoint that can return current config
+without minting a new visitor, out of this item's own scope.
 
 **Known gap, not this repository's bug**: an operator-authored message (real-time push, not the
 widget's own send) does not reliably arrive live right now - `../ago-root/docs/backlog/5-11-fix-competing-consumer-queue-collision.md`

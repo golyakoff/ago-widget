@@ -14,7 +14,18 @@ const MAX_RATE_LIMIT_RETRIES = 3;
  * site, `429` + `Retry-After` honoured with jittered backoff rather than hammered
  * (embeddable-widget skill's Connection behaviour). A stored session from a previous page load is
  * reused as-is - the token is valid for 30 days server-side, so minting a new visitor identity on
- * every page view would silently fragment one visitor into many.
+ * every page view would silently fragment one visitor into many. `11-03`: this also means a
+ * returning visitor's cached `widgetPrimaryColorHex`/`widgetPosition` are *not* refreshed on this
+ * path either - `storage.ts`'s own `VisitorSession` doc comment states that limitation plainly.
+ *
+ * `11-03`: `ui/widget.ts` now calls this eagerly, right after mounting, rather than lazily on first
+ * open - the skill's Bootstrap section ("the handshake returns the site's widget settings ... and
+ * the visitor's history cursor") describes this call as part of bootstrap itself, not something
+ * deferred until interaction. That is compatible with the skill's "nothing heavy before first
+ * interaction" rule because the two are different weights: this is one small, already rate-limited
+ * REST call that does not block rendering (fired without an `await` at the call site), never the
+ * real-time connection itself - the actual heavy part (`connection.ts`'s SignalR handshake, joining
+ * a conversation, loading history) stays exactly as lazy as `5-09` made it, gated on first open.
  */
 export async function getOrCreateVisitorSession(
   config: WidgetConfig,
@@ -35,7 +46,12 @@ export async function getOrCreateVisitorSession(
 
     if (response.status === 201) {
       const body = (await response.json()) as VisitorSessionResponse;
-      const session: VisitorSession = { token: body.token, visitorId: body.visitorId };
+      const session: VisitorSession = {
+        token: body.token,
+        visitorId: body.visitorId,
+        widgetPrimaryColorHex: body.widgetPrimaryColorHex,
+        widgetPosition: body.widgetPosition,
+      };
       storage.setVisitorSession(session);
       return session;
     }

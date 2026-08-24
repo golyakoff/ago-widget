@@ -1,8 +1,7 @@
-# Builds this repository's widget bundle and packages it, alongside 8-02's own public demo page
-# (public-demo/index.html - NOT demo/index.html, the deliberately hostile isolation-test page,
-# left untouched), into one minimal static-file-serving image. Built directly on the VPS and
-# imported into k3s's own containerd (adr/0026's "no registry" image-delivery decision, the same
-# one ago-chat's own Dockerfile follows) - not pushed anywhere, no CI wiring here.
+# Builds this repository's widget bundle and packages it, alongside a public demo page, into one
+# minimal static-file-serving image. Built directly on the VPS and imported into k3s's own
+# containerd (adr/0026's "no registry" image-delivery decision, the same one ago-chat's own
+# Dockerfile follows) - not pushed anywhere, no CI wiring here.
 #
 # AGO_API_BASE_URL is a required build ARG, not a default baked in here - build.mjs itself already
 # refuses to guess a value (CLAUDE.md: "do not invent ... endpoints"); this Dockerfile just carries
@@ -23,5 +22,11 @@ RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" npm run build
 FROM nginx:1.27-alpine-slim
 COPY --from=build /app/dist/ago-chat.js /usr/share/nginx/html/ago-chat.js
 COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.map
-COPY public-demo/index.html /usr/share/nginx/html/index.html
+# DEMO_PAGE_DIR selects which demo page this image embeds - `public-demo` (demo-shop1, the
+# original 8-02 page, `data-site="demo_site"`) by default, or `public-demo-2` (demo-shop2, a
+# second, independent tenant seeded specifically to demonstrate tenant isolation live: a different
+# operator, a different site row, a visibly different page - `data-site="demo_site2"`). Both share
+# this one widget bundle unmodified; only the HTML embedded alongside it differs.
+ARG DEMO_PAGE_DIR=public-demo
+COPY ${DEMO_PAGE_DIR}/index.html /usr/share/nginx/html/index.html
 EXPOSE 80

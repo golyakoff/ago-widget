@@ -34,11 +34,11 @@ export class SeenMessageIds {
 /**
  * `clientMessageId` per embeddable-widget skill: a client-generated id attached to every send, so
  * a UI can key its own optimistic bubble before the server ack arrives and reconcile it once the
- * real `MessageDto` shows up. It is a *local* correlation id only - `VisitorHub.SendMessageAsync`
- * does not accept or persist one today (realtime.md's Client protocol section still calls this "a
- * design intent, not wired up" as of `3-03`, and that has not changed here), so it cannot yet
- * de-duplicate a genuine retry after a lost connection the way the skill ultimately wants. See
- * `connection.ts`'s `send` for the conservative retry rule this gap forces in the meantime.
+ * real `MessageDto` shows up. `VisitorHub.SendMessageAsync` does accept and persist it (`5-07`) and
+ * dedupes a same-id retry server-side - but `ui/widget.ts` still reconciles its own optimistic
+ * bubble by queue order, not by matching this id against the echoed `MessageDto.clientMessageId`,
+ * and does not yet build a same-id retry path either. See `connection.ts`'s `SendOutcomeUnknownError`
+ * for the conservative rule that gap forces in the meantime.
  */
 export function newClientMessageId(): string {
   return crypto.randomUUID();

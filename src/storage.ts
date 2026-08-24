@@ -13,6 +13,23 @@ function key(siteKey: string, name: string): string {
 export interface VisitorSession {
   token: string;
   visitorId: string;
+  /**
+   * `11-03`: cached alongside the identity at mint time, from the same `POST /api/v1/visitor-sessions`
+   * response - not fetched separately. `adr/0029`'s "read once, at bootstrap" model is about the
+   * *visitor's* handshake, which only ever happens once per visitor identity (`getOrCreateVisitorSession`'s
+   * own doc comment: re-minting on every page view would fragment one visitor into many) - so a
+   * returning visitor whose identity was already minted keeps whatever config was current then, on
+   * every later page load, until their stored session itself is ever refreshed. This is a real,
+   * named limitation on top of the ADR's own already-stated one (an *already-open* tab not updating
+   * live): here, even a *fresh* page load does not re-request config for a visitor who already has a
+   * session, because re-requesting through this endpoint would mint a second identity to get it.
+   * Fixing this for real needs a session endpoint that can return current config without minting a
+   * new visitor - out of this item's scope (a `ago-chat` API change, and `11-01` is already closed).
+   * `null` for a session written before this field existed, or for a site with no override -
+   * `ui/appearance.ts`'s `parseWidgetColor`/`parseWidgetPosition` treat both identically to "not set".
+   */
+  widgetPrimaryColorHex: string | null;
+  widgetPosition: string | null;
 }
 
 export class WidgetStorage {
@@ -37,15 +54,46 @@ export class WidgetStorage {
     }
   }
 
+  private removeSafe(name: string): void {
+    try {
+      localStorage.removeItem(key(this.siteKey, name));
+    } catch {
+      // Same as writeSafe - storage unavailable is not this widget's problem to solve.
+    }
+  }
+
   getVisitorSession(): VisitorSession | null {
     const token = this.readSafe("visitor-token");
     const visitorId = this.readSafe("visitor-id");
-    return token && visitorId ? { token, visitorId } : null;
+    if (!token || !visitorId) {
+      return null;
+    }
+
+    return {
+      token,
+      visitorId,
+      widgetPrimaryColorHex: this.readSafe("widget-color"),
+      widgetPosition: this.readSafe("widget-position"),
+    };
   }
 
   setVisitorSession(session: VisitorSession): void {
     this.writeSafe("visitor-token", session.token);
     this.writeSafe("visitor-id", session.visitorId);
+
+    // Written as two separate keys, matching every other value this class stores - only written
+    // when present, so a stale key from a differently-configured site never lingers past an update.
+    if (session.widgetPrimaryColorHex) {
+      this.writeSafe("widget-color", session.widgetPrimaryColorHex);
+    } else {
+      this.removeSafe("widget-color");
+    }
+
+    if (session.widgetPosition) {
+      this.writeSafe("widget-position", session.widgetPosition);
+    } else {
+      this.removeSafe("widget-position");
+    }
   }
 
   getLastKnownSequence(conversationId: string): number | null {

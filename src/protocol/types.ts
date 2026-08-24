@@ -25,9 +25,17 @@ export interface HistoryPage {
   nextBeforeSequence: number | null;
 }
 
+/** `11-03`: `widgetPrimaryColorHex`/`widgetPosition` are additive fields `11-01` added to this same
+ * response (`AuthEndpoints.VisitorSessionResponse`, `ago-chat`) - no second round trip. `widgetPosition`
+ * carries the `Position` enum's PascalCase member name on the wire (`"BottomRight"`/`"BottomLeft"`),
+ * not yet normalised to this widget's own lowercase `WidgetPosition` union - `ui/appearance.ts`'s
+ * `parseWidgetPosition` is what does that, the one place this widget decides what an unrecognised
+ * value falls back to. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
+  widgetPrimaryColorHex: string | null;
+  widgetPosition: string;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

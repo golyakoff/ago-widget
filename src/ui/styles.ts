@@ -6,6 +6,12 @@
 export const widgetStyles = /* css */ `
   :host {
     all: initial;
+    /* 11-03: the widget's own built-in default - overridden per-instance via
+       host.style.setProperty("--ago-accent", ...) once a valid site color is known
+       (ui/appearance.ts's parseWidgetColor). "all: initial" above does not reset this: custom
+       properties are explicitly excluded from the "all" shorthand, so inheritance from the host
+       element into this shadow tree still works. */
+    --ago-accent: #2f6fed;
   }
 
   * {
@@ -23,12 +29,21 @@ export const widgetStyles = /* css */ `
     color: #1a1a1a;
   }
 
+  /* 11-03: the launcher's mirror-image placement - Ago.Chat.Domain.Position.BottomLeft
+     (ui/appearance.ts's parseWidgetPosition maps it to this class). Both the toggle's own
+     fixed position and the panel's attachment side (below) flip together, so the panel always
+     opens on the side its own toggle button sits on. */
+  .ago-root.ago-position-left {
+    right: auto;
+    left: 1.25rem;
+  }
+
   .ago-toggle {
     width: 3.5rem;
     height: 3.5rem;
     border-radius: 50%;
     border: none;
-    background: #2f6fed;
+    background: var(--ago-accent);
     color: #fff;
     font-size: 1.5rem;
     cursor: pointer;
@@ -39,7 +54,7 @@ export const widgetStyles = /* css */ `
   .ago-send:focus-visible,
   .ago-close:focus-visible,
   .ago-input:focus-visible {
-    outline: 0.1875rem solid #2f6fed;
+    outline: 0.1875rem solid var(--ago-accent);
     outline-offset: 0.125rem;
   }
 
@@ -63,6 +78,11 @@ export const widgetStyles = /* css */ `
     overflow: hidden;
   }
 
+  .ago-root.ago-position-left .ago-panel {
+    right: auto;
+    left: 0;
+  }
+
   .ago-panel[hidden] {
     display: none;
   }
@@ -72,7 +92,7 @@ export const widgetStyles = /* css */ `
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem 1rem;
-    background: #2f6fed;
+    background: var(--ago-accent);
     color: #fff;
   }
 
@@ -112,7 +132,7 @@ export const widgetStyles = /* css */ `
 
   .ago-message--visitor {
     align-self: flex-end;
-    background: #2f6fed;
+    background: var(--ago-accent);
     color: #fff;
     border-bottom-right-radius: 0.125rem;
   }
@@ -180,7 +200,7 @@ export const widgetStyles = /* css */ `
   .ago-send {
     border: none;
     border-radius: 0.5rem;
-    background: #2f6fed;
+    background: var(--ago-accent);
     color: #fff;
     padding: 0 1rem;
     cursor: pointer;

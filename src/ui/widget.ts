@@ -7,7 +7,8 @@ import { newClientMessageId } from "../protocol/dedup.js";
 import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
-import { logWidgetError } from "../errors.js";
+import { logWidgetError, guardAsync } from "../errors.js";
+import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 
 interface PendingSend {
   clientMessageId: string;
@@ -24,6 +25,7 @@ export class ChatWidget {
   private readonly storage: WidgetStorage;
   private readonly host: HTMLDivElement;
   private readonly root: ShadowRoot;
+  private readonly container: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
@@ -37,6 +39,10 @@ export class ChatWidget {
 
   private connection: VisitorConnection | null = null;
   private connectPromise: Promise<void> | null = null;
+  /** `11-03`: kicked off eagerly from the constructor (not lazily on first open) - see
+   * `bootstrapSession`'s own doc comment for why. `connect()` awaits this same promise rather than
+   * calling `getOrCreateVisitorSession` a second time. */
+  private readonly sessionPromise: Promise<VisitorSession>;
   private session: VisitorSession | null = null;
   private conversationId: string | null = null;
   private isOpen = false;
@@ -51,6 +57,7 @@ export class ChatWidget {
 
     const container = document.createElement("div");
     container.className = "ago-root";
+    this.container = container;
 
     this.toggle = document.createElement("button");
     this.toggle.type = "button";
@@ -152,10 +159,44 @@ export class ChatWidget {
     this.root.appendChild(container);
 
     this.focusTrap = new FocusTrap(this.panel);
+
+    // `11-03`: fired here, not on first open - see `bootstrapSession`'s own doc comment. Stored so
+    // `connect()` can await the same in-flight (or already-resolved) request instead of calling
+    // `getOrCreateVisitorSession` a second time; wrapped in `guardAsync` so a failure here (visitor
+    // never opens the widget at all, so `connect()` never gets a chance to observe or report it)
+    // cannot surface as an `unhandledrejection` on the host page.
+    this.sessionPromise = this.bootstrapSession();
+    guardAsync(async () => {
+      await this.sessionPromise;
+    });
   }
 
   mount(parent: HTMLElement): void {
     parent.appendChild(this.host);
+  }
+
+  /**
+   * `11-03`: resolves the visitor's identity and applies the site's widget config (color, launcher
+   * position) to the closed, not-yet-opened launcher - this has to happen before any interaction,
+   * since the position affects where the toggle button itself renders, not just the panel a click
+   * would reveal. Reuses `getOrCreateVisitorSession`'s existing storage short-circuit for a returning
+   * visitor (that method's own doc comment states the resulting config-staleness limitation).
+   *
+   * The brief window between mount and this promise resolving renders with the widget's own built-in
+   * appearance (this class's own CSS defaults) - for a first-time visitor this is a real network
+   * round trip, typically well under the time it takes a person to notice or react, and for a
+   * returning visitor `getOrCreateVisitorSession` resolves synchronously-fast from storage.
+   */
+  private async bootstrapSession(): Promise<VisitorSession> {
+    const session = await getOrCreateVisitorSession(this.config, this.storage);
+    this.session = session;
+    this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
+    const color = parseWidgetColor(session.widgetPrimaryColorHex);
+    if (color) {
+      this.host.style.setProperty("--ago-accent", color);
+    }
+
+    return session;
   }
 
   private toggleOpen(): void {
@@ -189,11 +230,14 @@ export class ChatWidget {
   }
 
   /** Lazy-init on first open, not on page load (embeddable-widget skill: "nothing heavy before
-   * first interaction"). Session + connection failures degrade to a status message, never a throw
-   * that could escape to the host page. */
+   * first interaction") - `11-03`: true of the real-time connection built here, not of the visitor
+   * identity/config resolution any more, which `bootstrapSession` now starts eagerly at mount time.
+   * This method awaits that same `sessionPromise` rather than re-requesting it, so a first open
+   * never fires a second, redundant `POST /api/v1/visitor-sessions`. Session + connection failures
+   * degrade to a status message, never a throw that could escape to the host page. */
   private async connect(): Promise<void> {
     try {
-      const session = await getOrCreateVisitorSession(this.config, this.storage);
+      const session = await this.sessionPromise;
       this.session = session;
       const connection = new VisitorConnection(this.config, session, this.storage);
       connection.onMessage((message) => this.handleIncoming(message));

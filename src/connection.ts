@@ -22,6 +22,12 @@ export class NotConnectedError extends Error {
  * does dedup by `clientMessageId` server-side (`5-07`) - a same-id retry would be safe in principle -
  * but this widget does not yet build that retry path (`ui/widget.ts`'s send failure UI surfaces "not
  * sure it sent" rather than resending); the caller must decide instead of this class silently resending.
+ *
+ * `5-17`: what `ui/widget.ts` does do is keep the message's optimistic bubble paired to its
+ * `clientMessageId` after this is thrown, so that if the send *had* landed, the server's own copy -
+ * live, or in the history a resuming `JoinAsync` replays - resolves that bubble instead of rendering
+ * the same message a second time. See that method's own branch for why the warning may only be
+ * cleared by that arrival and by nothing else.
  */
 export class SendOutcomeUnknownError extends Error {
   constructor(cause: unknown) {

@@ -132,6 +132,11 @@ section. What this repository actually has:
 - **What the visitor sees around that** (`ui/widget.test.ts`): the composer is disabled while the
   socket is gone and usable again after the resume, resumed messages render once each, a send that
   did not go says so instead of vanishing, and the panel's own Enter/Shift+Enter contract.
+- **Which optimistic bubble an echo belongs to** (`ui/reconciliation.test.ts`, `5-17`): a failed send
+  leaves its notice on screen and does not desynchronise the messages after it, two echoes arriving
+  out of send order each resolve their own bubble, a visitor message this panel did not send renders
+  as a new message, and an *unconfirmed* send's warning is cleared by the server's own copy of that
+  message and by nothing else. Its own header says why it is a separate file from `widget.test.ts`.
 - **Isolation on a hostile page** (`isolation.test.ts`): the jsdom twin of `demo/index.html` - the
   widget's surface is unreachable from the host document's own queries, its stylesheet stays inside
   the shadow root, it adds exactly one global and never touches the page's own, every storage key is
@@ -166,15 +171,23 @@ on a fresh page load either, since re-requesting through this same endpoint woul
 visitor identity to get it - fixing that needs a session endpoint that can return current config
 without minting a new visitor, out of this item's own scope.
 
-**Known defect, found by `11-08`'s own tests and deliberately not fixed in that item** (a testing
-item should not quietly ship a product change): **one failed send permanently offsets the optimistic
-bubble queue.** `ChatWidget.dispatchSend` pushes an entry onto `pendingSends` before invoking and
-never removes it when the send fails, and `handleIncoming` reconciles by queue position rather than by
-`clientMessageId` (`protocol/dedup.ts` already names that as a gap). So after the ordinary
-drop -> send -> reconnect sequence, the next message's own echo removes the *"Not sent - reconnecting"*
-bubble instead of its own - the visitor loses the only sign their message never went, and sees the new
-one rendered twice. Measured, not reasoned; `ui/widget.test.ts` carries the detail beside the test
-that found it.
+**`5-17`**: an echo is paired with its optimistic bubble by `clientMessageId`, not by queue position.
+The old positional pairing assumed every entry would eventually be matched by exactly one echo, so a
+single failed send offset it for the life of the panel: the next message's echo removed the
+*"Not sent - reconnecting"* bubble instead of its own, and the message that did send rendered twice.
+Found by `11-08`'s tests and fixed here.
+
+The decision that came with it, since both answers were defensible: **what a failed send leaves
+behind depends on whether the server could have seen it.** A send that never left - `NotConnectedError`,
+or a rejection that came back over a socket that stayed up - drops its entry, because no delivery can
+ever carry that id and the notice should stay until the visitor does something about it. A send that
+failed with `SendOutcomeUnknownError` **keeps** its entry: the invoke was in flight when the socket
+went, the message may well have landed, and if it did, the server's own copy carries the same id and
+resolves the bubble into the real message rather than rendering it a second time. That warning is
+never cleared by anything except that arrival - not by a later message, not by the reconnect itself -
+so "we are not sure" is only ever replaced by evidence. It mirrors the rule `ago-console` applies from
+the other end (retry an unknown-outcome send with the *same* `clientMessageId`, a fresh one when
+nothing was sent). Automatic retry remains deliberately out of scope here.
 
 **Known gap, not this repository's bug**: an operator-authored message (real-time push, not the
 widget's own send) does not reliably arrive live right now - `../ago-root/docs/backlog/5-11-fix-competing-consumer-queue-collision.md`

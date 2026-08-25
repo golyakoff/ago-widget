@@ -12,6 +12,13 @@ export interface MessageDto {
   body: string;
   createdAt: string;
   attachmentId?: string | null;
+  /** `5-07`: additive, optional - `null`/absent for any message sent before this shipped, since
+   * nothing back-filled it. Declared here by `5-17`, which is when this side first read it: the
+   * server has put it on every delivery of a visitor's message from the start (the local echo, the
+   * broker fan-out copy, and the history a resuming `JoinAsync` replays all go through `VisitorHub`'s
+   * one `ToDto`), the widget simply never looked. See `ui/widget.ts`'s `handleIncoming` for what it
+   * is used for and `protocol/dedup.ts` for where the id comes from. */
+  clientMessageId?: string | null;
 }
 
 export interface VisitorJoinResult {

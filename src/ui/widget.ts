@@ -10,11 +10,6 @@ import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
 import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 
-interface PendingSend {
-  clientMessageId: string;
-  bubble: HTMLDivElement;
-}
-
 /**
  * `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
  * short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
@@ -66,7 +61,22 @@ export class ChatWidget {
   private conversationId: string | null = null;
   private isOpen = false;
   private isConnected = false;
-  private readonly pendingSends: PendingSend[] = [];
+  /**
+   * The optimistic bubble for each message this panel has sent and not yet seen come back, keyed by
+   * the `clientMessageId` it was sent under.
+   *
+   * `5-17`: a `Map` keyed by that id, not the array-and-`shift()` this used to be. The array paired
+   * an echo with a bubble by *queue position*, which is only correct while every entry is eventually
+   * matched by exactly one echo - one failed send offset the pairing permanently, so every later
+   * echo removed the bubble before the one it belonged to: the failure notice vanished and the
+   * message that did send rendered twice. The id was already on the wire in both directions
+   * (`5-12`); nothing compared it to anything.
+   *
+   * Entries are removed by exactly two things: the echo that matches them (`handleIncoming`), and a
+   * send failing in a way that means the server never saw it (`dispatchSend`). An unconfirmed send
+   * is deliberately neither - see `dispatchSend`'s `SendOutcomeUnknownError` branch.
+   */
+  private readonly pendingSends = new Map<string, HTMLDivElement>();
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
@@ -336,7 +346,7 @@ export class ChatWidget {
     }
 
     const clientMessageId = newClientMessageId();
-    this.pendingSends.push({ clientMessageId, bubble });
+    this.pendingSends.set(clientMessageId, bubble);
 
     connection
       .sendMessage(conversationId, body, clientMessageId, attachmentId)
@@ -344,12 +354,39 @@ export class ChatWidget {
         bubble.classList.remove("ago-message--pending");
       })
       .catch((error: unknown) => {
-        if (error instanceof NotConnectedError) {
-          this.markBubbleFailed(bubble, "Not sent - reconnecting. It will not be retried automatically.");
-        } else if (error instanceof SendOutcomeUnknownError) {
+        if (error instanceof SendOutcomeUnknownError) {
+          // `5-17`'s decision, and the case that decides it: **the entry is kept.** This error means
+          // the invoke was in flight when the socket went, so the message may well have landed. If
+          // it did, the server's own copy carries this same `clientMessageId` and will arrive - over
+          // the live connection, or in the history a resuming `JoinAsync` replays after the
+          // reconnect - and reconciles this bubble into the real message, rendered once. Dropping
+          // the entry here would make that arrival look like a brand-new message and render the
+          // visitor's one message twice, under a warning saying it might never have been sent.
+          //
+          // This is not "we are not sure" quietly becoming a cleared warning. The warning is removed
+          // by one thing only: the server's own copy of *this* message showing up, which is
+          // evidence. Nothing else can clear it - not a later message's echo, not a reconnect, not
+          // time passing - and if the message really never landed, it stays on screen for good.
+          //
+          // The same rule the console takes from the other end: `ConversationPage.tsx` retries an
+          // unknown-outcome send with the *same* `clientMessageId` (server-side dedup, `5-07`) and a
+          // fresh one when nothing was sent. Both sides treat that id as still live exactly when the
+          // server may already hold it. This widget does not retry at all - out of scope, and
+          // `dispatchSend`'s own message says so - but "still live" means the same thing here.
           this.markBubbleFailed(bubble, "Not sure this was sent - the connection dropped mid-request.");
         } else {
-          this.markBubbleFailed(bubble, "Failed to send.");
+          // Nothing reached the server. `NotConnectedError` never invoked at all; anything else came
+          // back while the socket was still up, i.e. the hub refused it. No delivery can ever carry
+          // this id, so the entry would sit in the map for the life of the panel. The failed bubble
+          // stays until the visitor does something about it, and a visitor message arriving with
+          // this id anyway would be a genuinely new message - which is how it would render.
+          this.pendingSends.delete(clientMessageId);
+          this.markBubbleFailed(
+            bubble,
+            error instanceof NotConnectedError
+              ? "Not sent - reconnecting. It will not be retried automatically."
+              : "Failed to send.",
+          );
         }
 
         logWidgetError(error);
@@ -423,17 +460,25 @@ export class ChatWidget {
   }
 
   /**
-   * A `MessageDto` from this visitor reconciles the oldest pending optimistic bubble instead of
-   * appending a second one - by queue order, not by matching `message.clientMessageId` against the
-   * id `dispatchSend` generated (see `protocol/dedup.ts`'s `newClientMessageId` doc comment for why
-   * that's still a gap, not a wire-protocol limitation). Any other visitor DTO (no pending entry -
-   * e.g. sent from another tab of the same visitor) and any operator DTO render as a genuinely new
-   * incoming message.
+   * A `MessageDto` from this visitor removes the optimistic bubble for *that* message rather than
+   * appending a second one - matched by `clientMessageId` (`5-17`), the id `dispatchSend` generated
+   * and the server echoes back on every delivery of it. Comparison is by string equality, which is
+   * safe both ways: `crypto.randomUUID()` and `System.Text.Json`'s `Guid` both write the lowercase
+   * 8-4-4-4-12 form.
+   *
+   * Everything with no matching entry renders as the genuinely new incoming message it is: any
+   * operator message, a visitor message sent from another tab of this same visitor, a message old
+   * enough to predate `clientMessageId` (`5-07` back-filled nothing), and the echo of a send this
+   * panel has already given up on.
    */
   private handleIncoming(message: MessageDto): void {
-    if (message.authorKind === "Visitor" && this.pendingSends.length > 0) {
-      const pending = this.pendingSends.shift()!;
-      pending.bubble.remove();
+    const clientMessageId = message.clientMessageId;
+    if (message.authorKind === "Visitor" && clientMessageId) {
+      const bubble = this.pendingSends.get(clientMessageId);
+      if (bubble !== undefined) {
+        this.pendingSends.delete(clientMessageId);
+        bubble.remove();
+      }
     }
 
     this.appendMessageBubble(message);

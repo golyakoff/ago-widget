@@ -28,11 +28,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * verification are for, and `README.md`'s testing section says so.
  */
 
-// Both are esbuild `define`s replaced by `build.mjs`, and genuinely absent under vitest, which does
-// not run that build. Declared on `globalThis` for the same reason `config.test.ts` already does: the
-// bundled code reads a bare identifier, and a global of that name is what a bare identifier resolves to.
+// All three are esbuild `define`s replaced by `build.mjs`, and genuinely absent under vitest, which
+// does not run that build. Declared on `globalThis` for the same reason `config.test.ts` already does:
+// the bundled code reads a bare identifier, and a global of that name is what a bare identifier
+// resolves to.
 (globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_API_BASE_URL__"] = "https://built-in.example";
 (globalThis as unknown as Record<string, string>)["__AGO_WIDGET_VERSION__"] = "0.1.0-test";
+(globalThis as unknown as Record<string, string>)["__AGO_COMMIT__"] = "0".repeat(40);
 
 const SITE_KEY = "demo_site";
 const API_BASE_URL = "https://api.test.invalid";
@@ -208,7 +210,10 @@ describe("the widget on a hostile host page", () => {
 
     const added = [...Object.keys(window)].filter((name) => !globalsBefore.has(name));
     expect(added).toEqual(["AgoChat"]);
-    expect(hostile().AgoChat).toEqual({ version: "0.1.0-test" });
+    // `15-07`: still exactly one global, and it now carries the commit the bundle was built from
+    // alongside the version - the widget's own answer to what GET /healthz/version answers for the
+    // .NET hosts, for a bundle running on a page whose origin serves no version.json of ours.
+    expect(hostile().AgoChat).toEqual({ version: "0.1.0-test", commit: "0".repeat(40) });
     // Still the host page's function, never called and never replaced - it throws if either happened.
     expect(() => hostile().$?.()).toThrow("the widget must never call the host page's own $ function");
     expect(hostile().hostPageStillWorks?.()).toBe("yes");

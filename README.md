@@ -64,6 +64,14 @@ build should talk to - `http://localhost:5009` for the local cluster
 tag's own `data-api` attribute, for exactly the case this repository's own demo page needs: one
 built bundle, pointed at a different API origin without a second build.
 
+`AGO_COMMIT` is optional and defaults to `unknown`. It is the commit the bundle was built from, and
+it ends up on `window.AgoChat.commit` in the browser - `15-07`/`adr/0051`. The .NET hosts answer the
+same question at `GET /healthz/version`; a bundle has no process to ask, and a bundle embedded on a
+tenant's page cannot see the `version.json` its own container serves, so the only place the answer
+survives is inside the bundle. Unlike `AGO_API_BASE_URL` it does not change what the widget *does*,
+which is why an unset value is `unknown` rather than a refusal: a build that says "unknown" out loud
+is fine, and one that claims a commit it was not built from is not.
+
 A third attribute, `data-public-demo="true"`, renders one fixed line inside the panel telling the
 visitor that anyone with the published operator login can read what they type (`8-06`). It is set on
 this repository's own two public demo pages and nowhere else; the default is off, and only the exact
@@ -71,13 +79,34 @@ string `"true"` turns it on, so no real shop's embed can acquire it by accident.
 a free-text notice deliberately - a tenant-configurable processing notice is `16-04`'s server-driven
 mechanism, and this must not pre-empt its shape.
 
+## Publishing
+
+CI publishes two images to GHCR on every push to `main` -
+`ghcr.io/golyakoff/ago-demo-shop{1,2}:<40-char commit SHA>` - both from this repository's
+`Dockerfile`, differing only in which demo page is embedded (`DEMO_PAGE_DIR`). Publishing needs no
+secret beyond the workflow's own `GITHUB_TOKEN` (`adr/0047`).
+
+The `Dockerfile` deliberately takes **no environment input from its build command**: it carries the
+demo deployment's own API origin as a committed default, so `ago-demo-shop1:<sha>` is a function of
+the commit and nothing else, and the tag keeps meaning one thing (`adr/0051`). `build.mjs`'s refusal
+to guess an API origin is untouched - that guards the *product* build, which has no deployment; the
+`Dockerfile` is the *demo packaging*, which has exactly one.
+
+Each image also serves `/version.json` (`{"app":"ago-widget","page":…,"commit":…}`), so
+`curl https://demo-shop1.reserve-me.ru/version.json` names the deployed commit without a browser -
+and the bundle itself carries the same commit on `window.AgoChat.commit`, which is the copy that
+survives being embedded on somebody else's origin.
+
 ## Bundle size
 
-**22.0 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of this
-commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-17`'s 21.0 KB by
-`17-07`'s renewal path (`tokenExpiry.ts`, `VisitorSessionManager`'s renew/throttle/expiry branches
-and the two strings the panel shows a visitor whose session did not survive). Both numbers come from
-the same command on the same machine. `build.mjs` enforces
+**22.1 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`) -
+up from `5-17`'s 21.0 KB by `17-07`'s renewal path (`tokenExpiry.ts`, `VisitorSessionManager`'s
+renew/throttle/expiry branches and the two strings the panel shows a visitor whose session did not
+survive), and then by **49 bytes gzipped** (22,546 → 22,595; 82,587 → 82,637 raw) for `15-07`'s
+`window.AgoChat.commit`, which is a 40-character string plus one property name and compresses
+about as badly as a hex string can. All three numbers come from the same command on the same
+machine. `build.mjs` enforces
 a 45 KB gzipped budget on every build (CI included) - real headroom over the measured number, not a
 guess made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
 

@@ -19,6 +19,17 @@ if (!apiBaseUrl) {
   process.exit(1);
 }
 
+// `15-07`: the commit this bundle was built from, baked in the same way the version already is.
+// The widget is the one artifact here that is *not* loaded from an origin we control - a tenant's
+// page fetches ago-chat.js and nothing else, so the version.json the container serves next to it
+// (Dockerfile) is not something that page can see. `window.AgoChat.commit` is the widget's own
+// answer to the question `GET /healthz/version` answers for the .NET hosts.
+//
+// Unset means `unknown`, not a failed build - unlike AGO_API_BASE_URL above, which changes what the
+// bundle *does*. A developer running `npm run build` to look at the output should get a bundle that
+// says "unknown" out loud rather than one that refuses to exist or, worse, claims a commit.
+const commit = process.env.AGO_COMMIT || "unknown";
+
 // Measured on a clean build (README's own "Bundle size" section carries the current number and
 // the date it was last measured) - this ceiling is a deliberate, small amount of headroom above
 // that, not a round number picked in advance.
@@ -36,6 +47,7 @@ const result = await build({
   define: {
     __AGO_WIDGET_VERSION__: JSON.stringify(packageJson.version),
     __AGO_DEFAULT_API_BASE_URL__: JSON.stringify(apiBaseUrl),
+    __AGO_COMMIT__: JSON.stringify(commit),
   },
 });
 
@@ -44,7 +56,7 @@ const gzipBytes = gzipSync(bundleBytes).length;
 const gzipKb = (gzipBytes / 1024).toFixed(1);
 const budgetKb = (GZIP_BUDGET_BYTES / 1024).toFixed(0);
 
-console.log(`Bundle: ${(bundleBytes.length / 1024).toFixed(1)} KB raw, ${gzipKb} KB gzipped (budget: ${budgetKb} KB gzipped)`);
+console.log(`Bundle: ${(bundleBytes.length / 1024).toFixed(1)} KB raw, ${gzipKb} KB gzipped (budget: ${budgetKb} KB gzipped), commit ${commit}`);
 
 if (gzipBytes > GZIP_BUDGET_BYTES) {
   console.error(`Bundle size ${gzipKb} KB gzipped exceeds the ${budgetKb} KB budget.`);

@@ -36,3 +36,84 @@ jobs:
         run: npm run build
         env:
           AGO_API_BASE_URL: "http://localhost:5009"
+          AGO_COMMIT: ${{ github.sha }}
+
+  # `15-07`/`adr/0051`: the two public demo images are published to GHCR from here, not built on the
+  # deployment node. Only on `main`, and only after build-test passed - a pull request never
+  # publishes, so a fork or a draft branch cannot put an image into the registry a deploy might
+  # later reach for. Modelled directly on ago-chat's own publish-images job (adr/0047).
+  #
+  # One repository, two images: the widget bundle is byte-identical between them and only the
+  # embedded demo page differs (Dockerfile's DEMO_PAGE_DIR). That difference lives in the image
+  # *name*, never in the tag, so both images' SHA tags keep meaning exactly one thing.
+  publish-images:
+    needs: build-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # A repository's own GITHUB_TOKEN can write to that repository's own package feed - the same
+      # property adr/0018 already relies on for the NuGet feed, so publishing needs no new secret.
+      # Only *reading* a private package would, which is exactly why adr/0047 wants these public.
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # No docker/login-action: `docker login` with the workflow token does the same thing with one
+      # fewer third-party action in the supply chain.
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Note what is NOT passed here: AGO_API_BASE_URL. The Dockerfile carries the deployment's own
+      # value as a committed default (adr/0051), so this image is a function of the commit alone -
+      # which is the only thing that lets ${{ github.sha }} keep being a truthful name for it.
+      # DEMO_PAGE_DIR is passed, and is not an exception: it picks which of the two images is being
+      # built, and that choice is already in the image name.
+      - name: Build and push the two demo images
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          set -euo pipefail
+          build_one() {
+            local name="$1" page="$2"
+            local repo="ghcr.io/${{ github.repository_owner }}/${name}"
+            echo "::group::${repo}"
+            docker build \
+              --build-arg "DEMO_PAGE_DIR=${page}" \
+              --build-arg "GIT_COMMIT=${{ github.sha }}" \
+              -t "${repo}:${{ github.sha }}" \
+              -t "${repo}:main" \
+              .
+            docker push "${repo}:${{ github.sha }}"
+            docker push "${repo}:main"
+            echo "::endgroup::"
+          }
+          build_one ago-demo-shop1 public-demo
+          build_one ago-demo-shop2 public-demo-2
+
+      # Proves the commit actually reached the served files, rather than only the tag. Cheap, and it
+      # is the exact property 15-07 exists for - a published image that cannot name its own commit
+      # is the 2026-08-25 failure with extra steps.
+      - name: Check the images can name their own commit
+        run: |
+          set -euo pipefail
+          for name in ago-demo-shop1 ago-demo-shop2; do
+            repo="ghcr.io/${{ github.repository_owner }}/${name}"
+            served=$(docker run --rm --entrypoint cat "${repo}:${{ github.sha }}" /usr/share/nginx/html/version.json)
+            echo "${name}: ${served}"
+            echo "${served}" | grep -q '"commit":"${{ github.sha }}"'
+            docker run --rm --entrypoint grep "${repo}:${{ github.sha }}" \
+              -q '${{ github.sha }}' /usr/share/nginx/html/ago-chat.js
+          done
+
+      - name: Summarise what was published
+        run: |
+          {
+            echo "### Images published"
+            echo
+            echo "Deploy with: \`./deploy.sh demo-shop1 ${{ github.sha }}\` (ago-deploy/k8s, on the node)"
+            echo
+            for n in demo-shop1 demo-shop2; do
+              echo "- \`ghcr.io/${{ github.repository_owner }}/ago-${n}:${{ github.sha }}\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -64,6 +64,29 @@ export class VisitorConnection {
         // widget was never supposed to be sending credentials in the first place.
         withCredentials: false,
       })
+      // `5-14`: without this, `@microsoft/signalr`'s default logger is `ConsoleLogger(Information)`,
+      // and `WebSocketTransport` logs "WebSocket connected to {url}" at exactly `Information` - after
+      // it has appended `access_token=` to that url. Confirmed live against a running API, not
+      // assumed from the console's own case: the visitor's real JWT was printed in full on every
+      // connect. `coding-style.md` bans it outright ("Never log message bodies, tokens, presigned
+      // URLs..."), and a visitor token being a smaller blast radius than an operator one
+      // (`api-design.md`: it grants only that visitor's own conversation) does not make it a
+      // different rule. It is worse here in one respect the console does not share: this bundle runs
+      // on a page the widget does not control, alongside whatever else that page loaded.
+      //
+      // `Warning` rather than `Error`/`None` because it is the *lowest* level that suppresses that
+      // line while still surfacing the diagnostics worth having: HTTP request errors and timeouts,
+      // the page-freeze warning that predicts a dropped connection, and an unhandled server->client
+      // method name.
+      //
+      // Unconditional, with no build-mode branch. Two reasons. The token-bearing line sits at
+      // `Information`, which is *above* `Debug` and `Trace` on this library's ladder, so every level
+      // verbose enough to be worth switching to also prints the token - there is no dev setting that
+      // is both more informative and token-free. And `build.mjs` has no dev/production mode to hang a
+      // condition on in the first place (one esbuild invocation, always minified; `define` carries
+      // only the version and the API base URL, and esbuild gives no `import.meta.env`), so a
+      // conditional would mean inventing a build flag whose only effect is to reintroduce the leak.
+      .configureLogging(signalR.LogLevel.Warning)
       .withAutomaticReconnect({
         nextRetryDelayInMilliseconds: (context) =>
           jitteredDelayMs(context.previousRetryCount + 1, defaultBackoffOptions),

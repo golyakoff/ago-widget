@@ -13,6 +13,12 @@
  *
  * The three things only a server or a network can do are exposed as methods a test calls directly:
  * `push`, `dropToReconnecting`, `completeReconnect`.
+ *
+ * `17-07` added a fourth, `negotiateToken()`: the `accessTokenFactory` the real library calls on
+ * every connect and every reconnect attempt is kept rather than discarded, so a test can ask what
+ * this connection *would* present right now. That is the only observable difference between a
+ * connection that renews its token and one that has been carrying a captured, expired string since
+ * the page loaded - nothing else about the fake, or about a real socket, distinguishes them.
  */
 import type { MessageDto } from "../protocol/types.js";
 
@@ -38,9 +44,13 @@ export interface Invocation {
  */
 export const joinQueue: unknown[] = [];
 
+export type AccessTokenFactory = () => string | Promise<string>;
+
 export class FakeHubConnection {
   state: string = HubConnectionState.Disconnected;
   readonly invocations: Invocation[] = [];
+  /** Set by the builder from `withUrl`'s options - see this file's header. */
+  accessTokenFactory: AccessTokenFactory | null = null;
   /** Makes the next `SendMessageAsync` reject, standing in for a send whose connection went away
    * mid-invoke (`leavingState`) or for a server that refused it while the socket stayed up. */
   failNextSend: { error: Error; leavingState: string } | null = null;
@@ -95,6 +105,19 @@ export class FakeHubConnection {
     return Promise.resolve(1);
   }
 
+  /**
+   * What this connection would put in the negotiate right now - i.e. what `@microsoft/signalr`
+   * itself calls before the first connect and before every automatic-reconnect attempt.
+   */
+  negotiateToken(): Promise<string> {
+    const factory = this.accessTokenFactory;
+    if (factory === null) {
+      throw new Error("this connection was built without an accessTokenFactory");
+    }
+
+    return Promise.resolve(factory());
+  }
+
   /** The server pushing over this connection. */
   push(dto: MessageDto): void {
     this.handlers.get("MessageReceived")?.(dto as never);
@@ -136,7 +159,10 @@ export class FakeHubConnection {
 export const hubs: FakeHubConnection[] = [];
 
 export class HubConnectionBuilder {
-  withUrl(): HubConnectionBuilder {
+  private accessTokenFactory: AccessTokenFactory | null = null;
+
+  withUrl(_url: string, options?: { accessTokenFactory?: AccessTokenFactory }): HubConnectionBuilder {
+    this.accessTokenFactory = options?.accessTokenFactory ?? null;
     return this;
   }
 
@@ -150,6 +176,7 @@ export class HubConnectionBuilder {
 
   build(): FakeHubConnection {
     const hub = new FakeHubConnection();
+    hub.accessTokenFactory = this.accessTokenFactory;
     hubs.push(hub);
     return hub;
   }

@@ -1,7 +1,7 @@
 import type { MessageDto } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
 import { WidgetStorage, type VisitorSession } from "../storage.js";
-import { getOrCreateVisitorSession } from "../session.js";
+import { VisitorSessionExpiredError, VisitorSessionManager } from "../session.js";
 import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
 import { newClientMessageId } from "../protocol/dedup.js";
 import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
@@ -37,6 +37,7 @@ function createPublicDemoNotice(): HTMLDivElement {
  */
 export class ChatWidget {
   private readonly storage: WidgetStorage;
+  private readonly sessionManager: VisitorSessionManager;
   private readonly host: HTMLDivElement;
   private readonly root: ShadowRoot;
   private readonly container: HTMLDivElement;
@@ -61,6 +62,10 @@ export class ChatWidget {
   private conversationId: string | null = null;
   private isOpen = false;
   private isConnected = false;
+  /** `17-07`: set once the server has refused to renew this visitor's token mid-session. Terminal
+   * for this page load - see `handleSessionExpired` for why the widget stops rather than quietly
+   * minting a second identity underneath a transcript that belongs to the first. */
+  private isSessionExpired = false;
   /**
    * The optimistic bubble for each message this panel has sent and not yet seen come back, keyed by
    * the `clientMessageId` it was sent under.
@@ -80,6 +85,7 @@ export class ChatWidget {
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
+    this.sessionManager = new VisitorSessionManager(config, this.storage);
     const { host, root } = createShadowHost();
     this.host = host;
     this.root = root;
@@ -221,17 +227,31 @@ export class ChatWidget {
    * `11-03`: resolves the visitor's identity and applies the site's widget config (color, launcher
    * position) to the closed, not-yet-opened launcher - this has to happen before any interaction,
    * since the position affects where the toggle button itself renders, not just the panel a click
-   * would reveal. Reuses `getOrCreateVisitorSession`'s existing storage short-circuit for a returning
-   * visitor (that method's own doc comment states the resulting config-staleness limitation).
+   * would reveal. Reuses `VisitorSessionManager.start`'s storage short-circuit for a returning
+   * visitor (that method's own doc comment states the three paths it can take).
    *
    * The brief window between mount and this promise resolving renders with the widget's own built-in
    * appearance (this class's own CSS defaults) - for a first-time visitor this is a real network
    * round trip, typically well under the time it takes a person to notice or react, and for a
-   * returning visitor `getOrCreateVisitorSession` resolves synchronously-fast from storage.
+   * returning visitor with a token nowhere near expiry it resolves synchronously-fast from storage
+   * with no request at all.
+   *
+   * `17-07`: this is also where the widget says something when a returning visitor's identity could
+   * not be carried over. `restarted` means the stored token was past renewing, so a *new*
+   * `VisitorId` was minted and the previous conversation is not reachable from this browser any
+   * more. The note is written into the message list here rather than at open time so it sits above
+   * whatever the (new, empty) conversation goes on to contain, and it is written only for a visitor
+   * who actually lost something - never for a first-ever arrival.
    */
   private async bootstrapSession(): Promise<VisitorSession> {
-    const session = await getOrCreateVisitorSession(this.config, this.storage);
+    const { session, restarted } = await this.sessionManager.start();
     this.session = session;
+    if (restarted) {
+      this.renderSystemNote(
+        "Your previous chat has expired, so this is a new conversation. Anything you sent before is no longer shown here.",
+      );
+    }
+
     this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
     const color = parseWidgetColor(session.widgetPrimaryColorHex);
     if (color) {
@@ -281,7 +301,7 @@ export class ChatWidget {
     try {
       const session = await this.sessionPromise;
       this.session = session;
-      const connection = new VisitorConnection(this.config, session, this.storage);
+      const connection = new VisitorConnection(this.config, () => this.currentToken(), this.storage);
       connection.onMessage((message) => this.handleIncoming(message));
       connection.onStateChange((state) => this.renderConnectionState(state));
       this.connection = connection;
@@ -295,11 +315,80 @@ export class ChatWidget {
       this.renderConnectionState("connected");
     } catch (error) {
       logWidgetError(error);
-      this.status.textContent = "Chat is unavailable right now. Please try again later.";
+      if (!this.isSessionExpired) {
+        this.status.textContent = "Chat is unavailable right now. Please try again later.";
+      }
+    }
+  }
+
+  /**
+   * Every place this widget presents the visitor token - the hub's negotiate (via
+   * `VisitorConnection`'s `accessTokenFactory`) and the three attachment calls - goes through here,
+   * so renewal happens wherever the token is about to be used and nowhere else (`session.ts`
+   * explains why that is a better shape here than a timer).
+   *
+   * The one thing this adds on top of `VisitorSessionManager.token()` is making the terminal case
+   * *visible*. It still rethrows: the caller's own failure path is what stops the connect, the send
+   * or the upload.
+   */
+  private async currentToken(): Promise<string> {
+    try {
+      return await this.sessionManager.token();
+    } catch (error) {
+      if (error instanceof VisitorSessionExpiredError) {
+        this.handleSessionExpired();
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * `17-07`'s decided answer for a token that dies **while the page is open**, which is a different
+   * question from one that is already dead at page load (`session.ts`'s `start` mints a new identity
+   * for that one and the panel says so).
+   *
+   * Here the widget does **not** re-identify. A new `VisitorId` would open a different conversation
+   * while the previous one's messages are still on screen: the visitor would carry on typing into a
+   * transcript the operator answering them cannot see, and nothing would look wrong. So the session
+   * ends, visibly, and reloading - a thing the visitor can actually do - is what starts a new one.
+   *
+   * The connection is stopped rather than left to retry, because `@microsoft/signalr`'s reconnect
+   * loop would otherwise ask for a token forever, and every one of those attempts now costs a
+   * renewal request against a server that has already refused.
+   *
+   * `adr/0034` called the pre-`17-07` behaviour "silence: an expired token does not prompt anything;
+   * the widget keeps presenting it and the hub connection simply fails". This is that path made
+   * observable rather than moved.
+   */
+  private handleSessionExpired(): void {
+    if (this.isSessionExpired) {
+      return;
+    }
+
+    this.isSessionExpired = true;
+    this.isConnected = false;
+    this.input.disabled = true;
+    this.attachButton.disabled = true;
+    this.sendButton.disabled = true;
+    this.status.textContent = "This chat session has expired. Reload the page to start a new one.";
+
+    const connection = this.connection;
+    this.connection = null;
+    if (connection !== null) {
+      guardAsync(() => connection.stop());
     }
   }
 
   private renderConnectionState(state: ConnectionState): void {
+    // `17-07`: an expired session is terminal for this page load, and stopping the connection makes
+    // SignalR fire `onclose` right afterwards - without this the "reload to start a new one" message
+    // would be replaced, one tick later, by "Disconnected. Trying to reconnect…", which is both
+    // untrue and the exact kind of quiet that this item exists to remove.
+    if (this.isSessionExpired) {
+      return;
+    }
+
     this.isConnected = state === "connected";
     this.input.disabled = !this.isConnected;
     this.attachButton.disabled = !this.isConnected;
@@ -422,7 +511,6 @@ export class ChatWidget {
     }
 
     const conversationId = this.conversationId;
-    const session = this.session;
     const body = this.input.value.trim() || file.name;
     this.input.value = "";
     this.updateSendButtonEnabled();
@@ -433,23 +521,28 @@ export class ChatWidget {
     progress.textContent = "Uploading… 0%";
     bubble.appendChild(progress);
 
-    this.uploadThenSend(file, body, conversationId, session, bubble, progress);
+    this.uploadThenSend(file, body, conversationId, bubble, progress);
   }
 
+  /**
+   * `17-07`: the token is read per call through `currentToken()`, not captured once when the file
+   * was picked. An upload is the one thing this widget does that can outlive a renewal window - a
+   * large file on a slow connection - and step 4 (`confirmAttachment`) would otherwise present a
+   * token minted before step 1 began.
+   */
   private uploadThenSend(
     file: File,
     body: string,
     conversationId: string,
-    session: VisitorSession,
     bubble: HTMLDivElement,
     progress: HTMLDivElement,
   ): void {
     (async () => {
-      const created = await createAttachment(this.config, session.token, conversationId, file);
+      const created = await createAttachment(this.config, await this.currentToken(), conversationId, file);
       await uploadToPresignedUrl(created.uploadUrl, file, (fraction) => {
         progress.textContent = `Uploading… ${Math.round(fraction * 100)}%`;
       });
-      await confirmAttachment(this.config, session.token, created.attachmentId);
+      await confirmAttachment(this.config, await this.currentToken(), created.attachmentId);
 
       bubble.remove();
       this.dispatchSend(body, created.attachmentId);
@@ -531,7 +624,8 @@ export class ChatWidget {
       return;
     }
 
-    getAttachmentDownload(this.config, this.session.token, attachmentId)
+    this.currentToken()
+      .then((token) => getAttachmentDownload(this.config, token, attachmentId))
       .then((info) => {
         const link = document.createElement("a");
         link.href = info.url;

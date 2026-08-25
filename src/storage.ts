@@ -16,15 +16,17 @@ export interface VisitorSession {
   /**
    * `11-03`: cached alongside the identity at mint time, from the same `POST /api/v1/visitor-sessions`
    * response - not fetched separately. `adr/0029`'s "read once, at bootstrap" model is about the
-   * *visitor's* handshake, which only ever happens once per visitor identity (`getOrCreateVisitorSession`'s
-   * own doc comment: re-minting on every page view would fragment one visitor into many) - so a
-   * returning visitor whose identity was already minted keeps whatever config was current then, on
-   * every later page load, until their stored session itself is ever refreshed. This is a real,
-   * named limitation on top of the ADR's own already-stated one (an *already-open* tab not updating
-   * live): here, even a *fresh* page load does not re-request config for a visitor who already has a
-   * session, because re-requesting through this endpoint would mint a second identity to get it.
-   * Fixing this for real needs a session endpoint that can return current config without minting a
-   * new visitor - out of this item's scope (a `ago-chat` API change, and `11-01` is already closed).
+   * *visitor's* handshake, which only ever happens once per visitor identity (`session.ts`'s
+   * `VisitorSessionManager`: re-minting on every page view would fragment one visitor into many).
+   *
+   * **`17-07` largely closed this.** The paragraph that stood here said fixing it "needs a session
+   * endpoint that can return current config without minting a new visitor", and that is exactly what
+   * `POST /api/v1/visitor-sessions/renew` is: it returns the same response shape, so every renewal
+   * rewrites these two fields. What is left of the limitation is bounded rather than permanent - a
+   * returning visitor's cached config is at most one renewal window stale (a third of the token
+   * lifetime), instead of frozen at the moment their identity was first minted - and `adr/0029`'s
+   * own stated limitation, that an *already-open* tab does not update live, is untouched.
+   *
    * `null` for a session written before this field existed, or for a site with no override -
    * `ui/appearance.ts`'s `parseWidgetColor`/`parseWidgetPosition` treat both identically to "not set".
    */
@@ -116,5 +118,27 @@ export class WidgetStorage {
 
   setConversationId(conversationId: string): void {
     this.writeSafe("conversation-id", conversationId);
+  }
+
+  /**
+   * `17-07`: forgets which conversation this browser was resuming, and the cursor into it.
+   *
+   * Called on exactly one event - a stored visitor identity the server would no longer renew being
+   * replaced by a freshly minted one (`session.ts`'s `start`). The new `VisitorId` does not own the
+   * old conversation, and leaving the cursor behind would make the first `JoinAsync` of the new
+   * session ask to resume *from a sequence in somebody else's transcript*: the server answers with
+   * the delta after that sequence in the conversation it actually resolves for this visitor, so a
+   * new conversation whose own messages sit below that number comes back empty and the visitor
+   * watches their own messages fail to appear.
+   *
+   * Removes the cursor before the id, because the cursor's key is derived from the id.
+   */
+  clearConversation(): void {
+    const conversationId = this.getConversationId();
+    if (conversationId !== null) {
+      this.removeSafe(`last-sequence:${conversationId}`);
+    }
+
+    this.removeSafe("conversation-id");
   }
 }

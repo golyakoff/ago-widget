@@ -22,7 +22,10 @@ src/
   index.ts         bootstrap: reads the <script> tag, mounts once, wrapped so a failure
                     degrades to "no widget" - never a broken host page
   config.ts         data-site / data-api / data-public-demo parsing
-  session.ts        POST /api/v1/visitor-sessions - rate-limit (429/Retry-After) handling
+  session.ts        VisitorSessionManager: mints the visitor identity, renews the token
+                     before it expires (17-07), rate-limit (429/Retry-After) handling
+  tokenExpiry.ts     reads nbf/exp out of the visitor JWT - never verifies it, and is only
+                     ever a decision about *when to renew*, never an authorization one
   attachments.ts     presign/upload/confirm/download (5-10) - courtesy validation, real
                      XHR upload progress, never a thrown exception on failure
   storage.ts         namespaced localStorage, scoped per site
@@ -70,10 +73,11 @@ mechanism, and this must not pre-empt its shape.
 
 ## Bundle size
 
-**21.0 KB gzipped** (76.8 KB raw, minified), measured 2026-08-25 against a clean build of this
-commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `11-03`'s 20.5 KB by
-`8-06`'s public-demo notice (its fixed sentence and the strip's CSS). Both numbers come from the same
-command on the same machine, the second with `8-06`'s changes stashed. `build.mjs` enforces
+**22.0 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-17`'s 21.0 KB by
+`17-07`'s renewal path (`tokenExpiry.ts`, `VisitorSessionManager`'s renew/throttle/expiry branches
+and the two strings the panel shows a visitor whose session did not survive). Both numbers come from
+the same command on the same machine. `build.mjs` enforces
 a 45 KB gzipped budget on every build (CI included) - real headroom over the measured number, not a
 guess made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
 
@@ -137,6 +141,15 @@ section. What this repository actually has:
   out of send order each resolve their own bubble, a visitor message this panel did not send renders
   as a new message, and an *unconfirmed* send's warning is cleared by the server's own copy of that
   message and by nothing else. Its own header says why it is a separate file from `widget.test.ts`.
+- **The visitor's identity outliving its own token** (`session.test.ts` and
+  `ui/sessionRenewal.test.ts`, `17-07`): a token close to expiry is exchanged for a fresh one under
+  the *same* `VisitorId`, a token that runs out under an open page is not what the next negotiate
+  carries, a renewal that fails transiently leaves the visitor on the token they still have, a
+  renewal the server refuses ends the session visibly instead of silently becoming a second visitor,
+  and a visitor returning after expiry gets a working widget, a sentence saying the old conversation
+  is gone, and no stale cursor into it. Time is an injected clock (`session.test.ts`) or
+  `vi.setSystemTime` (`ui/sessionRenewal.test.ts`) moved in whole days - nothing here passes because
+  the test ran quickly, which for this behaviour would be no test at all.
 - **Isolation on a hostile page** (`isolation.test.ts`): the jsdom twin of `demo/index.html` - the
   widget's surface is unreachable from the host document's own queries, its stylesheet stays inside
   the shadow root, it adds exactly one global and never touches the page's own, every storage key is
@@ -159,7 +172,7 @@ section. What this repository actually has:
 
 New behaviour joins one of those two lists rather than neither.
 
-**`11-03`**: bootstrap now resolves the visitor's identity (`session.ts`'s `getOrCreateVisitorSession`)
+**`11-03`**: bootstrap now resolves the visitor's identity (`session.ts`'s `VisitorSessionManager`)
 eagerly, right after mounting - not lazily on first open, the way `5-09` originally built it. Position
 has to be known before the closed launcher renders (it decides which corner the toggle button itself
 sits in), so the fetch could no longer wait for a click; `connect()` (built on first open) reuses the
@@ -188,6 +201,37 @@ never cleared by anything except that arrival - not by a later message, not by t
 so "we are not sure" is only ever replaced by evidence. It mirrors the rule `ago-console` applies from
 the other end (retry an unknown-outcome send with the *same* `clientMessageId`, a fresh one when
 nothing was sent). Automatic retry remains deliberately out of scope here.
+
+**`17-07`**: the visitor's token now **renews**, which is what lets its lifetime come down.
+
+Before this, `getOrCreateVisitorSession` stored the first token it was ever handed and reused it
+forever - it never inspected `exp` and never re-minted - so the token's lifetime *was* "how long a
+returning visitor still sees their own conversation", and shortening it would have moved the day this
+widget silently stops working from day 31 to day 8. That is exactly why `../ago-root/docs/adr/0034-*`
+could not lower the number on its own.
+
+How it works, and the three decisions worth stating:
+
+- **Renewal happens at use, not on a timer.** The token is only ever presented at the hub's negotiate
+  and on the attachment calls, and every one of those goes through `VisitorSessionManager.token()`,
+  which exchanges the token first if less than a third of its own lifetime is left. No `setInterval`
+  runs on the host page, a laptop that slept through the moment a timer would have fired renews on
+  the next use rather than never, and the widget never renews a token it was not about to use.
+- **The threshold comes from the token, never from a constant.** `tokenExpiry.ts` reads `nbf`/`exp`,
+  so the same code is correct against whatever lifetime the server is configured with. It verifies
+  nothing: the server re-validates on every presentation, and the worst a lying `exp` can do is cost
+  one extra rate-limited request.
+- **Re-identification only ever happens at a page load.** A visitor returning after their token could
+  no longer be renewed gets a new identity, a cleared conversation cursor, and a sentence in the panel
+  saying the previous conversation is not coming back - `adr/0034` called the old behaviour "silence",
+  and this is that path made observable rather than moved. A token the server refuses to renew *while
+  the page is open* ends the session visibly instead: a new `VisitorId` there would open a different
+  conversation underneath a transcript that belongs to the first one, and the visitor would go on
+  typing to an operator who cannot see it.
+
+The same change removed the defect `5-17` flagged next door: `accessTokenFactory` used to close over
+a captured token, which was harmless only because the token never rotated. It takes a provider now,
+so a connection opened days ago and dropped negotiates with a token that is valid *now*.
 
 **Known gap, not this repository's bug**: an operator-authored message (real-time push, not the
 widget's own send) does not reliably arrive live right now - `../ago-root/docs/backlog/5-11-fix-competing-consumer-queue-collision.md`

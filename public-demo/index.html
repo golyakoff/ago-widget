@@ -93,6 +93,19 @@
         color: var(--accent);
       }
 
+      /* 8-06. Sits directly under the tagline, above everything explanatory - a visitor who reads
+         only the first screenful still reads this. Left rule and a flat tint rather than a card, so
+         it does not look like one more section to skim past. */
+      .public-notice {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-left-width: 5px;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 0 0 32px;
+        font-weight: 600;
+      }
+
       .credential-box {
         background: var(--warn-bg);
         border: 1px solid var(--warn-line);
@@ -143,6 +156,11 @@
       <h1>AGO Chat</h1>
       <p class="tag">
         A live, working customer-support chat - the whole thing, running for real, no local setup.
+      </p>
+
+      <p class="public-notice">
+        This is a public demo. The operator login below is published on this page, so anyone can read
+        every conversation started here - including yours. Do not type anything real.
       </p>
 
       <div class="card">
@@ -202,6 +220,11 @@
           disposable conversations. Nothing you send here is production data, and nothing you do
           here can reach anything that would be.
         </p>
+        <p>
+          Safe for the deployment is not the same as private for you, though, and this card would be
+          misleading without saying so: the login above is published, so anything you type into the
+          widget is readable by any stranger who signs in with it. Treat this chat as a public one.
+        </p>
       </div>
 
       <footer>
@@ -211,6 +234,11 @@
       </footer>
     </main>
 
-    <script src="./ago-chat.js" data-site="demo_site" async></script>
+    <!--
+      8-06: data-public-demo turns on the widget's own "anyone can read this" line, inside the panel
+      itself. The page copy above is not enough on its own - the launcher floats over every scroll
+      position, so a visitor can open the panel and type without ever having read the page.
+    -->
+    <script src="./ago-chat.js" data-site="demo_site" data-public-demo="true" async></script>
   </body>
 </html>

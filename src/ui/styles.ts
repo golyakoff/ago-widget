@@ -112,6 +112,21 @@ export const widgetStyles = /* css */ `
     padding: 0.25rem;
   }
 
+  /* 8-06. Deliberately not tinted with --ago-accent: the accent is the site's own brand colour
+     (11-03), and a warning painted in the brand colour reads as decoration. Amber-on-dark-amber at
+     a contrast ratio well past 4.5:1, fixed rather than themed, so it looks like an interruption in
+     the panel rather than part of it - and so it renders identically regardless of which of the two
+     demo pages (light or dark) it is floating over, since the panel's own background is white in
+     both. Full width, no border-radius, no icon: it is a strip, not a card. */
+  .ago-notice {
+    background: #fff4d6;
+    border-bottom: 0.0625rem solid #e0b34a;
+    color: #5c4008;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    padding: 0.5rem 0.75rem;
+  }
+
   .ago-messages {
     flex: 1;
     overflow-y: auto;

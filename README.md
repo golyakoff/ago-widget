@@ -21,7 +21,7 @@ pollution, jittered reconnect, resume-by-sequence, and never breaking the host p
 src/
   index.ts         bootstrap: reads the <script> tag, mounts once, wrapped so a failure
                     degrades to "no widget" - never a broken host page
-  config.ts         data-site / data-api parsing
+  config.ts         data-site / data-api / data-public-demo parsing
   session.ts        POST /api/v1/visitor-sessions - rate-limit (429/Retry-After) handling
   attachments.ts     presign/upload/confirm/download (5-10) - courtesy validation, real
                      XHR upload progress, never a thrown exception on failure
@@ -59,11 +59,19 @@ build should talk to - `http://localhost:5009` for the local cluster
 tag's own `data-api` attribute, for exactly the case this repository's own demo page needs: one
 built bundle, pointed at a different API origin without a second build.
 
+A third attribute, `data-public-demo="true"`, renders one fixed line inside the panel telling the
+visitor that anyone with the published operator login can read what they type (`8-06`). It is set on
+this repository's own two public demo pages and nowhere else; the default is off, and only the exact
+string `"true"` turns it on, so no real shop's embed can acquire it by accident. It is a flag and not
+a free-text notice deliberately - a tenant-configurable processing notice is `16-04`'s server-driven
+mechanism, and this must not pre-empt its shape.
+
 ## Bundle size
 
-**20.5 KB gzipped** (75.7 KB raw, minified), measured 2026-08-24 against a clean build of this
-commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `5-10`'s 19.9 KB now that
-`11-03`'s per-site appearance (color/position, applied at bootstrap) is included. `build.mjs` enforces
+**21.0 KB gzipped** (76.8 KB raw, minified), measured 2026-08-25 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - up from `11-03`'s 20.5 KB by
+`8-06`'s public-demo notice (its fixed sentence and the strip's CSS). Both numbers come from the same
+command on the same machine, the second with `8-06`'s changes stashed. `build.mjs` enforces
 a 45 KB gzipped budget on every build (CI included) - real headroom over the measured number, not a
 guess made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
 

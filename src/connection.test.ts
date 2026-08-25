@@ -31,12 +31,10 @@ const config: WidgetConfig = {
   isPublicDemo: false,
 };
 
-const session = {
-  token: "visitor-token",
-  visitorId: "55555555-5555-5555-5555-555555555555",
-  widgetPrimaryColorHex: null,
-  widgetPosition: null,
-};
+/** : the connection takes a token *provider*, not a session - see its constructor for why
+ * a captured token became a defect the moment renewal existed. Tests that do not care about
+ * renewal hand it a provider that always answers the same thing. */
+const tokenProvider = () => Promise.resolve("visitor-token");
 
 function message(id: string, sequence: number, authorKind: "Visitor" | "Operator" = "Operator"): MessageDto {
   return {
@@ -56,7 +54,7 @@ function joinResult(history: MessageDto[]): VisitorJoinResult {
 let storage: WidgetStorage;
 
 function newConnection() {
-  return new VisitorConnection(config, session, storage);
+  return new VisitorConnection(config, tokenProvider, storage);
 }
 
 beforeEach(() => {
@@ -176,7 +174,7 @@ describe("a page reloaded after a conversation was already open", () => {
     currentHub().push(message("m2", 12));
 
     // A fresh page load: a new connection, a new storage reader, the same browser storage.
-    const second = new VisitorConnection(config, session, new WidgetStorage(SITE_KEY));
+    const second = new VisitorConnection(config, tokenProvider, new WidgetStorage(SITE_KEY));
     joinQueue.push(joinResult([]));
     await second.start();
 

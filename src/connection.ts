@@ -1,7 +1,7 @@
 import * as signalR from "@microsoft/signalr";
 import type { HistoryPage, MessageDto, VisitorJoinResult } from "./protocol/types.js";
 import type { WidgetConfig } from "./config.js";
-import type { VisitorSession, WidgetStorage } from "./storage.js";
+import type { WidgetStorage } from "./storage.js";
 import { defaultBackoffOptions, jitteredDelayMs } from "./protocol/backoff.js";
 import { SeenMessageIds } from "./protocol/dedup.js";
 import { SequenceTracker } from "./protocol/sequence.js";
@@ -52,14 +52,32 @@ export class VisitorConnection {
   private conversationId: string | null = null;
   private sequenceTracker = new SequenceTracker();
 
+  /**
+   * `accessTokenFactory` is a **factory**, not a token, and `@microsoft/signalr` calls it on every
+   * negotiate - the first connect and every automatic-reconnect attempt alike. `5-17` noted that
+   * this one closed over a captured `session.token`, and that it was harmless only because the
+   * visitor token never rotated. `17-07` makes it rotate, so the capture became a live defect: a
+   * connection opened days ago, dropped, and re-established would negotiate with the token this page
+   * load started with - the one renewal had already replaced - and the reconnect would be rejected
+   * by a server that is entirely right to reject it. The visitor would see "Reconnecting…" forever.
+   *
+   * So the token arrives as `tokenProvider`, asynchronous because `session.ts`'s own `token()` may
+   * have to renew before it can answer. This is *the* moment renewal has to happen for the widget to
+   * survive its own token's lifetime: SignalR is asking what to present, and the answer is computed
+   * then rather than remembered from before.
+   *
+   * Mirrors `ago-console`'s `OperatorConnection`, which took the same shape for the same reason in
+   * `5-16` - the two repositories keep converging on this because it is the same problem seen from
+   * two token issuers.
+   */
   constructor(
     private readonly config: WidgetConfig,
-    session: VisitorSession,
+    tokenProvider: () => Promise<string>,
     private readonly storage: WidgetStorage,
   ) {
     this.connection = new signalR.HubConnectionBuilder()
       .withUrl(`${config.apiBaseUrl}/hubs/visitor`, {
-        accessTokenFactory: () => session.token,
+        accessTokenFactory: tokenProvider,
         // The widget never uses cookies (embeddable-widget skill: "No cookies on the host
         // domain") - identity travels entirely through the JWT above. @microsoft/signalr's own
         // default is `withCredentials: true`, which sends the browser's cookie jar for this

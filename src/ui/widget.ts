@@ -16,6 +16,25 @@ interface PendingSend {
 }
 
 /**
+ * `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
+ * short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
+ * polite banner people skim is worth less than a blunt one they finish reading.
+ *
+ * Fixed text owned by the widget rather than passed in from the host page: `config.ts` explains why
+ * the script tag carries a flag and not a string.
+ */
+function createPublicDemoNotice(): HTMLDivElement {
+  const notice = document.createElement("div");
+  notice.className = "ago-notice";
+  // `role="note"`, not a live region: it is present before the visitor interacts at all, so there is
+  // nothing to announce - it is read in document order like the rest of the panel.
+  notice.setAttribute("role", "note");
+  notice.textContent =
+    "This is a public demo. Anyone who opens the demo operator console can read what you type here. Do not type anything real.";
+  return notice;
+}
+
+/**
  * Assembles the widget's whole visible surface inside one Shadow DOM root. This is intentionally
  * one class rather than a component framework: the panel has a fixed, small set of views (closed,
  * connecting, open) and pulling in a UI framework's runtime for that would blow the bundle budget
@@ -92,6 +111,14 @@ export class ChatWidget {
     this.closeButton.addEventListener("click", () => this.close());
     header.append(title, this.closeButton);
 
+    // `8-06`: directly under the header and outside `.ago-messages`, so it is the first thing read
+    // when the panel opens and cannot be scrolled away by the conversation underneath it. Not
+    // dismissible: the thing it warns about (typing something real) is available on every keystroke,
+    // not once at open time, so a close button would only ever remove the warning from the exact
+    // moment it applies. Not a `.ago-message--system` bubble either - a bubble reads as chat history
+    // and scrolls off with it.
+    const notice = config.isPublicDemo ? createPublicDemoNotice() : null;
+
     this.messages = document.createElement("div");
     this.messages.className = "ago-messages";
     // aria-live for incoming messages (embeddable-widget skill's accessibility baseline) -
@@ -154,7 +181,12 @@ export class ChatWidget {
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
     composer.append(this.attachButton, this.fileInput, this.input, this.sendButton);
-    this.panel.append(header, this.messages, this.status, composer);
+    this.panel.append(header);
+    if (notice) {
+      this.panel.append(notice);
+    }
+
+    this.panel.append(this.messages, this.status, composer);
     container.append(this.panel, this.toggle);
     this.root.appendChild(container);
 

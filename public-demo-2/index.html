@@ -91,6 +91,21 @@
         color: var(--accent);
       }
 
+      /* 8-06. Same block as public-demo/index.html, restyled for this page rather than inherited
+         from it: --warn-bg here is a near-black amber, so the text colour has to be a light amber
+         (#f5d98a on #241d0f) instead of demo-shop1's dark-on-pale. Two pages, two palettes, one
+         sentence - the sentence is what is shared, never the colour values. */
+      .public-notice {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-left-width: 5px;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 0 0 32px;
+        color: #f5d98a;
+        font-weight: 600;
+      }
+
       .credential-box {
         background: var(--warn-bg);
         border: 1px solid var(--warn-line);
@@ -142,6 +157,12 @@
       <p class="tag">
         A second, independent shop on the same platform - its own site, its own operator login,
         nothing shared with the other demo tenant except the code.
+      </p>
+
+      <p class="public-notice">
+        This is a public demo. The operator login below is published on this page, so anyone can read
+        every conversation started here - including yours. Isolation from the other tenant is real;
+        privacy from other visitors of this one is not. Do not type anything real.
       </p>
 
       <div class="card">
@@ -200,6 +221,7 @@
       </footer>
     </main>
 
-    <script src="./ago-chat.js" data-site="demo_site2" async></script>
+    <!-- 8-06: see public-demo/index.html's own comment on this attribute. -->
+    <script src="./ago-chat.js" data-site="demo_site2" data-public-demo="true" async></script>
   </body>
 </html>

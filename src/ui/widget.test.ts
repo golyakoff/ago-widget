@@ -193,20 +193,16 @@ describe("the panel while the connection is gone and after it returns", () => {
   });
 
   /**
-   * **Found while writing the test above, and deliberately not fixed here** (`11-08` is a testing
-   * item; this is a product defect and gets its own change).
+   * The defect found while writing the test above - one failed send desynchronising every optimistic
+   * bubble after it - was fixed by `5-17`, which pairs an echo with its bubble by `clientMessageId`
+   * instead of by queue position. `ui/reconciliation.test.ts` is where that pairing is covered, in
+   * the sequences that distinguish it from the old positional behaviour.
    *
-   * `dispatchSend` pushes an entry onto `pendingSends` *before* invoking and never removes it when
-   * the send fails - only `handleIncoming` ever shifts that queue, and it shifts by position rather
-   * than by `clientMessageId` (`protocol/dedup.ts` already names that as a known gap). So one failed
-   * send offsets the queue permanently: the drop-send-reconnect sequence this describe block already
-   * covers leaves a stale entry, and the *next* successful message's echo then removes the
-   * "Not sent - reconnecting" bubble instead of its own optimistic one - so the visitor loses the
-   * only sign their message never went, and sees their new message rendered twice. Measured, not
-   * reasoned: the panel ends up showing `["second", "second"]`.
-   *
-   * No test asserts the broken behaviour, because a test that pins a defect certifies it. This note
-   * is here because this file is where the next person looking at reconciliation will be.
+   * What is left here is the plain case: the sender's own message coming back once, not rendered
+   * twice. `5-17` changed the fixture it needs - the echo now has to carry the id the widget sent
+   * the message under, because that is what matches it, and it is what the real `VisitorHub` puts on
+   * every delivery. Before that fix this test passed with the id omitted, which is precisely the
+   * hole: nothing compared the id to anything.
    */
   it("does not re-render the visitor's own message when the server echoes it back", async () => {
     joinQueue.push(joinResult([]));
@@ -218,7 +214,8 @@ describe("the panel while the connection is gone and after it returns", () => {
     expect(panel.bubbleTexts()).toEqual(["hello"]);
 
     // realtime.md's fan-out path: the sender's own connection receives its message again.
-    currentHub().push({ ...message("echo", 5, "Visitor"), body: "hello" });
+    const clientMessageId = currentHub().invocationAt("SendMessageAsync", 0).args[3] as string;
+    currentHub().push({ ...message("echo", 5, "Visitor"), body: "hello", clientMessageId });
     await flush();
 
     expect(panel.bubbleTexts()).toEqual(["hello"]);

@@ -29,6 +29,8 @@ src/
   connection.ts      @microsoft/signalr wrapper: resume-by-sequence, jittered reconnect,
                      the sender's-own-echo dedup
   protocol/          pure, unit-tested: backoff.ts, dedup.ts, sequence.ts, types.ts
+  testing/           a hand-written @microsoft/signalr fake for the behaviour tests - never
+                     imported by index.ts, so it never reaches the bundle
   ui/                Shadow DOM host, the widget's own visible surface, focus trap, styles,
                      appearance.ts (11-03: parses the per-site color/position the handshake
                      returns, never trusting the wire value blindly)
@@ -111,14 +113,46 @@ npm run lint
 npm test
 ```
 
-Unit tests cover the protocol/pure-logic layer (`protocol/*.test.ts`, `storage.test.ts`,
-`attachments.test.ts`'s courtesy validation, `ui/appearance.test.ts`'s `11-03` color/position parsing)
-- sequence handling, the sender's-own-echo dedup, jittered backoff, the client-side size/type check,
-and the "malformed/missing config falls back to the built-in default, never throws" contract, matching
-the skill's own testing bar. `connection.ts`, `ui/widget.ts`, and `attachments.ts`'s upload flow are
-exercised live against the demo page instead of mocked: a real `HubConnection` against a real
-`Ago.Chat.Api`, a real presigned upload against real MinIO, is closer to what actually ships than a
-mocked client would prove.
+All three run in CI on every push and pull request (`.github/workflows/ci.yml`), along with the build
+and its bundle-size check. The levels are `../ago-root/docs/conventions/testing.md`'s frontend
+section. What this repository actually has:
+
+**Tested**
+
+- **Pure logic** (`protocol/*.test.ts`, `storage.test.ts`, `config.test.ts`, `attachments.test.ts`'s
+  courtesy validation, `ui/appearance.test.ts`'s `11-03` color/position parsing): sequence handling,
+  the sender's-own-echo dedup, jittered backoff, per-site storage scoping, the client-side size/type
+  check, and the "malformed/missing config falls back to the built-in default, never throws" contract.
+- **Reconnect and resume as behaviour** (`connection.test.ts`, `11-08`): the connection drops, the
+  client resumes from the sequence it really saw, what arrived during the gap is delivered exactly
+  once even when the resume delta overlaps a live push, a page reload resumes from the persisted
+  cursor, and a send meeting a connection that is not there is refused rather than lost. Testing
+  `backoff` is not testing this - `5-16` in `ago-console` is the standing proof that every piece can
+  be correct while the object owning them goes deaf.
+- **What the visitor sees around that** (`ui/widget.test.ts`): the composer is disabled while the
+  socket is gone and usable again after the resume, resumed messages render once each, a send that
+  did not go says so instead of vanishing, and the panel's own Enter/Shift+Enter contract.
+- **Isolation on a hostile page** (`isolation.test.ts`): the jsdom twin of `demo/index.html` - the
+  widget's surface is unreachable from the host document's own queries, its stylesheet stays inside
+  the shadow root, it adds exactly one global and never touches the page's own, every storage key is
+  namespaced, a malformed embed degrades to no widget instead of throwing into the page, a page whose
+  `localStorage` throws still gets a widget, and the snippet pasted twice mounts once.
+
+**Deliberately not tested, and why**
+
+- **The CSS cascade half of the isolation claim.** Measured rather than assumed (2026-08-25): jsdom
+  matches selectors against the flattened document and implements no shadow-boundary scoping in
+  `getComputedStyle`, so the host page's `button { ... !important }` *does* apply to a button inside
+  an open shadow root there, and the shadow root's own `<style>` does not apply at all. An assertion
+  either way would be wrong. What the automated test proves is the DOM boundary that makes the
+  cascade rule hold in a real browser; the browser's half is `demo/index.html` and live verification.
+  `isolation.test.ts`'s own header carries the measurement.
+- **Appearance, and coverage as a number.** Nothing behavioural to assert about a colour; no
+  snapshots, which fail on every restyle and pass through every real defect. No coverage target.
+- **`attachments.ts`'s upload flow end to end.** Still exercised live: a real presigned PUT against
+  real MinIO is closer to what ships than a mocked `XMLHttpRequest` would prove.
+
+New behaviour joins one of those two lists rather than neither.
 
 **`11-03`**: bootstrap now resolves the visitor's identity (`session.ts`'s `getOrCreateVisitorSession`)
 eagerly, right after mounting - not lazily on first open, the way `5-09` originally built it. Position
@@ -131,6 +165,16 @@ real, named limitation this surfaces: a *returning* visitor's cached color/posit
 on a fresh page load either, since re-requesting through this same endpoint would mint a second
 visitor identity to get it - fixing that needs a session endpoint that can return current config
 without minting a new visitor, out of this item's own scope.
+
+**Known defect, found by `11-08`'s own tests and deliberately not fixed in that item** (a testing
+item should not quietly ship a product change): **one failed send permanently offsets the optimistic
+bubble queue.** `ChatWidget.dispatchSend` pushes an entry onto `pendingSends` before invoking and
+never removes it when the send fails, and `handleIncoming` reconciles by queue position rather than by
+`clientMessageId` (`protocol/dedup.ts` already names that as a gap). So after the ordinary
+drop -> send -> reconnect sequence, the next message's own echo removes the *"Not sent - reconnecting"*
+bubble instead of its own - the visitor loses the only sign their message never went, and sees the new
+one rendered twice. Measured, not reasoned; `ui/widget.test.ts` carries the detail beside the test
+that found it.
 
 **Known gap, not this repository's bug**: an operator-authored message (real-time push, not the
 widget's own send) does not reliably arrive live right now - `../ago-root/docs/backlog/5-11-fix-competing-consumer-queue-collision.md`

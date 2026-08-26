@@ -149,6 +149,91 @@
         color: var(--muted);
         font-size: 0.9rem;
       }
+
+      /* 8-09: the "get your own tenant" card and whatever the mint call renders into it. Uses this
+         page's own palette variables rather than fixed colours, so both demo pages - the light one
+         and the dark one - style it correctly from one block of CSS copied between them. */
+      .own-tenant-box {
+        border-color: var(--accent);
+      }
+      .own-tenant-box button.mint {
+        appearance: none;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        padding: 0.7rem 1.15rem;
+        cursor: pointer;
+      }
+      .own-tenant-box button.mint:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .ago-demo-panel {
+        margin-top: 1rem;
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.6rem;
+        background: var(--canvas);
+      }
+      .ago-demo-panel__title {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+      .ago-demo-panel__lifetime {
+        margin: 0 0 0.5rem;
+        color: var(--muted);
+      }
+      /* The one line that has to be read rather than skimmed - the password exists nowhere else. */
+      .ago-demo-panel__warning {
+        margin: 0 0 0.9rem;
+        padding: 0.55rem 0.7rem;
+        border: 1px solid var(--warn-line);
+        border-radius: 0.45rem;
+        background: var(--warn-bg);
+        font-weight: 600;
+      }
+      .ago-demo-field {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .ago-demo-field__label {
+        flex: 0 0 5.5rem;
+        color: var(--muted);
+      }
+      .ago-demo-field__value {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.95rem;
+        padding: 0.45rem 0.55rem;
+        border: 1px solid var(--line);
+        border-radius: 0.4rem;
+        background: var(--paper);
+        color: var(--ink);
+      }
+      .ago-demo-field__copy {
+        appearance: none;
+        border: 1px solid var(--line);
+        border-radius: 0.4rem;
+        background: var(--paper);
+        color: var(--ink);
+        font: inherit;
+        padding: 0.45rem 0.7rem;
+        cursor: pointer;
+      }
+      .ago-demo-panel__steps {
+        margin: 0.75rem 0 0;
+        padding-left: 1.15rem;
+        color: var(--muted);
+      }
+      .ago-demo-step {
+        margin-bottom: 0.3rem;
+      }
     </style>
   </head>
   <body>
@@ -190,6 +275,23 @@
           </li>
           <li>Find your message in the queue, open it, and reply. Watch it arrive back here live.</li>
         </ol>
+      </div>
+
+      <!--
+        8-09: the half of 8-07 a stranger can actually reach. The endpoint has existed since 8-07 and
+        nothing called it; this card is what calls it. Placed above the shared login below on purpose -
+        a viewer should meet the private option first, and the shared one is kept because it is what
+        demonstrates tenant isolation live (two seeded tenants, neither able to see the other).
+      -->
+      <div class="card own-tenant-box">
+        <h2>Or get a tenant of your own</h2>
+        <p>
+          The login below is shared with every other visitor to this page. Press this instead and you
+          get your own tenant, with your own operator account and your own conversations - which
+          nobody else can read. It deletes itself after about a day, along with everything in it.
+        </p>
+        <button type="button" class="mint" id="ago-demo-mint-button">Get your own tenant</button>
+        <div id="ago-demo-mint-output"></div>
       </div>
 
       <div class="card credential-box">
@@ -239,6 +341,19 @@
       itself. The page copy above is not enough on its own - the launcher floats over every scroll
       position, so a visitor can open the panel and type without ever having read the page.
     -->
-    <script src="./ago-chat.js" data-site="demo_site" data-public-demo="true" async></script>
+    <!--
+      8-09: the widget is no longer embedded by a literal tag here. demo-boot.js reads `?site=`,
+      falls back to this page's own key (demo_site) when it is absent - which is every link that
+      exists today - and then injects the widget's own <script data-site> tag with the answer.
+
+      **The query parameter belongs to this page, not to the widget** (ago-root adr/0058). A
+      widget that read it from its host page's URL could be repointed at another tenant by any
+      page it is embedded on, which is a tenant-isolation hole rather than a convenience. The
+      two ship as separate bundles so that stays true by construction.
+
+      8-06's data-public-demo is set by demo-boot.js, not dropped - the page stays public even
+      when the tenant is private, and that notice is still the honest thing to show.
+    -->
+    <script src="./demo-boot.js" data-fallback-site="demo_site" defer></script>
   </body>
 </html>

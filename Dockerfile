@@ -47,6 +47,11 @@ LABEL org.opencontainers.image.source="https://github.com/golyakoff/ago-widget" 
       org.opencontainers.image.revision="${GIT_COMMIT}"
 COPY --from=build /app/dist/ago-chat.js /usr/share/nginx/html/ago-chat.js
 COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.map
+# `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget tag, wires the
+# "get your own tenant" button. A separate bundle from the widget on purpose (build.mjs, adr/0058):
+# only these demo pages ever load it, and no tenant embedding the widget downloads a byte of it.
+COPY --from=build /app/dist/demo-boot.js /usr/share/nginx/html/demo-boot.js
+COPY --from=build /app/dist/demo-boot.js.map /usr/share/nginx/html/demo-boot.js.map
 # DEMO_PAGE_DIR selects which demo page this image embeds - `public-demo` (demo-shop1, the
 # original 8-02 page, `data-site="demo_site"`) by default, or `public-demo-2` (demo-shop2, a
 # second, independent tenant seeded specifically to demonstrate tenant isolation live: a different

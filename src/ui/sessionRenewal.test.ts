@@ -35,7 +35,7 @@ const T0 = Date.UTC(2026, 7, 25, 9, 0, 0);
 const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
-  isPublicDemo: false,
+  demoNotice: "none",
 };
 
 function tokenMintedAt(mintedAt: number): string {

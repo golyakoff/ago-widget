@@ -243,7 +243,12 @@
         A live, working customer-support chat - the whole thing, running for real, no local setup.
       </p>
 
-      <p class="public-notice">
+      <!--
+        8-11: the id is what demo-boot.js swaps this text through on a minted `?site=` tenant, where
+        every word of it is false. The default copy stays exactly 8-06's - this item makes the
+        warning conditional, never softer.
+      -->
+      <p class="public-notice" id="ago-demo-public-notice">
         This is a public demo. The operator login below is published on this page, so anyone can read
         every conversation started here - including yours. Do not type anything real.
       </p>
@@ -295,11 +300,16 @@
       </div>
 
       <div class="card credential-box">
-        <h2>Operator login (throwaway, safe to publish)</h2>
+        <h2>Operator login for Demo Shop One (throwaway, safe to publish)</h2>
+        <!--
+          8-11: named rather than "this tenant". The same markup renders on a minted `?site=` page,
+          where "this tenant" would point at the visitor's own one - which this credential cannot
+          reach at all.
+        -->
         <p>
           This is a real, working credential against the console above - deliberately public,
-          not a leaked one. It only ever grants access to this dedicated demo tenant (see below),
-          never to any real shop's data.
+          not a leaked one. It only ever grants access to the Demo Shop One tenant: never to any
+          real shop's data, and never to a tenant minted by the button above.
         </p>
         <dl>
           <dt>Username</dt>
@@ -314,18 +324,32 @@
 
       <div class="card">
         <h2>Is this safe to poke at?</h2>
+        <!--
+          8-11: this card used to argue from a count - "exactly one tenant" - which 8-05's second
+          seeded shop and 8-07's minted ones falsified. The reassurance it was reaching for is still
+          true, so it now rests on that instead: every tenant here is a demo tenant, and no real
+          customer was ever onboarded. That claim survives the next minted tenant; a number does not.
+        -->
         <p>
-          Yes. This deployment holds exactly one tenant - this demo site - and nothing else.
-          AGO Chat is multi-tenant by construction (every row a visitor or operator can reach is
-          scoped to one <em>site</em>); this server was never given a second, real tenant's data to
-          isolate you from, so there is nothing behind the throwaway login except this demo's own
-          disposable conversations. Nothing you send here is production data, and nothing you do
-          here can reach anything that would be.
+          Yes. Every tenant on this deployment is a demo tenant - the seeded shops these pages embed,
+          plus the throwaway ones the button above mints. No real customer has ever been onboarded
+          here, so there is no production data behind any login on this server. AGO Chat is
+          multi-tenant by construction (every row a visitor or operator can reach is scoped to one
+          <em>site</em>), and you can watch that working between the two shop pages - but nothing you
+          send here is production data, and nothing you do here can reach anything that would be.
         </p>
-        <p>
+        <!--
+          8-11: swapped by demo-boot.js on a minted `?site=` tenant, like the banner above. Found by
+          walking the built page in a browser rather than by reading it: the banner and the widget
+          were both conditional and this paragraph still told a visitor on their own tenant that any
+          stranger could read what they typed. Same bug, third place.
+        -->
+        <p id="ago-demo-privacy-note">
           Safe for the deployment is not the same as private for you, though, and this card would be
-          misleading without saying so: the login above is published, so anything you type into the
-          widget is readable by any stranger who signs in with it. Treat this chat as a public one.
+          misleading without saying so: the login above is published, so anything you type into
+          <em>this page's</em> widget is readable by any stranger who signs in with it. Treat this
+          chat as a public one - or press &ldquo;Get your own tenant&rdquo; above and use the private
+          one it hands you, which that login cannot reach.
         </p>
       </div>
 
@@ -337,8 +361,8 @@
     </main>
 
     <!--
-      8-06: data-public-demo turns on the widget's own "anyone can read this" line, inside the panel
-      itself. The page copy above is not enough on its own - the launcher floats over every scroll
+      8-06: data-demo-notice turns on the widget's own line inside the panel itself (`8-11` renamed
+      the attribute when one boolean stopped being enough for two kinds of tenant). The page copy above is not enough on its own - the launcher floats over every scroll
       position, so a visitor can open the panel and type without ever having read the page.
     -->
     <!--
@@ -351,8 +375,12 @@
       page it is embedded on, which is a tenant-isolation hole rather than a convenience. The
       two ship as separate bundles so that stays true by construction.
 
-      8-06's data-public-demo is set by demo-boot.js, not dropped - the page stays public even
-      when the tenant is private, and that notice is still the honest thing to show.
+      8-11: demo-boot.js decides *which* notice, from the tenant rather than the page. The sentence
+      above and the one inside the widget both used to be unconditional, and this comment used to
+      defend that ("the page stays public even when the tenant is private"). The page being public is
+      true; what the sentences claim is that the published demo-operator login can read the
+      conversation, and on a minted tenant it cannot - adr/0058 gives that visitor a site, roles and
+      an operator of their own. On the shared shops nothing changed at all.
     -->
     <script src="./demo-boot.js" data-fallback-site="demo_site" defer></script>
   </body>

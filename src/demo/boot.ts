@@ -12,6 +12,7 @@
  * property of the build output rather than a comment somebody has to keep honouring. Nothing in
  * `src/demo/` is imported by `src/index.ts`, and nothing here imports the widget.
  */
+import type { DemoNotice } from "../config.js";
 import { mintDemoTenant } from "./mint.js";
 import { renderOutcome } from "./panel.js";
 import { resolveDemoSiteKey } from "./siteKey.js";
@@ -27,20 +28,96 @@ declare const __AGO_DEFAULT_API_BASE_URL__: string;
  * earlier cannot reach a tag the parser has not seen yet. A dynamically appended classic script still
  * gets a valid `document.currentScript`, which is what makes this work at all.
  */
-export function bootWidget(doc: Document, siteKey: string, isPublicDemo: boolean): HTMLScriptElement {
+export function bootWidget(doc: Document, siteKey: string, notice: DemoNotice): HTMLScriptElement {
   const script = doc.createElement("script");
   script.src = "./ago-chat.js";
   script.async = true;
   script.setAttribute("data-site", siteKey);
-  if (isPublicDemo) {
-    // `8-06`: the panel's own "anyone can read this" line. Still true on a minted tenant's page, which
-    // is shared in exactly one sense that still matters - the page is public, so anybody who is handed
-    // the link can talk to that tenant. `8-06` is explicitly out of this item's scope and stays on.
-    script.setAttribute("data-public-demo", "true");
+  if (notice !== "none") {
+    // `8-11`: which sentence, decided from the tenant rather than from the page.
+    //
+    // This used to be an unconditional `data-public-demo="true"`, and the comment that stood here
+    // defended it: a minted tenant's page is still public "in exactly one sense that still matters -
+    // the page is public, so anybody who is handed the link can talk to that tenant". That is true
+    // and it is not what the sentence said. `8-06`'s line claims the *demo operator console* can
+    // read the conversation, and on a minted tenant it cannot: `adr/0058` gives that visitor their
+    // own site, their own roles and their own operator, and the published `demo-operator` login
+    // belongs to a different tenant entirely. The residual the old comment was reaching for - a link
+    // and a password that can be passed on - is what the private sentence states instead.
+    script.setAttribute("data-demo-notice", notice);
   }
 
   doc.body.appendChild(script);
   return script;
+}
+
+/**
+ * `8-11`: which of the widget's two demo sentences this page should ask for, from the one fact that
+ * decides it - whether the resolved tenant is the page's own or one a visitor minted.
+ *
+ * **Extracted so it can be tested.** It was a ternary inside `start()`, which nothing reaches: that
+ * function is module-level, guarded on `document.currentScript`, and runs on import. Reverting the
+ * ternary to an unconditional `"public"` - the original bug, exactly - turned no test red, which was
+ * found by doing it. `resolveDemoSiteKey` is already extracted for the same reason and this mirrors
+ * it: the decision is a pure function, the wiring is what stays untested.
+ */
+export function demoNoticeFor(siteKey: string, fallbackSiteKey: string): DemoNotice {
+  // A page serving its own baked-in key is one of the shared demo shops, and `8-06`'s warning is
+  // exactly right there. Anything else arrived through a minted `visitorUrl`.
+  return siteKey === fallbackSiteKey ? "public" : "private";
+}
+
+/**
+ * `8-11`: the page's own top banner, which has the same problem one layer up.
+ *
+ * `demo-boot.js` swaps the widget's tenant and hides the mint button when `?site=` is present, but
+ * the banner is static markup - so on a minted tenant's page it went on saying "the operator login
+ * below is published on this page, so anyone can read every conversation started here - including
+ * yours". Fixing only the widget would have left a stranger reading the contradiction on the way
+ * down to it. The item's Done-when says *no text anywhere on the page*, which is why this exists.
+ *
+ * A text swap rather than a second `<p>` toggled by a class: two blocks of copy in the markup is two
+ * places to keep true, and the one that is currently wrong is the one that would be left behind.
+ *
+ * **Two blocks, because a browser found the second one.** The banner and the widget were both made
+ * conditional first, and walking the built page proved the safety card's own privacy paragraph still
+ * told a visitor on their own tenant that any stranger could read what they typed. Reading the source
+ * would not have caught it; the item asks for a browser for exactly this reason.
+ *
+ * Guarded per element like the mint button, and each result reported separately - `demo-shop2` has no
+ * safety card at all, so a missing element is the ordinary case rather than a fault, and a single
+ * boolean would have made "not there" and "not swapped" the same answer.
+ */
+export function applyOwnTenantPageCopy(doc: Document): { banner: boolean; privacyNote: boolean } {
+  return {
+    banner: swap(
+      doc,
+      "ago-demo-public-notice",
+      "You are on a tenant of your own. The operator login published below belongs to the shared demo "
+      + "shops, not to this tenant - nobody but you can read what you type here. This tenant and "
+      + "everything in it delete themselves after about a day.",
+    ),
+    // The safety card's second paragraph. Only demo-shop1's page carries the card, so this is
+    // routinely false on demo-shop2 and that is not a failure - see this function's own remarks.
+    privacyNote: swap(
+      doc,
+      "ago-demo-privacy-note",
+      "Safe for the deployment, and private for you on this page: the login above is published, but "
+      + "it only reaches the shared demo shops - never the tenant you are on. Only the operator "
+      + "account you were handed can read this conversation, and it is deleted with the tenant after "
+      + "about a day.",
+    ),
+  };
+}
+
+function swap(doc: Document, id: string, text: string): boolean {
+  const element = doc.getElementById(id);
+  if (element === null) {
+    return false;
+  }
+
+  element.textContent = text;
+  return true;
 }
 
 /** Wires a button to the endpoint, disabling it while a request is in flight so a double-press cannot
@@ -89,10 +166,16 @@ function start(): void {
   }
 
   const siteKey = resolveDemoSiteKey(window.location.search, fallbackSiteKey);
-  const isOwnTenant = siteKey !== fallbackSiteKey;
+  const notice = demoNoticeFor(siteKey, fallbackSiteKey);
+  const isOwnTenant = notice === "private";
 
   const run = (): void => {
-    bootWidget(document, siteKey, true);
+    // `8-11`: the notice follows the tenant now, not the page.
+    bootWidget(document, siteKey, notice);
+
+    if (isOwnTenant) {
+      applyOwnTenantPageCopy(document);
+    }
 
     const button = document.getElementById("ago-demo-mint-button");
     const output = document.getElementById("ago-demo-mint-output");

@@ -28,7 +28,7 @@ const SITE_KEY = "shop_test";
 const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
-  isPublicDemo: false,
+  demoNotice: "none",
 };
 
 /** : the connection takes a token *provider*, not a session - see its constructor for why

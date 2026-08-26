@@ -244,7 +244,12 @@
         nothing shared with the other demo tenant except the code.
       </p>
 
-      <p class="public-notice">
+      <!--
+        8-11: the id is what demo-boot.js swaps this text through on a minted `?site=` tenant, where
+        every word of it is false. The default copy stays exactly 8-06's - this item makes the
+        warning conditional, never softer.
+      -->
+      <p class="public-notice" id="ago-demo-public-notice">
         This is a public demo. The operator login below is published on this page, so anyone can read
         every conversation started here - including yours. Isolation from the other tenant is real;
         privacy from other visitors of this one is not. Do not type anything real.
@@ -300,10 +305,16 @@
       </div>
 
       <div class="card credential-box">
-        <h2>Operator login for this tenant (throwaway, safe to publish)</h2>
+        <h2>Operator login for Demo Shop Two (throwaway, safe to publish)</h2>
+        <!--
+          8-11: named rather than "this tenant", for the same reason as demo-shop1's own card - this
+          markup also renders on a minted `?site=` page, where "this tenant" would point at the
+          visitor's own one, which this credential cannot reach at all.
+        -->
         <p>
           A real, working credential against the console above - deliberately public, not a leaked
-          one. It only ever grants access to this tenant's own data, never demo-shop1's.
+          one. It only ever grants access to the Demo Shop Two tenant: never demo-shop1's, and never
+          a tenant minted by the button above.
         </p>
         <dl>
           <dt>Username</dt>
@@ -334,8 +345,12 @@
       page it is embedded on, which is a tenant-isolation hole rather than a convenience. The
       two ship as separate bundles so that stays true by construction.
 
-      8-06's data-public-demo is set by demo-boot.js, not dropped - the page stays public even
-      when the tenant is private, and that notice is still the honest thing to show.
+      8-11: demo-boot.js decides *which* notice, from the tenant rather than the page. The sentence
+      above and the one inside the widget both used to be unconditional, and this comment used to
+      defend that ("the page stays public even when the tenant is private"). The page being public is
+      true; what the sentences claim is that the published demo-operator login can read the
+      conversation, and on a minted tenant it cannot - adr/0058 gives that visitor a site, roles and
+      an operator of their own. On the shared shops nothing changed at all.
     -->
     <script src="./demo-boot.js" data-fallback-site="demo_site2" defer></script>
   </body>

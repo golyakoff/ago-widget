@@ -15,17 +15,50 @@ import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
  * short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
  * polite banner people skim is worth less than a blunt one they finish reading.
  *
+ * `8-11` did not touch a word of it. What changed is *when* it appears: it used to be attached to
+ * the page and is now attached to the tenant, because on a tenant minted by `8-07`'s button it was
+ * simply false.
+ *
  * Fixed text owned by the widget rather than passed in from the host page: `config.ts` explains why
- * the script tag carries a flag and not a string.
+ * the script tag carries an enum and not a string.
  */
-function createPublicDemoNotice(): HTMLDivElement {
+const PUBLIC_DEMO_NOTICE =
+  "This is a public demo. Anyone who opens the demo operator console can read what you type here. Do not type anything real.";
+
+/**
+ * `8-11`: the same sentence's counterpart on a minted tenant, and the answer to that item's own open
+ * question - whether the widget should say anything here at all.
+ *
+ * **It should.** `8-06`'s argument was that the warning belongs where the typing happens, because a
+ * visitor can open the launcher from any scroll position without having read the page. That argument
+ * does not care which way the fact points: the reassurance belongs there for exactly the same
+ * reason, and the tenant's own lifetime is currently stated nowhere in the widget at all. Silence
+ * would also have left the panel visually identical in the two cases, so a reviewer comparing them
+ * could not tell that the notice had become conditional rather than simply deleted.
+ *
+ * **Precise rather than generous.** "Only the operator login you were given" and not "nobody else",
+ * which is what `8-09`'s panel says and is the one place that copy over-claims: the visitor was
+ * handed a `?site=` link and a password, and either can be passed on. What the widget states is what
+ * the deployment actually enforces.
+ *
+ * **No "do not type anything real."** On a public tenant that is proportionate; here it would
+ * re-create the contradiction this item exists to remove, in a softer form. The disposability is
+ * said instead, which is the true version of the same caution.
+ *
+ * The lifetime is a fixed phrase, not a formatted timestamp: the widget is not told the expiry, and
+ * an attribute carrying one would put a second copy of a number `8-09`'s panel already renders
+ * exactly, a few centimetres away, where the two could disagree.
+ */
+const PRIVATE_DEMO_NOTICE =
+  "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.";
+
+function createDemoNotice(text: string): HTMLDivElement {
   const notice = document.createElement("div");
   notice.className = "ago-notice";
   // `role="note"`, not a live region: it is present before the visitor interacts at all, so there is
   // nothing to announce - it is read in document order like the rest of the panel.
   notice.setAttribute("role", "note");
-  notice.textContent =
-    "This is a public demo. Anyone who opens the demo operator console can read what you type here. Do not type anything real.";
+  notice.textContent = text;
   return notice;
 }
 
@@ -133,7 +166,13 @@ export class ChatWidget {
     // not once at open time, so a close button would only ever remove the warning from the exact
     // moment it applies. Not a `.ago-message--system` bubble either - a bubble reads as chat history
     // and scrolls off with it.
-    const notice = config.isPublicDemo ? createPublicDemoNotice() : null;
+    // `8-11`: three states, and the default is silence. A real shop's embed asks for neither
+    // sentence and gets neither.
+    const noticeText =
+      config.demoNotice === "public" ? PUBLIC_DEMO_NOTICE
+      : config.demoNotice === "private" ? PRIVATE_DEMO_NOTICE
+      : null;
+    const notice = noticeText === null ? null : createDemoNotice(noticeText);
 
     this.messages = document.createElement("div");
     this.messages.className = "ago-messages";

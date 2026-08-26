@@ -23,7 +23,7 @@ const CONVERSATION_ID = "77777777-7777-7777-7777-777777777777";
 const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
-  isPublicDemo: false,
+  demoNotice: "none",
 };
 
 function message(id: string, sequence: number, authorKind: "Visitor" | "Operator" = "Operator"): MessageDto {
@@ -258,5 +258,57 @@ describe("the panel's composer", () => {
     await flush();
 
     expect(currentHub().invocationsOf("SendMessageAsync")).toHaveLength(0);
+  });
+});
+
+/**
+ * `8-11`: which sentence the panel renders, and the fact that it renders none by default.
+ *
+ * Mounted rather than opened - the notice is built in the constructor and sits above `.ago-messages`,
+ * so it exists before anything connects and none of these need a hub.
+ */
+describe("the panel's demo notice", () => {
+  function noticeFor(demoNotice: WidgetConfig["demoNotice"]): string | null {
+    const widget = new ChatWidget({ ...config, demoNotice });
+    widget.mount(document.body);
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    const notice = host?.shadowRoot?.querySelector(".ago-notice");
+    return notice === null || notice === undefined ? null : (notice.textContent ?? "");
+  }
+
+  // 8-06, unchanged and unweakened. This item made the warning conditional, never softer.
+  it("renders 8-06's warning word for word on a public demo tenant", () => {
+    expect(noticeFor("public")).toBe(
+      "This is a public demo. Anyone who opens the demo operator console can read what you type here. "
+      + "Do not type anything real.",
+    );
+  });
+
+  /**
+   * The answer to `8-11`'s open question: the widget says something rather than nothing. `8-06`
+   * argued the warning belongs where the typing happens because the launcher floats over every
+   * scroll position; the reassurance belongs there for the same reason, and the tenant's lifetime is
+   * stated nowhere else in the widget.
+   */
+  it("renders the private counterpart on a minted tenant, and claims no more than is enforced", () => {
+    const notice = noticeFor("private") ?? "";
+
+    expect(notice).toContain("your own demo tenant");
+    expect(notice).toContain("deletes itself after about a day");
+
+    // Precise, not generous: the visitor holds a link and a password and can pass either on, so the
+    // claim is scoped to the login rather than to "nobody", which is where 8-09's panel over-claims.
+    expect(notice).toContain("Only the operator login you were given");
+    expect(notice).not.toContain("Nobody else");
+
+    // The thing this item exists to delete from a private tenant.
+    expect(notice).not.toContain("public demo");
+    expect(notice).not.toContain("Do not type anything real");
+  });
+
+  // The default, and the one that matters most: a real shop's widget must never mention a demo.
+  it("renders no notice at all for an ordinary embed", () => {
+    expect(noticeFor("none")).toBeNull();
   });
 });

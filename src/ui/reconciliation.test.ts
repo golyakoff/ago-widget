@@ -27,7 +27,7 @@ const VISITOR_ID = "99999999-9999-9999-9999-999999999999";
 const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
-  isPublicDemo: false,
+  demoNotice: "none",
 };
 
 /** The server's own copy of a message coming back over the connection. `clientMessageId` is what

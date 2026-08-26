@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootWidget, wireMintButton } from "./boot.js";
+import { applyOwnTenantPageCopy, bootWidget, demoNoticeFor, wireMintButton } from "./boot.js";
 
 describe("bootWidget", () => {
   beforeEach(() => {
@@ -13,7 +13,7 @@ describe("bootWidget", () => {
    * page hosting it.
    */
   it("injects the widget script carrying the resolved key as data-site", () => {
-    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", true);
+    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "public");
 
     const script = document.querySelector<HTMLScriptElement>('script[src="./ago-chat.js"]');
     expect(script).not.toBeNull();
@@ -21,13 +21,133 @@ describe("bootWidget", () => {
     expect(script?.async).toBe(true);
   });
 
-  it("keeps 8-06's public-demo notice on, and can be asked not to", () => {
-    bootWidget(document, "demo_site", true);
-    expect(document.querySelector("script")?.getAttribute("data-public-demo")).toBe("true");
+  /**
+   * `8-11`'s whole point, at the one line that decides it. `8-06`'s warning claims the published
+   * demo-operator console can read the conversation; on a minted tenant it cannot (`adr/0058` gives
+   * that visitor their own site, roles and operator), so asking for it there was a contradiction of
+   * the panel that had just handed over the credentials.
+   */
+  it("asks for the public notice on a shared shop and the private one on a minted tenant", () => {
+    bootWidget(document, "demo_site", "public");
+    expect(document.querySelector("script")?.getAttribute("data-demo-notice")).toBe("public");
 
     document.body.replaceChildren();
-    bootWidget(document, "demo_site", false);
-    expect(document.querySelector("script")?.hasAttribute("data-public-demo")).toBe(false);
+    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "private");
+    expect(document.querySelector("script")?.getAttribute("data-demo-notice")).toBe("private");
+  });
+
+  it("asks for no notice at all when told none", () => {
+    bootWidget(document, "demo_site", "none");
+    expect(document.querySelector("script")?.hasAttribute("data-demo-notice")).toBe(false);
+  });
+});
+
+/**
+ * The decision this whole item is. It lived as a ternary inside the module-level `start()`, where no
+ * test could reach it - reverting it to the original unconditional `"public"` turned nothing red,
+ * which is how this describe block came to exist.
+ */
+describe("demoNoticeFor", () => {
+  it("asks for 8-06's public warning on a page serving its own baked-in key", () => {
+    expect(demoNoticeFor("demo_site", "demo_site")).toBe("public");
+  });
+
+  it("asks for the private notice when the page was pointed at a minted tenant", () => {
+    expect(demoNoticeFor("demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "demo_site")).toBe("private");
+  });
+});
+
+describe("applyOwnTenantPageCopy", () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /**
+   * `8-11`: the same contradiction one layer up. The banner is static markup, so a minted `?site=`
+   * page went on telling a visitor that anyone could read their conversation on the way down to the
+   * widget that had just been fixed. The Done-when says *no text anywhere on the page*.
+   */
+  function seedSharedPageCopy(): { banner: HTMLElement; privacyNote: HTMLElement } {
+    const banner = document.createElement("p");
+    banner.id = "ago-demo-public-notice";
+    banner.textContent =
+      "This is a public demo. The operator login below is published on this page, so anyone can read "
+      + "every conversation started here - including yours. Do not type anything real.";
+
+    const privacyNote = document.createElement("p");
+    privacyNote.id = "ago-demo-privacy-note";
+    privacyNote.textContent =
+      "the login above is published, so anything you type into this page's widget is readable by any "
+      + "stranger who signs in with it. Treat this chat as a public one.";
+
+    document.body.append(banner, privacyNote);
+    return { banner, privacyNote };
+  }
+
+  it("replaces the page banner's public warning with what is true on a minted tenant", () => {
+    const { banner } = seedSharedPageCopy();
+
+    expect(applyOwnTenantPageCopy(document).banner).toBe(true);
+
+    const replaced = banner.textContent ?? "";
+    expect(replaced).toContain("tenant of your own");
+    expect(replaced).toContain("nobody but you can read what you type here");
+    // The claim this item exists to remove, in the two shapes the original copy used.
+    expect(replaced).not.toContain("anyone can read");
+    expect(replaced).not.toContain("including yours");
+  });
+
+  /**
+   * The third place the same claim lived, and the one a source reading missed - it was found by
+   * walking the built page in a browser, which is what the item's own Done-when asks for.
+   */
+  it("replaces the safety card's privacy paragraph too", () => {
+    const { privacyNote } = seedSharedPageCopy();
+
+    expect(applyOwnTenantPageCopy(document).privacyNote).toBe(true);
+
+    const replaced = privacyNote.textContent ?? "";
+    expect(replaced).toContain("never the tenant you are on");
+    expect(replaced).not.toContain("readable by any stranger");
+    expect(replaced).not.toContain("Treat this chat as a public one");
+  });
+
+  /**
+   * The whole point, as one assertion over everything a stranger can read: after the swap, no text
+   * on the page says somebody else can read the conversation. This is the Done-when.
+   */
+  it("leaves no text on the page claiming anybody else can read the conversation", () => {
+    seedSharedPageCopy();
+    applyOwnTenantPageCopy(document);
+
+    const pageText = (document.body.textContent ?? "").toLowerCase();
+    for (const claim of [
+      "anyone can read",
+      "including yours",
+      "readable by any stranger",
+      "treat this chat as a public one",
+    ]) {
+      expect(pageText).not.toContain(claim);
+    }
+  });
+
+  /**
+   * Same defensive shape as the mint button: a page missing its markup still boots its widget,
+   * because the widget is the demo and the copy is commentary on it. `demo-shop2` genuinely has no
+   * safety card, so a missing privacy note is the ordinary case rather than a fault - which is why
+   * each element is reported separately instead of collapsing into one boolean.
+   */
+  it("reports each block separately, so a page without a safety card is not a failure", () => {
+    const banner = document.createElement("p");
+    banner.id = "ago-demo-public-notice";
+    banner.textContent = "This is a public demo.";
+    document.body.appendChild(banner);
+
+    expect(applyOwnTenantPageCopy(document)).toEqual({ banner: true, privacyNote: false });
+  });
+
+  it("does nothing and says so when the page has neither block", () => {
+    expect(applyOwnTenantPageCopy(document)).toEqual({ banner: false, privacyNote: false });
   });
 });
 

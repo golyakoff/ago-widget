@@ -27,7 +27,7 @@ const LIFETIME_MS = 7 * DAY_MS;
 const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
-  isPublicDemo: false,
+  demoNotice: "none",
 };
 
 /** The instant every test starts from. A fixed date, never `Date.now()`. */

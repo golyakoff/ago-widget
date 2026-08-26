@@ -35,6 +35,29 @@ const commit = process.env.AGO_COMMIT || "unknown";
 // that, not a round number picked in advance.
 const GZIP_BUDGET_BYTES = 45 * 1024;
 
+// `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget's <script> tag with
+// the answer, and wires the "get your own tenant" button. **A second entry point, not a second export
+// from the widget**, and that separation is the point rather than a packaging detail: `adr/0058` says
+// the query parameter belongs to the demo page and never to the widget, because a widget that read it
+// could be repointed at another tenant by any page hosting it. Two bundles make that a property of the
+// build output instead of a comment somebody has to keep honouring.
+//
+// It is not counted against the widget's own budget below, because no tenant ever downloads it - it is
+// served only alongside the two public demo pages (Dockerfile). Its size is reported anyway, since an
+// unwatched artifact is how the first one got big.
+await build({
+  entryPoints: ["src/demo/boot.ts"],
+  bundle: true,
+  minify: true,
+  format: "iife",
+  target: "es2022",
+  outfile: "dist/demo-boot.js",
+  sourcemap: true,
+  define: {
+    __AGO_DEFAULT_API_BASE_URL__: JSON.stringify(apiBaseUrl),
+  },
+});
+
 const result = await build({
   entryPoints: ["src/index.ts"],
   bundle: true,
@@ -62,6 +85,9 @@ if (gzipBytes > GZIP_BUDGET_BYTES) {
   console.error(`Bundle size ${gzipKb} KB gzipped exceeds the ${budgetKb} KB budget.`);
   process.exit(1);
 }
+
+const demoGzipKb = (gzipSync(readFileSync("dist/demo-boot.js")).length / 1024).toFixed(1);
+console.log(`Demo boot: ${demoGzipKb} KB gzipped (demo pages only, not part of the widget budget)`);
 
 if (process.env["AGO_WRITE_METAFILE"]) {
   const { writeFileSync } = await import("node:fs");

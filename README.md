@@ -110,6 +110,15 @@ machine. `build.mjs` enforces
 a 45 KB gzipped budget on every build (CI included) - real headroom over the measured number, not a
 guess made in advance (`embeddable-widget` skill: "a hard ceiling, checked on every build").
 
+**`8-09` adds a second bundle and spends none of that budget.** `dist/demo-boot.js` (**2.3 KB
+gzipped**) is the two public demo pages' own boot script - it resolves `?site=`, injects the widget's
+`<script data-site>` tag with the answer, and wires the "get your own tenant" button. It is a separate
+esbuild entry point on purpose (`ago-root/docs/adr/0058`): the query parameter belongs to the demo
+page and must never be read by the widget, because a widget that read its host page's URL could be
+repointed at another tenant by any page embedding it. Only the demo pages load it; **no tenant
+embedding the widget downloads a byte of it**, which the build's own metafile confirms - `dist/ago-chat.js`
+has zero inputs from `src/demo/`. The widget bundle is byte-for-byte unaffected by that item.
+
 `@microsoft/signalr` is the only dependency and the large majority of this size. The `Open
 questions` section of `../ago-root/docs/backlog/5-09-widget-bootstrap-and-messaging.md` called for
 measuring before deciding between the real SignalR client and a hand-rolled one - at under 20 KB

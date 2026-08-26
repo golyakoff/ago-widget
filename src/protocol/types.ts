@@ -7,7 +7,11 @@
 export interface MessageDto {
   id: string;
   sequence: number;
-  authorKind: "Visitor" | "Operator";
+  /** `14-04`: `"System"` is a message AGO Chat authored on the shop's behalf - today the offline
+   * auto-reply, and nothing else. Additive, exactly as api-design.md's versioning rule promises: a
+   * widget build older than `14-04` still receives one and simply falls through to its own
+   * unrecognised-kind path, which renders it on the incoming side. */
+  authorKind: "Visitor" | "Operator" | "System";
   authorId: string;
   body: string;
   createdAt: string;

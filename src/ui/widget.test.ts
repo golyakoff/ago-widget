@@ -27,7 +27,7 @@ const config: WidgetConfig = {
   booking: null,
 };
 
-function message(id: string, sequence: number, authorKind: "Visitor" | "Operator" = "Operator"): MessageDto {
+function message(id: string, sequence: number, authorKind: MessageDto["authorKind"] = "Operator"): MessageDto {
   return {
     id,
     sequence,
@@ -220,6 +220,28 @@ describe("the panel while the connection is gone and after it returns", () => {
     await flush();
 
     expect(panel.bubbleTexts()).toEqual(["hello"]);
+  });
+});
+
+/**
+ * `14-04`: the offline auto-reply, seen from the visitor's side. It arrives as an ordinary message
+ * with `authorKind: "System"` - there is no separate transport, which is the point of authoring it as
+ * a message at all - and the only thing this side has to get right is not passing it off as a person.
+ */
+describe("an automatic reply", () => {
+  it("renders on the incoming side, labelled, with the reply itself as the bubble's text", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor"), message("m2", 2, "System")]));
+    const panel = await openWidget();
+
+    const bubbles = [...panel.root.querySelectorAll(".ago-message")];
+    expect(bubbles.map((b) => b.className)).toEqual([
+      "ago-message ago-message--visitor",
+      "ago-message ago-message--auto",
+    ]);
+    // Not `.ago-message--system`, which is this widget's own local status note - see renderBubble.
+    expect(panel.root.querySelectorAll(".ago-message--system")).toHaveLength(0);
+    // The label is CSS `content`, so the bubble's text is exactly what the shop scripted.
+    expect(panel.bubbleTexts()).toEqual(["message m1", "message m2"]);
   });
 });
 

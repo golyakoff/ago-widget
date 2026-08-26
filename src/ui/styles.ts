@@ -163,6 +163,29 @@ export const widgetStyles = /* css */ `
     border-bottom-left-radius: 0.125rem;
   }
 
+  /* 14-04: an automatic reply. Same incoming-side shape as an operator bubble, because that is what
+     it is - a message from the shop - with a label so a visitor is never misled into thinking a
+     person answered. The label is a CSS content string rather than a DOM node so that textContent
+     stays exactly the message body: a test, a copy-paste or a screen reader reading the bubble gets
+     the reply, and the label is announced separately as decoration. */
+  .ago-message--auto {
+    align-self: flex-start;
+    background: #f0f1f4;
+    color: #1a1a1a;
+    border-bottom-left-radius: 0.125rem;
+    border-left: 2px solid #c7c9d1;
+  }
+
+  .ago-message--auto::before {
+    content: "Automatic reply";
+    display: block;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin-bottom: 0.25rem;
+  }
+
   .ago-message--system {
     align-self: center;
     background: transparent;

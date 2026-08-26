@@ -694,9 +694,14 @@ export class ChatWidget {
     }
   }
 
-  private renderBubble(authorKind: "Visitor" | "Operator", body: string, state?: "sending"): HTMLDivElement {
+  private renderBubble(authorKind: MessageDto["authorKind"], body: string, state?: "sending"): HTMLDivElement {
     const bubble = document.createElement("div");
-    bubble.className = `ago-message ago-message--${authorKind.toLowerCase()}`;
+    // `14-04`: a System message is the shop's own automatic reply, so it gets an incoming-side bubble
+    // with a label - deliberately not `.ago-message--system`, which is this widget's *local* status
+    // note ("You are offline") and is centred, grey and unlabelled. Conflating the two would make a
+    // real message from the shop look like a client-side notice, and vice versa.
+    const modifier = authorKind === "System" ? "auto" : authorKind.toLowerCase();
+    bubble.className = `ago-message ago-message--${modifier}`;
     if (state === "sending") {
       bubble.classList.add("ago-message--pending");
     }

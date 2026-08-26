@@ -251,4 +251,75 @@ export const widgetStyles = /* css */ `
     white-space: nowrap;
     border: 0;
   }
+  /* 20-06: the booking module's own surface, inside the same panel and the same Shadow DOM.
+     A list of choices, never a calendar grid - see booking/steps.ts for why the shape of the UI is
+     the shape of a message. */
+  .ago-booking {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .ago-booking-body {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  .ago-booking-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .ago-booking-choice {
+    border: 1px solid var(--ago-accent);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
+
+  .ago-booking-choice:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .ago-booking-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .ago-booking-input {
+    flex: 1;
+    font: inherit;
+    padding: 0.5rem;
+    border: 1px solid #d5d9e0;
+    border-radius: 0.5rem;
+  }
+
+  .ago-booking-send {
+    border: none;
+    border-radius: 0.5rem;
+    background: var(--ago-accent);
+    color: #fff;
+    padding: 0 0.75rem;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .ago-book {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0 0.5rem;
+  }
 `;

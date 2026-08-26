@@ -99,7 +99,18 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
-**22.1 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of this
+**24.9 KB gzipped** (91.3 KB raw, minified), measured 2026-08-26 against a clean build of this
+commit — up from 22.2 KB by `20-06`'s booking module (`src/booking/`: the step model, the flow, the
+calendar client and the panel), which is **+2.7 KB gzipped** and leaves 20.1 KB of the 45 KB budget
+unused. That number is the answer to the question `20-06` was told to ask out loud: the first
+feature that could plausibly have threatened the budget did not, so **no lazy-loaded module was
+needed** and none was built. If a later booking feature changes that, the fix is the split, not a
+bigger budget.
+
+The paragraph below is the history that produced the previous number, kept because each step of it
+is a measurement rather than a claim.
+
+**22.1 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of that
 commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`) -
 up from `5-17`'s 21.0 KB by `17-07`'s renewal path (`tokenExpiry.ts`, `VisitorSessionManager`'s
 renew/throttle/expiry branches and the two strings the panel shows a visitor whose session did not

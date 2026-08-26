@@ -24,6 +24,7 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  booking: null,
 };
 
 function message(id: string, sequence: number, authorKind: "Visitor" | "Operator" = "Operator"): MessageDto {

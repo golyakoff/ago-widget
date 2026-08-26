@@ -28,6 +28,7 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  booking: null,
 };
 
 /** The instant every test starts from. A fixed date, never `Date.now()`. */

@@ -9,6 +9,7 @@ import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
 import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import { BookingPanel } from "../booking/panel.js";
 
 /**
  * `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
@@ -84,6 +85,13 @@ export class ChatWidget {
   private readonly attachButton: HTMLButtonElement;
   private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
+  /** `20-06`: null unless the embed carried `data-booking`. Both of these being nullable is what
+   * makes "a shop without booking pays nothing" a property of the object graph rather than a
+   * promise. */
+  private readonly bookButton: HTMLButtonElement | null;
+  private readonly booking: BookingPanel | null;
+  private readonly composer: HTMLFormElement;
+  private isBooking = false;
 
   private connection: VisitorConnection | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -158,7 +166,26 @@ export class ChatWidget {
     this.closeButton.setAttribute("aria-label", "Close chat");
     this.closeButton.textContent = "✕";
     this.closeButton.addEventListener("click", () => this.close());
-    header.append(title, this.closeButton);
+
+    // `20-06`: **one script tag, one launcher, one panel.** Booking is a view inside the widget the
+    // shop already embeds, reached by this button - not a second embed with a second floating
+    // circle. The 2026-08-26 boundary review settled that on product grounds: booking must work from
+    // Telegram, MAX and SMS too, and some shops run with no widget at all, so a booking-only embed
+    // would be the one shape the product model rules out.
+    //
+    // Absent entirely unless the embed asked for booking. A shop with chat and no booking gets the
+    // same panel it had before, byte for byte.
+    this.bookButton = config.booking === null ? null : document.createElement("button");
+    if (this.bookButton) {
+      this.bookButton.type = "button";
+      this.bookButton.className = "ago-book";
+      this.bookButton.textContent = "Book";
+      this.bookButton.setAttribute("aria-label", "Book an appointment");
+      this.bookButton.addEventListener("click", () => this.toggleBooking());
+      header.append(title, this.bookButton, this.closeButton);
+    } else {
+      header.append(title, this.closeButton);
+    }
 
     // `8-06`: directly under the header and outside `.ago-messages`, so it is the first thing read
     // when the panel opens and cannot be scrolled away by the conversation underneath it. Not
@@ -241,7 +268,16 @@ export class ChatWidget {
       this.panel.append(notice);
     }
 
+    this.composer = composer;
     this.panel.append(this.messages, this.status, composer);
+
+    // `20-06`: built only when the embed asked for booking, and hidden until the button is pressed.
+    // Nothing in booking/ is reachable otherwise, so a chat-only shop makes no request to a product
+    // it does not have.
+    this.booking = config.booking === null ? null : new BookingPanel(config.booking);
+    if (this.booking) {
+      this.panel.append(this.booking.element);
+    }
     container.append(this.panel, this.toggle);
     this.root.appendChild(container);
 
@@ -328,6 +364,41 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-label", "Open chat");
     this.focusTrap.deactivate();
     this.toggle.focus();
+  }
+
+  /**
+   * `20-06`: swaps the panel between the conversation and the booking flow.
+   *
+   * <b>A swap, not a second panel and not a modal over the first.</b> The panel is already a small
+   * fixed surface on somebody else's page; stacking a second layer inside it would fight the focus
+   * trap that makes the first one keyboard-usable. The transcript is hidden rather than torn down,
+   * so coming back from booking returns to the same conversation with the same connection - nothing
+   * here touches the hub at all.
+   *
+   * <b>Booking does not require a conversation.</b> It works whether or not the visitor has ever
+   * sent a message, because a booking is not a chat message today - `21-01` is the item that would
+   * make it one, and this button is the widget-shaped shortcut that exists until then.
+   */
+  private toggleBooking(): void {
+    if (this.booking === null || this.bookButton === null) {
+      return;
+    }
+
+    this.isBooking = !this.isBooking;
+
+    this.messages.hidden = this.isBooking;
+    this.status.hidden = this.isBooking;
+    this.composer.hidden = this.isBooking;
+
+    if (this.isBooking) {
+      this.booking.show();
+      this.bookButton.textContent = "Chat";
+      this.bookButton.setAttribute("aria-label", "Back to the conversation");
+    } else {
+      this.booking.hide();
+      this.bookButton.textContent = "Book";
+      this.bookButton.setAttribute("aria-label", "Book an appointment");
+    }
   }
 
   /** Lazy-init on first open, not on page load (embeddable-widget skill: "nothing heavy before

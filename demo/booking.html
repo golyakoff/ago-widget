@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A stranger's page — AGO Chat + AGO Calendar</title>
+    <style>
+      body {
+        font: 16px/1.5 system-ui, sans-serif;
+        margin: 0 auto;
+        max-width: 40rem;
+        padding: 3rem 1rem;
+        color: #14181f;
+      }
+      code {
+        background: #f2f4f7;
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.25rem;
+      }
+      pre {
+        background: #f2f4f7;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sam &amp; Co, barbers</h1>
+
+    <p>
+      This page is deliberately plain. It has no framework, no build step and no styling worth
+      mentioning, because the thing being demonstrated is that a shop does not need any of that:
+      one <code>&lt;script&gt;</code> tag, and a visitor can both talk to somebody and book a
+      time.
+    </p>
+
+    <p>
+      <strong>One tag, not two.</strong> Booking is reached through the widget the shop already
+      embeds — the &ldquo;Book&rdquo; button in the panel header. That is
+      <code>20-06</code>&rsquo;s embed decision, settled on product grounds rather than packaging
+      ones: booking has to work from Telegram, MAX and SMS as well, where there is no widget at all,
+      so a booking-only embed would be the one shape the product model rules out.
+    </p>
+
+    <h2>What the shop pastes</h2>
+
+    <pre><code>&lt;script src="https://…/ago-chat.js"
+        data-site="demo_site"
+        data-api="http://localhost:5009"
+        data-booking="demo-barbershop"
+        data-booking-api="http://localhost:5011"
+        async&gt;&lt;/script&gt;</code></pre>
+
+    <p>
+      Two keys, because there are two products with two databases and two tenants
+      (<code>adr/0027</code>). The shop&rsquo;s own page is the one place that legitimately knows
+      about both — it bought both. Putting AGO Calendar&rsquo;s key into AGO Chat&rsquo;s
+      widget-config response would have saved a line here and put one product&rsquo;s identifier
+      inside the other product&rsquo;s domain.
+    </p>
+
+    <p>
+      <code>data-booking-api</code> has no built-in default, unlike <code>data-api</code>: AGO
+      Calendar is a separate deployable a shop may not have at all, so a default would be this
+      bundle asserting an address for a product that might not be running. Leave either attribute
+      out and there is no Book button and no request to AGO Calendar.
+    </p>
+
+    <h2>Running it against the local stack</h2>
+
+    <p>
+      This page is served from a different origin than either API, on purpose — the two-layer CORS
+      model is only exercised by a genuinely cross-origin page. The tenant&rsquo;s
+      <code>allowed_origins</code> must contain whatever origin serves this file, or the browser
+      refuses the response and the panel says booking is unavailable. See
+      <code>ago-root/docs/runbooks/local-dev.md</code>.
+    </p>
+
+    <!--
+      One tag. The chat half points at Ago.Chat.Api, the booking half at Ago.Calendar.Api - two
+      deployables, one embed.
+    -->
+    <script
+      src="../dist/ago-chat.js"
+      data-site="demo_site"
+      data-api="http://localhost:5009"
+      data-booking="demo-barbershop"
+      data-booking-api="http://localhost:5011"
+      async
+    ></script>
+  </body>
+</html>

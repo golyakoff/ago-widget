@@ -1,3 +1,5 @@
+import type { BookingConfig } from "./booking/calendarClient.js";
+
 /**
  * `data-site` on the `<script>` tag identifies the tenant (embeddable-widget skill's Bootstrap
  * section) - the one piece of config every embed must supply. `data-api` is additive: the public
@@ -42,6 +44,20 @@ export interface WidgetConfig {
   /** Which demo sentence, if any, the panel renders. Never `"public"` or `"private"` unless the
    * embed asks for it - a real customer's widget says nothing about demos. */
   demoNotice: DemoNotice;
+  /**
+   * `20-06`: AGO Calendar's booking surface, reached through **this** widget rather than a second
+   * script tag. Absent unless the embed asks for it, and absent is the default - a shop with chat
+   * and no booking makes no request and renders no button.
+   *
+   * <b>Why the key comes off the script tag rather than from the server.</b> The obvious
+   * alternative is for AGO Chat's own widget-config response to carry it, so the shop pastes one
+   * value instead of two. That would put AGO Calendar's tenant key inside `Ago.Chat.Domain`'s
+   * `WidgetConfig` - one product's domain holding another product's identifier, which is the
+   * dependency the repository split exists to prevent and the exact shape `adr/0061` refuses on the
+   * server side ("a message model gaining booking-shaped fields"). The shop's own page is the one
+   * place that legitimately knows about both products, because the shop bought both.
+   */
+  booking: BookingConfig | null;
 }
 
 /** Replaced at build time by `build.mjs` - see that file for why a `define` beats a runtime fetch. */
@@ -61,7 +77,31 @@ export function readConfig(script: HTMLOrSVGScriptElement): WidgetConfig {
   }
 
   const apiBaseUrl = script.dataset["api"] ?? __AGO_DEFAULT_API_BASE_URL__;
-  return { siteKey, apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""), demoNotice: readDemoNotice(script) };
+  return {
+    siteKey,
+    apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
+    demoNotice: readDemoNotice(script),
+    booking: readBookingConfig(script),
+  };
+}
+
+/**
+ * `20-06`. Two attributes, and **both** are required for booking to appear at all.
+ *
+ * `data-booking-api` has no default, unlike `data-api`. The chat API has one because the widget is
+ * built once per deployment and knows where its own backend lives; AGO Calendar is a separate
+ * deployable that a shop may not have bought, so a default here would be this bundle asserting an
+ * address for a product that might not be running. A missing value means no booking, silently -
+ * which is the same "say nothing rather than guess" call `readDemoNotice` makes below.
+ */
+function readBookingConfig(script: HTMLOrSVGScriptElement): BookingConfig | null {
+  const publicKey = script.dataset["booking"];
+  const apiBaseUrl = script.dataset["bookingApi"];
+  if (!publicKey || !apiBaseUrl) {
+    return null;
+  }
+
+  return { publicKey, apiBaseUrl: apiBaseUrl.replace(/\/+$/, "") };
 }
 
 /**

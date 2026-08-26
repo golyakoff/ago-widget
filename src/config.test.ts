@@ -73,3 +73,48 @@ describe("readConfig", () => {
     ).toBe("private");
   });
 });
+
+// `20-06`. The default is what matters most here too: a shop that bought chat and not booking must
+// not get a Book button, and must not have the bundle contact a product it does not have.
+describe("readConfig booking", () => {
+  it("offers no booking unless the embed asks for it", () => {
+    expect(readConfig(scriptWith({ "data-site": "shop_1" })).booking).toBeNull();
+  });
+
+  it("needs both the key and the calendar API origin, because there is no default for either", () => {
+    // `data-api` has a built-in default; `data-booking-api` deliberately does not. AGO Calendar is a
+    // separate deployable a shop may not have bought at all, so a default here would be this bundle
+    // asserting an address for a product that might not be running.
+    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "barbershop" })).booking).toBeNull();
+    expect(
+      readConfig(scriptWith({ "data-site": "shop_1", "data-booking-api": "https://cal.example" })).booking,
+    ).toBeNull();
+  });
+
+  it("reads the calendar tenant key and origin, stripping trailing slashes", () => {
+    const booking = readConfig(
+      scriptWith({
+        "data-site": "shop_1",
+        "data-booking": "barbershop",
+        "data-booking-api": "https://cal.example//",
+      }),
+    ).booking;
+
+    expect(booking).toEqual({ publicKey: "barbershop", apiBaseUrl: "https://cal.example" });
+  });
+
+  it("keeps the calendar key separate from the chat site key", () => {
+    // Two products, two tenants, two databases (`adr/0027`). A shop running both holds two keys, and
+    // the widget must never assume one is the other.
+    const config = readConfig(
+      scriptWith({
+        "data-site": "shop_1",
+        "data-booking": "barbershop",
+        "data-booking-api": "https://cal.example",
+      }),
+    );
+
+    expect(config.siteKey).toBe("shop_1");
+    expect(config.booking?.publicKey).toBe("barbershop");
+  });
+});

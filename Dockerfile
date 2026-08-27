@@ -36,7 +36,7 @@ RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" AGO_COMMIT="${GIT_COMMIT}" npm run bu
 # that actually exists for nginx (Chiseled itself is a .NET/Microsoft base-image family with no
 # nginx equivalent): official image, not a bespoke build, with the dynamic modules this
 # static-file-only container never uses (image filter, mail proxy, stream) stripped out.
-FROM nginx:1.27-alpine-slim
+FROM nginx:1.31-alpine-slim
 ARG GIT_COMMIT=unknown
 # `15-07`: the OCI annotations a registry and `docker inspect`/`crane config` read. `.source` is not
 # only documentation - GHCR uses it to link the published package back to this repository, which is

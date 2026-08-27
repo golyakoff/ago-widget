@@ -19,6 +19,17 @@ jobs:
       - name: Install
         run: npm ci
 
+      # 17-04: severity threshold and fail/report policy, stated in full in ago-platform's ci.yml and
+      # docs/runbooks/vulnerability-response.md (ago-root) - Critical/High fails the build, Moderate/Low
+      # is reported but does not, because a check that blocks every branch on an untriaged Low advisory
+      # nobody can act on trains people to ignore red CI rather than read it. `npm audit
+      # --audit-level=high` does both in one command: the human-readable report still lists every
+      # severity (verified locally - a real Low-severity esbuild advisory, GHSA-g7r4-m6w7-qqqr, prints
+      # in full here), and only Critical/High affects the exit code, so nothing needs separate parsing
+      # the way the .NET side does.
+      - name: Vulnerability check (npm audit)
+        run: npm audit --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -69,7 +80,7 @@ jobs:
       # which is the only thing that lets ${{ github.sha }} keep being a truthful name for it.
       # DEMO_PAGE_DIR is passed, and is not an exception: it picks which of the two images is being
       # built, and that choice is already in the image name.
-      - name: Build and push the two demo images
+      - name: Build the two demo images
         env:
           DOCKER_BUILDKIT: "1"
         run: |
@@ -84,8 +95,6 @@ jobs:
               -t "${repo}:${{ github.sha }}" \
               -t "${repo}:main" \
               .
-            docker push "${repo}:${{ github.sha }}"
-            docker push "${repo}:main"
             echo "::endgroup::"
           }
           build_one ago-demo-shop1 public-demo
@@ -93,7 +102,10 @@ jobs:
 
       # Proves the commit actually reached the served files, rather than only the tag. Cheap, and it
       # is the exact property 15-07 exists for - a published image that cannot name its own commit
-      # is the 2026-08-25 failure with extra steps.
+      # is the 2026-08-25 failure with extra steps. `17-04` moved this check ahead of the push below -
+      # it only ever needed the local image (`docker run` on a tag docker just built, no pull), so it
+      # was gaining nothing from running after push and a broken image could still have reached the
+      # registry before anyone found out.
       - name: Check the images can name their own commit
         run: |
           set -euo pipefail
@@ -104,6 +116,39 @@ jobs:
             echo "${served}" | grep -q '"commit":"${{ github.sha }}"'
             docker run --rm --entrypoint grep "${repo}:${{ github.sha }}" \
               -q '${{ github.sha }}' /usr/share/nginx/html/ago-chat.js
+          done
+
+      # `17-04`/`15-06`: scans before push for the same reason ago-chat's own publish-images job does
+      # (its ci.yml has the fuller comment) - a scan bolted on after push would let a Critical/High
+      # image sit in GHCR before anyone reacted. Same threshold (Critical/High fails, Moderate/Low is
+      # reported - docs/runbooks/vulnerability-response.md, ago-root), same digest-pinned invocation,
+      # same reason for pinning by digest rather than trusting `aquasecurity/trivy-action`'s tags or a
+      # floating `aquasec/trivy` tag (both were compromised in March 2026 - see ago-chat's ci.yml).
+      - name: Scan images for known vulnerabilities (Trivy)
+        run: |
+          set -euo pipefail
+          fail=0
+          for name in ago-demo-shop1 ago-demo-shop2; do
+            repo="ghcr.io/${{ github.repository_owner }}/${name}"
+            echo "::group::${repo}"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+              image --scanners vuln --severity CRITICAL,HIGH --exit-code 1 --format table \
+              "${repo}:${{ github.sha }}" || fail=1
+            echo "::endgroup::"
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::At least one image has a Critical/High vulnerability - see the groups above. Nothing was pushed."
+            exit 1
+          fi
+
+      - name: Push the two demo images
+        run: |
+          set -euo pipefail
+          for name in ago-demo-shop1 ago-demo-shop2; do
+            repo="ghcr.io/${{ github.repository_owner }}/${name}"
+            docker push "${repo}:${{ github.sha }}"
+            docker push "${repo}:main"
           done
 
       - name: Summarise what was published

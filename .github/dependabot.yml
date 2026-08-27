@@ -1,0 +1,30 @@
+# 17-04. Schedule: weekly, Monday 06:00 UTC - matches the backend repositories' own cadence
+# (ago-chat's credential-expiry.yml), so the project has one weekly rhythm rather than a different
+# one per repository or per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+
+  # Dockerfile (root): node:22-alpine (build stage) and nginx:1.27-alpine-slim (final stage) - both
+  # FROM lines are covered by this one entry.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"

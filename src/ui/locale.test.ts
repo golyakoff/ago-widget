@@ -175,6 +175,24 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
     expect(panel.status.textContent).toBe("Переподключение…");
   });
 
+  it("renders the public demo notice in Russian, not the English default it was built with", async () => {
+    // Found live: `this.notice`'s text was set once in the constructor, from that moment's still-
+    // English `this.strings`, and `applyStrings` had no line of its own re-visiting it - every other
+    // string in the "renders the panel chrome" test above went through `applyStrings` and passed; this
+    // one did not, and stayed in English on a real `ru` site. `demoNotice: "public"` here, not the
+    // module-level `config`'s own `"none"`, because that is the one case the bug needs to be visible in.
+    joinQueue.push(joinResult());
+    const widget = new ChatWidget({ ...config, demoNotice: "public" });
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    const notice = host?.shadowRoot?.querySelector(".ago-notice");
+    expect(notice?.textContent).toBe(
+      "Это публичная демонстрация. Всё, что вы здесь напишете, может прочитать любой, кто откроет демо-консоль оператора. Не указывайте реальные данные.",
+    );
+  });
+
   it("renders a restarted-session note in Russian for a returning visitor whose token could not be renewed", async () => {
     // A stored token already past its own exp, which puts VisitorSessionManager.start into its
     // renewal path immediately - session.test.ts's own fixtures use fakeJwt the same way. The
@@ -253,5 +271,18 @@ describe("a widget booted against a site with no WidgetLocale set", () => {
     await flush();
 
     expect(panel.status.textContent).toBe("Reconnecting…");
+  });
+
+  it("renders the private demo notice in English, unchanged", async () => {
+    joinQueue.push(joinResult());
+    const widget = new ChatWidget({ ...config, demoNotice: "private" });
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    const notice = host?.shadowRoot?.querySelector(".ago-notice");
+    expect(notice?.textContent).toBe(
+      "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.",
+    );
   });
 });

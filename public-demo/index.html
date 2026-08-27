@@ -11,11 +11,11 @@
   <script> tag below can reference ./ago-chat.js with no data-api override: the bundle already has
   https://chat.reserve-me.ru baked in at build time (AGO_API_BASE_URL, build.mjs).
 -->
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AGO Chat - live demo</title>
+    <title>AGO Chat — демо вживую</title>
     <style>
       :root {
         color-scheme: light;
@@ -240,7 +240,7 @@
     <main>
       <h1>AGO Chat</h1>
       <p class="tag">
-        A live, working customer-support chat - the whole thing, running for real, no local setup.
+        Живой, по-настоящему работающий чат поддержки — целиком, без локальной установки.
       </p>
 
       <!--
@@ -249,40 +249,40 @@
         warning conditional, never softer.
       -->
       <p class="public-notice" id="ago-demo-public-notice">
-        This is a public demo. The operator login below is published on this page, so anyone can read
-        every conversation started here - including yours. Do not type anything real.
+        Это публичное демо. Логин оператора ниже опубликован на этой странице, так что любой может
+        прочитать каждый разговор, начатый здесь — включая ваш. Не пишите сюда ничего настоящего.
       </p>
 
       <div class="card">
-        <h2>What this page is</h2>
+        <h2>Что это за страница</h2>
         <p>
-          This page has AGO Chat's own widget embedded on it, exactly the way a real shop would
-          embed it on their own site - one <code>&lt;script&gt;</code> tag, bottom-right corner.
-          Click it, send a message, and it goes to a real backend running on a real server.
+          На этой странице встроен настоящий виджет AGO Chat — точно так же, как его встроил бы у
+          себя реальный магазин: один тег <code>&lt;script&gt;</code>, правый нижний угол. Кликните,
+          отправьте сообщение — оно уйдёт на настоящий бэкенд на настоящем сервере.
         </p>
         <p>
-          From a second tab or another device, sign into the operator console (below) and answer
-          as the support agent - the two sides talk over a real WebSocket connection in real time,
-          the same as they would for an actual shop and an actual customer.
+          Из второй вкладки или с другого устройства войдите в консоль оператора (ниже) и ответьте
+          как оператор поддержки — обе стороны говорят по настоящему WebSocket-соединению в реальном
+          времени, ровно так же, как это было бы для настоящего магазина и настоящего покупателя.
         </p>
       </div>
 
       <div class="card">
-        <h2>Try it</h2>
+        <h2>Попробуйте</h2>
         <p>
-          Two operator logins are on offer below this card - one shared with every visitor here, one
-          a private tenant of your own. Pick either, then:
+          Ниже предложены два логина оператора — один общий для всех посетителей страницы, второй —
+          ваш собственный приватный тенант. Выберите любой, затем:
         </p>
         <ol>
-          <li>Open the chat bubble in the bottom-right corner of this page and send a message.</li>
+          <li>Откройте пузырь чата в правом нижнем углу этой страницы и отправьте сообщение.</li>
           <li>
-            Open the operator console in a new tab:
+            Откройте консоль оператора в новой вкладке:
             <a href="https://console.reserve-me.ru" target="_blank" rel="noopener">
               console.reserve-me.ru</a
             >
-            - sign in with whichever login you picked.
+            — войдите под тем логином, который выбрали.
           </li>
-          <li>Find your message in the queue, open it, and reply. Watch it arrive back here live.</li>
+          <li>Найдите своё сообщение в очереди, откройте его и ответьте. Ответ прилетит сюда вживую.</li>
         </ol>
       </div>
 
@@ -293,41 +293,42 @@
         demonstrates tenant isolation live (two seeded tenants, neither able to see the other).
       -->
       <div class="card own-tenant-box">
-        <h2>Or get a tenant of your own</h2>
+        <h2>Или получите свой тенант</h2>
         <p>
-          The login below is shared with every other visitor to this page. Press this instead and you
-          get your own tenant, with your own operator account and your own conversations - which
-          nobody else can read. It deletes itself after about a day, along with everything in it.
+          Логин ниже общий для всех посетителей этой страницы. Нажмите эту кнопку вместо этого — и
+          получите свой собственный тенант, со своим аккаунтом оператора и своими разговорами,
+          которые никто больше не увидит. Он удаляет себя сам примерно через сутки, вместе со всем,
+          что в нём есть.
         </p>
-        <button type="button" class="mint" id="ago-demo-mint-button">Get your own tenant</button>
+        <button type="button" class="mint" id="ago-demo-mint-button">Получить свой тенант</button>
         <div id="ago-demo-mint-output"></div>
       </div>
 
       <div class="card credential-box">
-        <h2>Operator login for Demo Shop One (throwaway, safe to publish)</h2>
+        <h2>Логин оператора для Demo Shop One (одноразовый, публиковать безопасно)</h2>
         <!--
           8-11: named rather than "this tenant". The same markup renders on a minted `?site=` page,
           where "this tenant" would point at the visitor's own one - which this credential cannot
           reach at all.
         -->
         <p>
-          This is a real, working credential against the console above - deliberately public,
-          not a leaked one. It only ever grants access to the Demo Shop One tenant: never to any
-          real shop's data, and never to a tenant minted by the button above.
+          Это настоящий, рабочий логин в консоль выше — намеренно публичный, а не утёкший. Он даёт
+          доступ только к тенанту Demo Shop One: никогда — к данным настоящего магазина, и никогда —
+          к тенанту, созданному кнопкой выше.
         </p>
         <dl>
-          <dt>Username</dt>
+          <dt>Логин</dt>
           <dd>demo-operator</dd>
-          <dt>Password</dt>
+          <dt>Пароль</dt>
           <dd>demo-operator-password</dd>
         </dl>
         <a class="console-link" href="https://console.reserve-me.ru" target="_blank" rel="noopener"
-          >Open the operator console</a
+          >Открыть консоль оператора</a
         >
       </div>
 
       <div class="card">
-        <h2>Is this safe to poke at?</h2>
+        <h2>Это безопасно — потыкать?</h2>
         <!--
           8-11: this card used to argue from a count - "exactly one tenant" - which 8-05's second
           seeded shop and 8-07's minted ones falsified. The reassurance it was reaching for is still
@@ -335,12 +336,13 @@
           customer was ever onboarded. That claim survives the next minted tenant; a number does not.
         -->
         <p>
-          Yes. Every tenant on this deployment is a demo tenant - the seeded shops these pages embed,
-          plus the throwaway ones the button above mints. No real customer has ever been onboarded
-          here, so there is no production data behind any login on this server. AGO Chat is
-          multi-tenant by construction (every row a visitor or operator can reach is scoped to one
-          <em>site</em>), and you can watch that working between the two shop pages - but nothing you
-          send here is production data, and nothing you do here can reach anything that would be.
+          Да. Каждый тенант на этом деплое — демо-тенант: заранее засеянные магазины, которые
+          встраивают эти страницы, плюс одноразовые, созданные кнопкой выше. Ни один настоящий клиент
+          сюда никогда не заводился, так что за любым логином на этом сервере не стоит промышленных
+          данных. AGO Chat мультитенантен по конструкции (каждая строка, которую может достать
+          посетитель или оператор, привязана к одному <em>site</em>), и это можно наблюдать вживую
+          между двумя страницами магазинов — но ничто из отправленного здесь не промышленные данные, и
+          ничто из сделанного здесь не может дотянуться до того, чем они были бы.
         </p>
         <!--
           8-11: swapped by demo-boot.js on a minted `?site=` tenant, like the banner above. Found by
@@ -349,18 +351,19 @@
           stranger could read what they typed. Same bug, third place.
         -->
         <p id="ago-demo-privacy-note">
-          Safe for the deployment is not the same as private for you, though, and this card would be
-          misleading without saying so: the login above is published, so anything you type into
-          <em>this page's</em> widget is readable by any stranger who signs in with it. Treat this
-          chat as a public one - or press &ldquo;Get your own tenant&rdquo; above and use the private
-          one it hands you, which that login cannot reach.
+          Безопасно для деплоя — не то же самое, что приватно для вас, и эта карточка вводила бы в
+          заблуждение, не сказав об этом: логин выше опубликован, так что всё, что вы напишете в
+          виджет <em>именно этой страницы</em>, сможет прочитать любой незнакомец, вошедший под ним.
+          Считайте этот чат публичным — либо нажмите «Получить свой тенант» выше и используйте
+          приватный, который он вам выдаст и который этот логин достать не может.
         </p>
       </div>
 
       <footer>
-        AGO Chat is a portfolio project demonstrating backend concurrency, realtime messaging, and
-        Clean Architecture end to end - source is public. This page and the widget it embeds are
-        both built and deployed as-is from that codebase, not a mockup.
+        AGO Chat — портфолио-проект, демонстрирующий конкурентность на бэкенде, обмен сообщениями в
+        реальном времени и Clean Architecture целиком, от начала до конца — исходный код открыт. Эта
+        страница и виджет, который она встраивает, собраны и задеплоены как есть из того же кода, а
+        не макет.
       </footer>
     </main>
 

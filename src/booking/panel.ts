@@ -2,6 +2,8 @@ import { guardAsync } from "../errors.js";
 import { BookingFlow, type FlowOutcome } from "./flow.js";
 import { BookingUnavailableError, CalendarClient, type BookingConfig } from "./calendarClient.js";
 import type { BookingStep } from "./steps.js";
+import type { WidgetStrings } from "../i18n/strings.js";
+import { en } from "../i18n/en.js";
 
 /**
  * The last stop for anything the flow could not turn into a step.
@@ -10,10 +12,15 @@ import type { BookingStep } from "./steps.js";
  * browser deliberately tells JavaScript nothing about a response it was not allowed to read, so a
  * page whose origin the tenant never approved cannot know that is why - and a message that guessed
  * would be wrong exactly when the visitor most needed it to be right.
+ *
+ * `11-10`: a `BookingUnavailableError` reaching here was already constructed by `CalendarClient` with
+ * an explicit, localized message (its own remarks), so `reason.message` is already correct. The
+ * fallback for anything else (a genuine programming error, not a `CalendarClient` failure) reads
+ * `strings.bookingUnavailable` directly rather than constructing a throwaway error just to read its
+ * default text.
  */
-function unavailable(reason: unknown): FlowOutcome {
-  const message =
-    reason instanceof BookingUnavailableError ? reason.message : new BookingUnavailableError().message;
+function unavailable(reason: unknown, strings: WidgetStrings): FlowOutcome {
+  const message = reason instanceof BookingUnavailableError ? reason.message : strings.bookingUnavailable;
 
   return { kind: "done", step: { kind: "booking.unavailable", body: message, payload: {}, actions: [] } };
 }
@@ -36,8 +43,13 @@ export class BookingPanel {
   private readonly choices: HTMLDivElement;
   private readonly form: HTMLFormElement;
   private readonly input: HTMLInputElement;
+  private readonly continueButton: HTMLButtonElement;
   private flow: BookingFlow | null = null;
   private busy = false;
+  /** `11-10`: this widget's own built-in language until `ChatWidget.applyStrings` calls
+   * `updateStrings` with the site's real one - the same "construct with the English default,
+   * overwrite once the real value is known" shape `ui/widget.ts`'s own `strings` field uses. */
+  private strings: WidgetStrings = en;
 
   constructor(private readonly config: BookingConfig) {
     this.root = document.createElement("div");
@@ -64,19 +76,29 @@ export class BookingPanel {
     this.input = document.createElement("input");
     this.input.type = "text";
     this.input.className = "ago-booking-input";
-    this.input.setAttribute("aria-label", "Your answer");
+    this.input.setAttribute("aria-label", this.strings.yourAnswer);
 
-    const send = document.createElement("button");
-    send.type = "submit";
-    send.className = "ago-booking-send";
-    send.textContent = "Continue";
+    this.continueButton = document.createElement("button");
+    this.continueButton.type = "submit";
+    this.continueButton.className = "ago-booking-send";
+    this.continueButton.textContent = this.strings.continueLabel;
 
-    this.form.append(this.input, send);
+    this.form.append(this.input, this.continueButton);
     this.root.append(this.body, this.choices, this.form);
   }
 
   get element(): HTMLDivElement {
     return this.root;
+  }
+
+  /** `11-10`: called by `ChatWidget.applyStrings` once the site's real language is known - see that
+   * field's own doc comment. `restart()` reads `this.strings` fresh on every call, so a booking
+   * session started after this point (which is every real one - locale resolves at boot, long before
+   * a visitor can click "Book") speaks the resolved language throughout. */
+  updateStrings(strings: WidgetStrings): void {
+    this.strings = strings;
+    this.input.setAttribute("aria-label", strings.yourAnswer);
+    this.continueButton.textContent = strings.continueLabel;
   }
 
   show(): void {
@@ -90,25 +112,28 @@ export class BookingPanel {
 
   /** Starts a fresh flow. Called on every open rather than resumed: availability changes under a
    * visitor who left the panel open, and a half-finished flow holding a slot id from ten minutes ago
-   * would offer a time somebody else has taken. */
+   * would offer a time somebody else has taken. `11-10`: also why a fresh `CalendarClient`/
+   * `BookingFlow` here, rather than caching them, is the right seam to thread `this.strings` through -
+   * whichever value is current at the moment booking actually starts. */
   restart(): void {
-    this.flow = new BookingFlow(new CalendarClient(this.config));
+    this.flow = new BookingFlow(new CalendarClient(this.config, this.strings), this.strings);
     this.render({
       kind: "step",
-      step: { kind: "booking.loading", body: "Loading available times…", payload: {}, actions: [] },
+      step: { kind: "booking.loading", body: this.strings.loadingAvailableTimes, payload: {}, actions: [] },
     });
     // The loading step has no actions, which would otherwise show the free-text box - suppressed
     // here because nothing is being asked yet.
     this.form.hidden = true;
 
     const flow = this.flow;
+    const strings = this.strings;
     guardAsync(async () => {
       // **Caught here, not left to `guardAsync`.** Found live: driving the built bundle from an
       // origin the tenant never approved leaves the server refusing the surface, the rejection
       // reaching `guardAsync`, and the panel sitting on "Loading available times…" for ever - a
       // spinner that is really an error. `guardAsync`'s job is to stop a throw escaping onto the host
       // page; it is not a way to tell the visitor anything.
-      const outcome = await flow.start().catch((reason: unknown) => unavailable(reason));
+      const outcome = await flow.start().catch((reason: unknown) => unavailable(reason, strings));
       if (this.flow === flow) {
         this.render(outcome);
       }
@@ -121,6 +146,7 @@ export class BookingPanel {
     }
 
     const flow = this.flow;
+    const strings = this.strings;
     this.busy = true;
     this.setDisabled(true);
 
@@ -128,7 +154,7 @@ export class BookingPanel {
       try {
         // Same reason as `restart`: a step that fails mid-flow (the slot list, say) must end in a
         // sentence rather than in a panel that stops responding.
-        const outcome = await flow.answer(value).catch((reason: unknown) => unavailable(reason));
+        const outcome = await flow.answer(value).catch((reason: unknown) => unavailable(reason, strings));
         if (this.flow === flow) {
           this.render(outcome);
         }

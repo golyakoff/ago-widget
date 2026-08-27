@@ -32,6 +32,11 @@ export interface VisitorSession {
    */
   widgetPrimaryColorHex: string | null;
   widgetPosition: string | null;
+  /** `11-10`: cached alongside color/position on the identical terms - the same `POST
+   * /api/v1/visitor-sessions`(`/renew`) response, refreshed on every renewal. `null` for a session
+   * written before this field existed, or for a site with no override - `i18n/resolve.ts`'s
+   * `parseWidgetLocale` treats that identically to "not set" and falls back to English. */
+  widgetLocale: string | null;
 }
 
 export class WidgetStorage {
@@ -76,6 +81,7 @@ export class WidgetStorage {
       visitorId,
       widgetPrimaryColorHex: this.readSafe("widget-color"),
       widgetPosition: this.readSafe("widget-position"),
+      widgetLocale: this.readSafe("widget-locale"),
     };
   }
 
@@ -83,8 +89,8 @@ export class WidgetStorage {
     this.writeSafe("visitor-token", session.token);
     this.writeSafe("visitor-id", session.visitorId);
 
-    // Written as two separate keys, matching every other value this class stores - only written
-    // when present, so a stale key from a differently-configured site never lingers past an update.
+    // Written as separate keys, matching every other value this class stores - only written when
+    // present, so a stale key from a differently-configured site never lingers past an update.
     if (session.widgetPrimaryColorHex) {
       this.writeSafe("widget-color", session.widgetPrimaryColorHex);
     } else {
@@ -95,6 +101,12 @@ export class WidgetStorage {
       this.writeSafe("widget-position", session.widgetPosition);
     } else {
       this.removeSafe("widget-position");
+    }
+
+    if (session.widgetLocale) {
+      this.writeSafe("widget-locale", session.widgetLocale);
+    } else {
+      this.removeSafe("widget-locale");
     }
   }
 

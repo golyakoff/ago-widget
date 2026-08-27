@@ -41,12 +41,17 @@ export interface HistoryPage {
  * carries the `Position` enum's PascalCase member name on the wire (`"BottomRight"`/`"BottomLeft"`),
  * not yet normalised to this widget's own lowercase `WidgetPosition` union - `ui/appearance.ts`'s
  * `parseWidgetPosition` is what does that, the one place this widget decides what an unrecognised
- * value falls back to. */
+ * value falls back to.
+ *
+ * `11-10`: `widgetLocale` joins on the identical terms - a flat, additive sibling field carrying
+ * `Ago.Chat.Domain.Locale`'s own PascalCase member name (`"En"`/`"Ru"`), normalised by
+ * `i18n/resolve.ts`'s `parseWidgetLocale`, the same split `parseWidgetPosition` already draws. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
   widgetPrimaryColorHex: string | null;
   widgetPosition: string;
+  widgetLocale: string;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

@@ -8,6 +8,7 @@ import {
   type OpenSlot,
 } from "./calendarClient.js";
 import type { BookingAction, BookingStep } from "./steps.js";
+import type { WidgetStrings } from "../i18n/strings.js";
 
 /**
  * Turns answers into the next step, and nothing else.
@@ -47,6 +48,12 @@ export class BookingFlow {
 
   constructor(
     private readonly client: CalendarClient,
+    /** `11-10`: the site's resolved language - every step body/retry message this class produces
+     * reads from it. Not defaulted, unlike `formatSlot` below: a caller with no opinion about
+     * formatting a time is a real, common case (this widget's own production use), but a caller with
+     * no opinion about which language to speak is not - `BookingPanel.restart()` and every test in
+     * `flow.test.ts` pass one explicitly. */
+    private readonly strings: WidgetStrings,
     /** Injected so a test can pin the rendering of a time without pinning the machine's zone. The
      * server sends an instant with an explicit offset (CLAUDE.md rule 11); how it reads to a person
      * is the renderer's business, and this is the seam. */
@@ -61,7 +68,7 @@ export class BookingFlow {
     if (this.surface.length === 0) {
       // A published calendar nobody performs anything on is a real configuration state, not an
       // error - the shop's own doing, and said plainly rather than dressed up as a failure.
-      return this.terminal("booking.unavailable", "There is nothing to book here yet.");
+      return this.terminal("booking.unavailable", this.strings.nothingToBookYet);
     }
 
     if (this.surface.length === 1) {
@@ -70,7 +77,7 @@ export class BookingFlow {
     }
 
     this.stage = "calendar";
-    return step("booking.calendar", "Which calendar would you like to book?", {
+    return step("booking.calendar", this.strings.whichCalendar, {
       calendars: this.surface.map((calendar) => ({ calendarId: calendar.calendarId, name: calendar.name })),
     }, this.surface.map((calendar) => ({ label: calendar.name, value: calendar.calendarId })));
   }
@@ -85,7 +92,7 @@ export class BookingFlow {
       case "calendar": {
         const calendar = this.surface.find((candidate) => candidate.calendarId === value);
         if (!calendar) {
-          return this.retry("That is not one of the options.");
+          return this.retry(this.strings.notAnOption);
         }
         this.choice.calendar = calendar;
         return this.serviceStep();
@@ -94,7 +101,7 @@ export class BookingFlow {
       case "service": {
         const service = this.choice.calendar?.services.find((candidate) => candidate.serviceId === value);
         if (!service) {
-          return this.retry("That is not one of the options.");
+          return this.retry(this.strings.notAnOption);
         }
         this.choice.service = service;
         return this.workerStep(signal);
@@ -105,7 +112,7 @@ export class BookingFlow {
         // like any other rather than a flag, so a numbered list can offer it as an option.
         this.choice.workerId = value === "" ? null : value;
         if (this.choice.workerId !== null && !this.workers.some((worker) => worker.workerId === value)) {
-          return this.retry("That is not one of the options.");
+          return this.retry(this.strings.notAnOption);
         }
         return this.slotStep(signal);
       }
@@ -113,13 +120,13 @@ export class BookingFlow {
       case "slot": {
         const slot = this.slots.find((candidate) => candidate.bookingId === value);
         if (!slot) {
-          return this.retry("That is not one of the options.");
+          return this.retry(this.strings.notAnOption);
         }
         this.choice.slot = slot;
         this.stage = "phone";
         return step(
           "booking.phone",
-          `${this.formatSlot(slot)} with ${slot.workerDisplayName}. What is your phone number?`,
+          `${this.formatSlot(slot)} ${this.strings.withWorker} ${slot.workerDisplayName}. ${this.strings.whatIsYourPhoneNumber}`,
           { bookingId: slot.bookingId, startsAt: slot.startsAt },
           [],
         );
@@ -128,11 +135,11 @@ export class BookingFlow {
       case "phone": {
         const phone = value.trim();
         if (phone.length === 0) {
-          return this.retry("A phone number is how the shop reaches you, so it cannot be left out.");
+          return this.retry(this.strings.phoneNumberRequired);
         }
         this.choice.phone = phone;
         this.stage = "name";
-        return step("booking.name", "And your name? Leave it blank if you would rather not say.", {}, []);
+        return step("booking.name", this.strings.namePrompt, {}, []);
       }
 
       case "name":
@@ -140,7 +147,7 @@ export class BookingFlow {
 
       case "done":
       default:
-        return this.terminal("booking.done", "This booking is finished.");
+        return this.terminal("booking.done", this.strings.bookingFinished);
     }
   }
 
@@ -149,10 +156,10 @@ export class BookingFlow {
     this.stage = "service";
     return step(
       "booking.service",
-      "What would you like to book?",
+      this.strings.whatWouldYouLikeToBook,
       { calendarId: calendar.calendarId, timeZone: calendar.timeZone, services: calendar.services },
       calendar.services.map((service) => ({
-        label: `${service.name} (${service.durationMinutes} min)`,
+        label: `${service.name} ${this.strings.minutesUnit(service.durationMinutes)}`,
         value: service.serviceId,
       })),
     );
@@ -164,7 +171,7 @@ export class BookingFlow {
     this.workers = await this.client.getWorkers(calendar.calendarId, service.serviceId, signal);
 
     if (this.workers.length === 0) {
-      return this.terminal("booking.unavailable", "Nobody is available for that at the moment.");
+      return this.terminal("booking.unavailable", this.strings.nobodyAvailable);
     }
 
     if (this.workers.length === 1) {
@@ -179,9 +186,9 @@ export class BookingFlow {
       label: worker.displayName,
       value: worker.workerId,
     }));
-    actions.push({ label: "Anyone", value: "" });
+    actions.push({ label: this.strings.anyone, value: "" });
 
-    return step("booking.worker", "Who would you like to see?", { workers: this.workers }, actions);
+    return step("booking.worker", this.strings.whoWouldYouLikeToSee, { workers: this.workers }, actions);
   }
 
   private async slotStep(signal?: AbortSignal): Promise<FlowOutcome> {
@@ -195,13 +202,13 @@ export class BookingFlow {
     );
 
     if (this.slots.length === 0) {
-      return this.terminal("booking.unavailable", "There are no free times for that at the moment.");
+      return this.terminal("booking.unavailable", this.strings.noFreeTimes);
     }
 
     this.stage = "slot";
     return step(
       "booking.slot",
-      "When would you like to come?",
+      this.strings.whenWouldYouLikeToCome,
       { timeZone: calendar.timeZone, slots: this.slots },
       this.slots.map((slot) => ({ label: this.slotLabel(slot), value: slot.bookingId })),
     );
@@ -230,7 +237,7 @@ export class BookingFlow {
           // Nothing here says "pending", and nothing may: the server's own
           // BookingConfirmedResponse has no field that could, and the two-step mechanic exists
           // precisely so the customer is told they are booked.
-          body: `You are booked: ${this.formatSlot(slot)} with ${slot.workerDisplayName}.`,
+          body: `${this.strings.youAreBookedPrefix}${this.formatSlot(slot)} ${this.strings.withWorker} ${slot.workerDisplayName}.`,
           payload: confirmation as unknown as Record<string, unknown>,
           actions: [],
         },
@@ -240,7 +247,7 @@ export class BookingFlow {
         // The one failure the flow acts on instead of reporting: go back to the times, which have
         // just changed, and let the visitor pick again. Losing this race is ordinary (`adr/0059`).
         const next = await this.slotStep(signal);
-        return withBody(next, `${new SlotTakenError().message} Here is what is still free.`);
+        return withBody(next, `${this.strings.slotTaken} ${this.strings.hereIsWhatIsStillFree}`);
       }
 
       if (error instanceof BookingRateLimitedError || error instanceof BookingUnavailableError) {

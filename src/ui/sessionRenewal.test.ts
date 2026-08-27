@@ -136,7 +136,13 @@ afterEach(() => {
 
 function storeSessionMintedAt(mintedAt: number): string {
   const token = tokenMintedAt(mintedAt);
-  storage.setVisitorSession({ token, visitorId: VISITOR_ID, widgetPrimaryColorHex: null, widgetPosition: null });
+  storage.setVisitorSession({
+    token,
+    visitorId: VISITOR_ID,
+    widgetPrimaryColorHex: null,
+    widgetPosition: null,
+    widgetLocale: null,
+  });
   return token;
 }
 

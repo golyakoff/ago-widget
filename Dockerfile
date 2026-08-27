@@ -36,7 +36,15 @@ RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" AGO_COMMIT="${GIT_COMMIT}" npm run bu
 # that actually exists for nginx (Chiseled itself is a .NET/Microsoft base-image family with no
 # nginx equivalent): official image, not a bespoke build, with the dynamic modules this
 # static-file-only container never uses (image filter, mail proxy, stream) stripped out.
-FROM nginx:1.27-alpine-slim
+FROM nginx:1.31-alpine-slim
+# `17-04`: the base tag names the image nginx's own maintainers published, not the Alpine packages
+# inside it *today* - Alpine ships security fixes into its package repositories continuously,
+# independent of when a base image was last rebuilt from them. `apk upgrade` reaches into the live
+# package repository at build time and pulls whatever is patched *now*, so this image stays current
+# between nginx's own rebuilds instead of only at the moment this Dockerfile happens to be edited -
+# `ago-console`'s companion fix found this the hard way, against the same base image this repository
+# shares. `--no-cache` skips the local index without leaving `/var/cache/apk` behind.
+RUN apk update && apk upgrade --no-cache
 ARG GIT_COMMIT=unknown
 # `15-07`: the OCI annotations a registry and `docker inspect`/`crane config` read. `.source` is not
 # only documentation - GHCR uses it to link the published package back to this repository, which is

@@ -10,6 +10,8 @@ import {
   type CalendarClient,
   type OpenSlot,
 } from "./calendarClient.js";
+import { en } from "../i18n/en.js";
+import { ru } from "../i18n/ru.js";
 
 /**
  * The flow with a fake AGO Calendar behind it.
@@ -21,7 +23,7 @@ import {
  */
 describe("the booking flow", () => {
   it("skips the calendar question when a tenant has one calendar, and asks for the service", async () => {
-    const flow = new BookingFlow(fakeClient(), stableLabel);
+    const flow = new BookingFlow(fakeClient(), en, stableLabel);
 
     const first = await flow.start();
 
@@ -37,7 +39,7 @@ describe("the booking flow", () => {
       },
     });
 
-    const first = await new BookingFlow(client, stableLabel).start();
+    const first = await new BookingFlow(client, en, stableLabel).start();
 
     expect(first.step.kind).toBe("booking.calendar");
     expect(first.step.actions.map((action) => action.value)).toEqual(["cal-1", "cal-2"]);
@@ -46,7 +48,7 @@ describe("the booking flow", () => {
   it("skips the worker question when only one person performs the service", async () => {
     // One name is not a choice. Asking anyway is bureaucracy on a screen and worse in a numbered
     // list.
-    const flow = new BookingFlow(fakeClient({ workers: [{ workerId: "w1", displayName: "Alex" }] }), stableLabel);
+    const flow = new BookingFlow(fakeClient({ workers: [{ workerId: "w1", displayName: "Alex" }] }), en, stableLabel);
     await flow.start();
 
     const next = await flow.answer("svc-haircut");
@@ -55,7 +57,7 @@ describe("the booking flow", () => {
   });
 
   it("offers 'Anyone' as an ordinary choice when several people perform the service", async () => {
-    const flow = new BookingFlow(fakeClient(), stableLabel);
+    const flow = new BookingFlow(fakeClient(), en, stableLabel);
     await flow.start();
 
     const workers = await flow.answer("svc-haircut");
@@ -65,10 +67,47 @@ describe("the booking flow", () => {
     expect(workers.step.actions.at(-1)).toEqual({ label: "Anyone", value: "" });
   });
 
+  // `11-10`: the flow's own strings, not just the widget chrome around it - proven the same way the
+  // rest of this file proves English, by reading the rendered step body/action labels.
+  it("renders every step body and action label in Russian when given the Russian string table", async () => {
+    const client = fakeClient({
+      surface: {
+        tenantName: "Barbershop",
+        calendars: [calendar("cal-1", "Main"), calendar("cal-2", "Second chair")],
+      },
+    });
+    const flow = new BookingFlow(client, ru, stableLabel);
+
+    const calendarStep = await flow.start();
+    expect(calendarStep.step.body).toBe("Какой календарь вы хотите выбрать?");
+
+    const serviceStep = await flow.answer("cal-1");
+    expect(serviceStep.step.body).toBe("Что вы хотите забронировать?");
+    expect(serviceStep.step.actions.map((a) => a.label)).toEqual(["Haircut (45 мин)", "Beard (20 мин)"]);
+
+    const workerStep = await flow.answer("svc-haircut");
+    expect(workerStep.step.body).toBe("Кого вы хотите выбрать?");
+    expect(workerStep.step.actions.at(-1)).toEqual({ label: "Любой", value: "" });
+
+    const slotStep = await flow.answer("");
+    expect(slotStep.step.body).toBe("Когда вам удобно прийти?");
+
+    const phoneStep = await flow.answer("e1");
+    expect(phoneStep.step.body).toContain(" с Alex. ");
+    expect(phoneStep.step.body).toContain("Какой у вас номер телефона?");
+
+    const nameStep = await flow.answer("+79990000001");
+    expect(nameStep.step.body).toBe("А как вас зовут? Оставьте поле пустым, если не хотите указывать.");
+
+    const done = await flow.answer("Anna");
+    expect(done.step.kind).toBe("booking.confirmed");
+    expect(done.step.body.startsWith("Вы записаны: ")).toBe(true);
+  });
+
   it("says so plainly when the shop has published nothing bookable", async () => {
     const client = fakeClient({ surface: { tenantName: "Barbershop", calendars: [] } });
 
-    const outcome = await new BookingFlow(client, stableLabel).start();
+    const outcome = await new BookingFlow(client, en, stableLabel).start();
 
     expect(outcome.kind).toBe("done");
     expect(outcome.step.body).toContain("nothing to book");
@@ -88,7 +127,7 @@ describe("the booking flow", () => {
       },
     });
 
-    const flow = new BookingFlow(client, stableLabel);
+    const flow = new BookingFlow(client, en, stableLabel);
     await flow.start();
     await flow.answer("svc-haircut");
     await flow.answer("");
@@ -129,7 +168,7 @@ describe("the booking flow", () => {
   });
 
   it("refuses to continue without a phone number", async () => {
-    const flow = new BookingFlow(fakeClient(), stableLabel);
+    const flow = new BookingFlow(fakeClient(), en, stableLabel);
     await flow.start();
     await flow.answer("svc-haircut");
     await flow.answer("");
@@ -145,7 +184,7 @@ describe("the booking flow", () => {
     // digit; the only free text is a phone number and a name, which are answers a person types on
     // any channel. If a step needed a browser, this test could not be written.
     const client = fakeClient();
-    const flow = new BookingFlow(client, stableLabel);
+    const flow = new BookingFlow(client, en, stableLabel);
     const transcript: string[] = [];
 
     let outcome = await flow.start();
@@ -198,7 +237,7 @@ function confirmation(): BookingConfirmation {
 }
 
 async function aFlowAtTheNameQuestion(overrides: Parameters<typeof fakeClient>[0] = {}): Promise<BookingFlow> {
-  const flow = new BookingFlow(fakeClient(overrides), stableLabel);
+  const flow = new BookingFlow(fakeClient(overrides), en, stableLabel);
   await flow.start();
   await flow.answer("svc-haircut");
   await flow.answer("");

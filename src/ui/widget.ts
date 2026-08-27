@@ -10,49 +10,23 @@ import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
 import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 import { BookingPanel } from "../booking/panel.js";
+import { en } from "../i18n/en.js";
+import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
+import type { WidgetStrings } from "../i18n/strings.js";
 
 /**
- * `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
- * short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
- * polite banner people skim is worth less than a blunt one they finish reading.
+ * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1`/`demo-shop2` (public) or a
+ * tenant minted by `8-07`'s button (private) must have read before typing - three short statements of
+ * fact for the public case, a precise reassurance plus the tenant's own disposability for the private
+ * one. Full reasoning for both sentences' wording stays where it always has: `i18n/en.ts`'s own
+ * `publicDemoNotice`/`privateDemoNotice` doc comments.
  *
- * `8-11` did not touch a word of it. What changed is *when* it appears: it used to be attached to
- * the page and is now attached to the tenant, because on a tenant minted by `8-07`'s button it was
- * simply false.
- *
- * Fixed text owned by the widget rather than passed in from the host page: `config.ts` explains why
- * the script tag carries an enum and not a string.
+ * `11-10`: the two sentences moved out of this file and into `i18n/en.ts`/`ru.ts` as the first two
+ * entries in the widget's new string table - they were always fixed text owned by the widget rather
+ * than passed in from the host page (`config.ts` explains why the script tag carries an enum and not
+ * a string), which is exactly what belongs in the string table alongside every other widget-owned
+ * sentence, translated the same way.
  */
-const PUBLIC_DEMO_NOTICE =
-  "This is a public demo. Anyone who opens the demo operator console can read what you type here. Do not type anything real.";
-
-/**
- * `8-11`: the same sentence's counterpart on a minted tenant, and the answer to that item's own open
- * question - whether the widget should say anything here at all.
- *
- * **It should.** `8-06`'s argument was that the warning belongs where the typing happens, because a
- * visitor can open the launcher from any scroll position without having read the page. That argument
- * does not care which way the fact points: the reassurance belongs there for exactly the same
- * reason, and the tenant's own lifetime is currently stated nowhere in the widget at all. Silence
- * would also have left the panel visually identical in the two cases, so a reviewer comparing them
- * could not tell that the notice had become conditional rather than simply deleted.
- *
- * **Precise rather than generous.** "Only the operator login you were given" and not "nobody else",
- * which is what `8-09`'s panel says and is the one place that copy over-claims: the visitor was
- * handed a `?site=` link and a password, and either can be passed on. What the widget states is what
- * the deployment actually enforces.
- *
- * **No "do not type anything real."** On a public tenant that is proportionate; here it would
- * re-create the contradiction this item exists to remove, in a softer form. The disposability is
- * said instead, which is the true version of the same caution.
- *
- * The lifetime is a fixed phrase, not a formatted timestamp: the widget is not told the expiry, and
- * an attribute carrying one would put a second copy of a number `8-09`'s panel already renders
- * exactly, a few centimetres away, where the two could disagree.
- */
-const PRIVATE_DEMO_NOTICE =
-  "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.";
-
 function createDemoNotice(text: string): HTMLDivElement {
   const notice = document.createElement("div");
   notice.className = "ago-notice";
@@ -76,6 +50,7 @@ export class ChatWidget {
   private readonly root: ShadowRoot;
   private readonly container: HTMLDivElement;
   private readonly panel: HTMLDivElement;
+  private readonly title: HTMLHeadingElement;
   private readonly toggle: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly messages: HTMLDivElement;
@@ -92,6 +67,11 @@ export class ChatWidget {
   private readonly booking: BookingPanel | null;
   private readonly composer: HTMLFormElement;
   private isBooking = false;
+  /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
+   * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
+   * against whatever `this.strings` holds at the time - initially this English default, so "no
+   * `WidgetLocale` set" renders identically to before this item existed. */
+  private strings: WidgetStrings = en;
 
   private connection: VisitorConnection | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -140,7 +120,7 @@ export class ChatWidget {
     this.toggle.className = "ago-toggle";
     this.toggle.setAttribute("aria-haspopup", "dialog");
     this.toggle.setAttribute("aria-expanded", "false");
-    this.toggle.setAttribute("aria-label", "Open chat");
+    this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.toggle.textContent = "💬";
     this.toggle.addEventListener("click", () => this.toggleOpen());
 
@@ -148,7 +128,7 @@ export class ChatWidget {
     this.panel.className = "ago-panel";
     this.panel.setAttribute("role", "dialog");
     this.panel.setAttribute("aria-modal", "false");
-    this.panel.setAttribute("aria-label", "Chat");
+    this.panel.setAttribute("aria-label", this.strings.chatLabel);
     this.panel.hidden = true;
     this.panel.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -158,12 +138,12 @@ export class ChatWidget {
 
     const header = document.createElement("div");
     header.className = "ago-header";
-    const title = document.createElement("h1");
-    title.textContent = "Chat with us";
+    this.title = document.createElement("h1");
+    this.title.textContent = this.strings.chatWithUs;
     this.closeButton = document.createElement("button");
     this.closeButton.type = "button";
     this.closeButton.className = "ago-close";
-    this.closeButton.setAttribute("aria-label", "Close chat");
+    this.closeButton.setAttribute("aria-label", this.strings.closeChat);
     this.closeButton.textContent = "✕";
     this.closeButton.addEventListener("click", () => this.close());
 
@@ -179,12 +159,12 @@ export class ChatWidget {
     if (this.bookButton) {
       this.bookButton.type = "button";
       this.bookButton.className = "ago-book";
-      this.bookButton.textContent = "Book";
-      this.bookButton.setAttribute("aria-label", "Book an appointment");
+      this.bookButton.textContent = this.strings.book;
+      this.bookButton.setAttribute("aria-label", this.strings.bookAnAppointment);
       this.bookButton.addEventListener("click", () => this.toggleBooking());
-      header.append(title, this.bookButton, this.closeButton);
+      header.append(this.title, this.bookButton, this.closeButton);
     } else {
-      header.append(title, this.closeButton);
+      header.append(this.title, this.closeButton);
     }
 
     // `8-06`: directly under the header and outside `.ago-messages`, so it is the first thing read
@@ -196,8 +176,8 @@ export class ChatWidget {
     // `8-11`: three states, and the default is silence. A real shop's embed asks for neither
     // sentence and gets neither.
     const noticeText =
-      config.demoNotice === "public" ? PUBLIC_DEMO_NOTICE
-      : config.demoNotice === "private" ? PRIVATE_DEMO_NOTICE
+      config.demoNotice === "public" ? this.strings.publicDemoNotice
+      : config.demoNotice === "private" ? this.strings.privateDemoNotice
       : null;
     const notice = noticeText === null ? null : createDemoNotice(noticeText);
 
@@ -210,7 +190,7 @@ export class ChatWidget {
 
     this.status = document.createElement("div");
     this.status.className = "ago-status";
-    this.status.textContent = "Connecting…";
+    this.status.textContent = this.strings.connecting;
 
     const composer = document.createElement("form");
     composer.className = "ago-composer";
@@ -222,8 +202,8 @@ export class ChatWidget {
     this.input = document.createElement("textarea");
     this.input.className = "ago-input";
     this.input.rows = 1;
-    this.input.setAttribute("aria-label", "Message");
-    this.input.placeholder = "Type a message…";
+    this.input.setAttribute("aria-label", this.strings.messageAriaLabel);
+    this.input.placeholder = this.strings.typeAMessage;
     this.input.disabled = true;
     this.input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -236,7 +216,7 @@ export class ChatWidget {
     this.sendButton = document.createElement("button");
     this.sendButton.type = "submit";
     this.sendButton.className = "ago-send";
-    this.sendButton.textContent = "Send";
+    this.sendButton.textContent = this.strings.send;
     this.sendButton.disabled = true;
 
     // A native file picker, not a drag-and-drop zone or a custom widget - the skill's
@@ -257,7 +237,7 @@ export class ChatWidget {
     this.attachButton = document.createElement("button");
     this.attachButton.type = "button";
     this.attachButton.className = "ago-attach";
-    this.attachButton.setAttribute("aria-label", "Attach a file");
+    this.attachButton.setAttribute("aria-label", this.strings.attachAFile);
     this.attachButton.textContent = "📎";
     this.attachButton.disabled = true;
     this.attachButton.addEventListener("click", () => this.fileInput.click());
@@ -317,14 +297,20 @@ export class ChatWidget {
    * more. The note is written into the message list here rather than at open time so it sits above
    * whatever the (new, empty) conversation goes on to contain, and it is written only for a visitor
    * who actually lost something - never for a first-ever arrival.
+   *
+   * `11-10`: also where the widget's own language resolves, in the same place and at the same time as
+   * color and position - `applyStrings` is called *first*, before the `restarted` note, so that note
+   * itself already renders in the resolved language rather than this widget's built-in default. There
+   * is no reason to delay it: `session.widgetLocale` is already in hand at this point, the same way
+   * `session.widgetPosition`/`widgetPrimaryColorHex` are already in hand for the two lines below it.
    */
   private async bootstrapSession(): Promise<VisitorSession> {
     const { session, restarted } = await this.sessionManager.start();
     this.session = session;
+    this.applyStrings(parseWidgetLocale(session.widgetLocale));
+
     if (restarted) {
-      this.renderSystemNote(
-        "Your previous chat has expired, so this is a new conversation. Anything you sent before is no longer shown here.",
-      );
+      this.renderSystemNote(this.strings.previousChatExpired);
     }
 
     this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
@@ -334,6 +320,47 @@ export class ChatWidget {
     }
 
     return session;
+  }
+
+  /**
+   * `11-10`: resolves `this.strings` to the site's real language and re-applies every static piece of
+   * text this class built with the English default in its constructor - the DOM-building code and
+   * this method deliberately read the same `this.strings.*` fields rather than each owning its own
+   * copy, so a new translatable string only ever needs adding once.
+   *
+   * Deliberately does **not** touch `this.status` - `renderConnectionState`/`handleSessionExpired`
+   * are the only writers of that element and both already read `this.strings` at the time they run,
+   * which by construction (`connect()` awaits the same `sessionPromise` this method is part of) is
+   * always after this method has already resolved it. Re-writing it here on top of a state those
+   * methods may already have set would be the bug, not the fix.
+   */
+  private applyStrings(locale: SupportedLocale): void {
+    this.strings = getStrings(locale);
+    const strings = this.strings;
+
+    this.toggle.setAttribute("aria-label", this.isOpen ? strings.closeChat : strings.openChat);
+    this.panel.setAttribute("aria-label", strings.chatLabel);
+    this.title.textContent = strings.chatWithUs;
+    this.closeButton.setAttribute("aria-label", strings.closeChat);
+    if (this.bookButton) {
+      this.bookButton.textContent = this.isBooking ? strings.chatLabel : strings.book;
+      this.bookButton.setAttribute(
+        "aria-label",
+        this.isBooking ? strings.backToConversation : strings.bookAnAppointment,
+      );
+    }
+    this.input.setAttribute("aria-label", strings.messageAriaLabel);
+    this.input.placeholder = strings.typeAMessage;
+    this.sendButton.textContent = strings.send;
+    this.attachButton.setAttribute("aria-label", strings.attachAFile);
+
+    // `ui/styles.ts`'s own remarks: a CSS `content:` pseudo-element string cannot be reached by
+    // rewriting a DOM text node, so it is threaded through as a custom property instead, the same
+    // mechanism `--ago-accent` already uses for the site's color. `JSON.stringify` produces a
+    // correctly quoted-and-escaped CSS string literal for any text, not just the two this item ships.
+    this.host.style.setProperty("--ago-auto-reply-label", JSON.stringify(strings.autoReplyLabel));
+
+    this.booking?.updateStrings(strings);
   }
 
   private toggleOpen(): void {
@@ -348,7 +375,7 @@ export class ChatWidget {
     this.isOpen = true;
     this.panel.hidden = false;
     this.toggle.setAttribute("aria-expanded", "true");
-    this.toggle.setAttribute("aria-label", "Close chat");
+    this.toggle.setAttribute("aria-label", this.strings.closeChat);
     this.focusTrap.activate();
     this.closeButton.focus();
 
@@ -361,7 +388,7 @@ export class ChatWidget {
     this.isOpen = false;
     this.panel.hidden = true;
     this.toggle.setAttribute("aria-expanded", "false");
-    this.toggle.setAttribute("aria-label", "Open chat");
+    this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
   }
@@ -392,12 +419,12 @@ export class ChatWidget {
 
     if (this.isBooking) {
       this.booking.show();
-      this.bookButton.textContent = "Chat";
-      this.bookButton.setAttribute("aria-label", "Back to the conversation");
+      this.bookButton.textContent = this.strings.chatLabel;
+      this.bookButton.setAttribute("aria-label", this.strings.backToConversation);
     } else {
       this.booking.hide();
-      this.bookButton.textContent = "Book";
-      this.bookButton.setAttribute("aria-label", "Book an appointment");
+      this.bookButton.textContent = this.strings.book;
+      this.bookButton.setAttribute("aria-label", this.strings.bookAnAppointment);
     }
   }
 
@@ -426,7 +453,7 @@ export class ChatWidget {
     } catch (error) {
       logWidgetError(error);
       if (!this.isSessionExpired) {
-        this.status.textContent = "Chat is unavailable right now. Please try again later.";
+        this.status.textContent = this.strings.chatUnavailable;
       }
     }
   }
@@ -481,7 +508,7 @@ export class ChatWidget {
     this.input.disabled = true;
     this.attachButton.disabled = true;
     this.sendButton.disabled = true;
-    this.status.textContent = "This chat session has expired. Reload the page to start a new one.";
+    this.status.textContent = this.strings.sessionExpired;
 
     const connection = this.connection;
     this.connection = null;
@@ -505,11 +532,11 @@ export class ChatWidget {
     this.updateSendButtonEnabled();
     this.status.textContent =
       state === "connecting"
-        ? "Connecting…"
+        ? this.strings.connecting
         : state === "reconnecting"
-          ? "Reconnecting…"
+          ? this.strings.reconnecting
           : state === "disconnected"
-            ? "Disconnected. Trying to reconnect…"
+            ? this.strings.disconnectedReconnecting
             : "";
   }
 
@@ -572,7 +599,7 @@ export class ChatWidget {
           // fresh one when nothing was sent. Both sides treat that id as still live exactly when the
           // server may already hold it. This widget does not retry at all - out of scope, and
           // `dispatchSend`'s own message says so - but "still live" means the same thing here.
-          this.markBubbleFailed(bubble, "Not sure this was sent - the connection dropped mid-request.");
+          this.markBubbleFailed(bubble, this.strings.sendOutcomeUnknownNote);
         } else {
           // Nothing reached the server. `NotConnectedError` never invoked at all; anything else came
           // back while the socket was still up, i.e. the hub refused it. No delivery can ever carry
@@ -582,9 +609,7 @@ export class ChatWidget {
           this.pendingSends.delete(clientMessageId);
           this.markBubbleFailed(
             bubble,
-            error instanceof NotConnectedError
-              ? "Not sent - reconnecting. It will not be retried automatically."
-              : "Failed to send.",
+            error instanceof NotConnectedError ? this.strings.notConnectedRetryNote : this.strings.sendFailedNote,
           );
         }
 
@@ -610,7 +635,7 @@ export class ChatWidget {
    * message) reuses `dispatchSend` - an attachment is just a message that happens to carry one.
    */
   private handleFileSelected(file: File): void {
-    const rejection = courtesyValidate(file);
+    const rejection = courtesyValidate(file, this.strings);
     if (rejection) {
       this.renderSystemNote(rejection);
       return;
@@ -628,7 +653,7 @@ export class ChatWidget {
     const bubble = this.renderBubble("Visitor", body, "sending");
     const progress = document.createElement("div");
     progress.className = "ago-status";
-    progress.textContent = "Uploading… 0%";
+    progress.textContent = `${this.strings.uploading} 0%`;
     bubble.appendChild(progress);
 
     this.uploadThenSend(file, body, conversationId, bubble, progress);
@@ -650,14 +675,14 @@ export class ChatWidget {
     (async () => {
       const created = await createAttachment(this.config, await this.currentToken(), conversationId, file);
       await uploadToPresignedUrl(created.uploadUrl, file, (fraction) => {
-        progress.textContent = `Uploading… ${Math.round(fraction * 100)}%`;
+        progress.textContent = `${this.strings.uploading} ${Math.round(fraction * 100)}%`;
       });
       await confirmAttachment(this.config, await this.currentToken(), created.attachmentId);
 
       bubble.remove();
       this.dispatchSend(body, created.attachmentId);
     })().catch((error: unknown) => {
-      this.markBubbleFailed(bubble, "Couldn't send the attachment.");
+      this.markBubbleFailed(bubble, this.strings.uploadFailedNote);
       logWidgetError(error);
     });
   }
@@ -752,10 +777,10 @@ export class ChatWidget {
           const img = document.createElement("img");
           img.className = "ago-attachment-image";
           img.src = info.thumbnailUrl ?? info.url;
-          img.alt = "Attachment";
+          img.alt = this.strings.attachmentAlt;
           link.appendChild(img);
         } else {
-          link.textContent = "📎 Download attachment";
+          link.textContent = this.strings.downloadAttachment;
         }
 
         bubble.appendChild(link);
@@ -765,7 +790,7 @@ export class ChatWidget {
         logWidgetError(error);
         const note = document.createElement("div");
         note.className = "ago-status";
-        note.textContent = "Attachment unavailable.";
+        note.textContent = this.strings.attachmentUnavailable;
         bubble.appendChild(note);
       });
   }

@@ -27,6 +27,8 @@
  * is only text, and that question is explicitly left open (`adr/0061`'s own Consequences).
  */
 
+import type { WidgetStrings } from "../i18n/strings.js";
+
 /** What a script tag has to supply for any of this to happen. */
 export interface BookingConfig {
   /** AGO Calendar's own tenant public key - a different value from `data-site`, because the two
@@ -77,7 +79,13 @@ export interface BookingConfirmation {
 }
 
 /** The failures a caller has to tell apart. Everything else is `BookingUnavailableError`, because a
- * visitor's next action is the same for all of them: try again or give up. */
+ * visitor's next action is the same for all of them: try again or give up.
+ *
+ * `11-10`: the default `message` stays the English text - it is what a caller with no `WidgetStrings`
+ * in hand gets (this repository's own tests, mainly), not what a visitor sees. `CalendarClient`
+ * itself always constructs this with an explicit, already-localized message
+ * (`this.strings.bookingUnavailable`), which is what `flow.ts`'s own `error.message` read for this
+ * type actually renders. */
 export class BookingUnavailableError extends Error {
   constructor(message = "Booking is not available right now.") {
     super(message);
@@ -86,17 +94,25 @@ export class BookingUnavailableError extends Error {
 }
 
 /** The slot was taken between the list and the claim. **An ordinary Tuesday** (`adr/0059`: a lost
- * race is not an error), and the only failure the flow reacts to rather than reports. */
+ * race is not an error), and the only failure the flow reacts to rather than reports.
+ *
+ * `11-10`: `flow.ts` no longer reads this error's own `.message` at all - it only checks
+ * `instanceof` and builds the visitor-facing sentence from `this.strings.slotTaken` directly, so this
+ * default exists purely for a caller with no strings in hand. `CalendarClient` still constructs this
+ * with an explicit localized message for consistency, in case a future caller ever does read it. */
 export class SlotTakenError extends Error {
-  constructor() {
-    super("Sorry, that time has just been taken.");
+  constructor(message = "Sorry, that time has just been taken.") {
+    super(message);
     this.name = "SlotTakenError";
   }
 }
 
+/** `11-10`: unlike `SlotTakenError`, `flow.ts` *does* read this one's `.message` (the combined
+ * `RateLimitedError || UnavailableError` branch in `confirm()`), so `CalendarClient` constructing it
+ * with an explicit localized message is load-bearing here, not just consistency. */
 export class BookingRateLimitedError extends Error {
-  constructor() {
-    super("Too many booking attempts. Please wait a moment and try again.");
+  constructor(message = "Too many booking attempts. Please wait a moment and try again.") {
+    super(message);
     this.name = "BookingRateLimitedError";
   }
 }
@@ -112,7 +128,13 @@ export class BookingRateLimitedError extends Error {
 export class CalendarClient {
   private readonly base: string;
 
-  constructor(private readonly config: BookingConfig) {
+  constructor(
+    private readonly config: BookingConfig,
+    /** `11-10`: the site's resolved language at the moment this client was built -
+     * `BookingPanel.restart()` constructs a fresh `CalendarClient` on every open, so this is always
+     * whichever `WidgetStrings` `ChatWidget.applyStrings` has resolved to by then. */
+    private readonly strings: WidgetStrings,
+  ) {
     this.base = `${config.apiBaseUrl.replace(/\/+$/, "")}/api/v1/embed/${encodeURIComponent(config.publicKey)}`;
   }
 
@@ -163,20 +185,23 @@ export class CalendarClient {
         signal: signal ?? null,
       });
     } catch {
-      throw new BookingUnavailableError();
+      throw new BookingUnavailableError(this.strings.bookingUnavailable);
     }
 
     if (response.status === 409) {
-      throw new SlotTakenError();
+      throw new SlotTakenError(this.strings.slotTaken);
     }
     if (response.status === 429) {
-      throw new BookingRateLimitedError();
+      throw new BookingRateLimitedError(this.strings.tooManyBookingAttempts);
     }
     if (!response.ok) {
       // 400 covers a phone the server refused. Its problem-details `detail` is written for a human
-      // and is the one server message worth showing verbatim - everything else is collapsed.
+      // and is the one server message worth showing verbatim - everything else is collapsed. `11-10`:
+      // that detail is never machine-translated (out of scope - it is the server's own text, not this
+      // widget's), but the *fallback* for a 400 with no readable detail still has to be this widget's
+      // own localized sentence, not the class's English-only default.
       const detail = await readProblemDetail(response);
-      throw new BookingUnavailableError(detail ?? undefined);
+      throw new BookingUnavailableError(detail ?? this.strings.bookingUnavailable);
     }
 
     return (await response.json()) as BookingConfirmation;
@@ -191,11 +216,11 @@ export class CalendarClient {
       // deliberately tells JavaScript nothing about a response it was not allowed to read. So the
       // widget cannot report "your origin is not approved" even when that is exactly what happened,
       // and saying so here is more useful than a message that guesses.
-      throw new BookingUnavailableError();
+      throw new BookingUnavailableError(this.strings.bookingUnavailable);
     }
 
     if (!response.ok) {
-      throw new BookingUnavailableError();
+      throw new BookingUnavailableError(this.strings.bookingUnavailable);
     }
 
     return (await response.json()) as T;

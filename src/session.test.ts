@@ -50,6 +50,7 @@ function sessionResponse(token: string, status: number, body: Partial<Record<str
       visitorId: VISITOR_ID,
       widgetPrimaryColorHex: null,
       widgetPosition: "BottomRight",
+      widgetLocale: "En",
       ...body,
     }),
     { status, headers: { "Content-Type": "application/json" } },
@@ -69,7 +70,13 @@ function requestsTo(path: string): RequestInit[] {
 /** A stored session as a returning visitor's browser would hold it. */
 function storeSessionMintedAt(mintedAt: number): string {
   const token = tokenMintedAt(mintedAt);
-  storage.setVisitorSession({ token, visitorId: VISITOR_ID, widgetPrimaryColorHex: null, widgetPosition: null });
+  storage.setVisitorSession({
+    token,
+    visitorId: VISITOR_ID,
+    widgetPrimaryColorHex: null,
+    widgetPosition: null,
+    widgetLocale: null,
+  });
   return token;
 }
 
@@ -145,6 +152,17 @@ describe("a visitor returning with a token that has life left in it", () => {
 
     expect(start.session.widgetPrimaryColorHex).toBe("#123456");
     expect(start.session.widgetPosition).toBe("BottomLeft");
+  });
+
+  // `11-10`: the third field a renewal refreshes, on the identical terms `11-03`'s two already do.
+  it("takes the refreshed widget locale the renewal returns", async () => {
+    storeSessionMintedAt(T0);
+    now = T0 + 5 * DAY_MS;
+    fetchImpl.mockResolvedValue(sessionResponse(tokenMintedAt(now), 200, { widgetLocale: "Ru" }));
+
+    const start = await manager().start();
+
+    expect(start.session.widgetLocale).toBe("Ru");
   });
 });
 
@@ -328,6 +346,7 @@ describe("a stored token this widget cannot read", () => {
       visitorId: VISITOR_ID,
       widgetPrimaryColorHex: null,
       widgetPosition: null,
+      widgetLocale: null,
     });
 
     const sessionManager = manager();

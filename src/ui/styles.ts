@@ -177,7 +177,11 @@ export const widgetStyles = /* css */ `
   }
 
   .ago-message--auto::before {
-    content: "Automatic reply";
+    /* 11-10: threaded through as a CSS custom property, the same mechanism --ago-accent already uses
+       for the site's color - a content: pseudo-element string is not a DOM text node, so the widget's
+       ordinary string-table lookup (ui/widget.ts's applyStrings) cannot reach it any other way. Set at
+       the same point locale is resolved, defaulting to the English default until then. */
+    content: var(--ago-auto-reply-label, "Automatic reply");
     display: block;
     font-size: 0.6875rem;
     letter-spacing: 0.04em;

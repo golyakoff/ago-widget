@@ -8,12 +8,19 @@ describe("WidgetStorage", () => {
 
   it("round-trips a visitor session", () => {
     const storage = new WidgetStorage("site_a");
-    storage.setVisitorSession({ token: "t", visitorId: "v", widgetPrimaryColorHex: null, widgetPosition: null });
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+    });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
       visitorId: "v",
       widgetPrimaryColorHex: null,
       widgetPosition: null,
+      widgetLocale: null,
     });
   });
 
@@ -23,6 +30,7 @@ describe("WidgetStorage", () => {
       visitorId: "a-visitor",
       widgetPrimaryColorHex: null,
       widgetPosition: null,
+      widgetLocale: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -35,29 +43,58 @@ describe("WidgetStorage", () => {
       visitorId: "v",
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
+      widgetLocale: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
       visitorId: "v",
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
+      widgetLocale: null,
     });
   });
 
-  it("clears a previously-cached color/position once a later write omits them", () => {
+  // `11-10`: the third cached field, round-tripped the same way the two `11-03` fields already are.
+  it("round-trips the widget locale alongside the identity, 11-10", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: "Ru",
+    });
+    expect(storage.getVisitorSession()).toEqual({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: "Ru",
+    });
+  });
+
+  it("clears a previously-cached color/position/locale once a later write omits them", () => {
     const storage = new WidgetStorage("site_a");
     storage.setVisitorSession({
       token: "t",
       visitorId: "v",
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
+      widgetLocale: "Ru",
     });
-    storage.setVisitorSession({ token: "t", visitorId: "v", widgetPrimaryColorHex: null, widgetPosition: null });
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+    });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
       visitorId: "v",
       widgetPrimaryColorHex: null,
       widgetPosition: null,
+      widgetLocale: null,
     });
   });
 

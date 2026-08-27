@@ -108,6 +108,12 @@ function field(label: string, value: string): HTMLElement {
   input.readOnly = true;
   input.value = value;
   input.setAttribute("spellcheck", "false");
+  // `id`/label read as "Username"/"Password" to Chrome's autofill heuristics even though this is a
+  // read-only display, not a login form - without this, Chrome silently overwrites the value set
+  // below with a *saved* credential for the same registrable domain (reserve-me.ru spans
+  // auth./console./demo-shop*.), so a viewer who typed a login on the Keycloak page moments earlier
+  // sees that old value here instead of the one this response actually minted.
+  input.setAttribute("autocomplete", "off");
   wrapper.appendChild(input);
 
   const copy = document.createElement("button");

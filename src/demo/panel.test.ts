@@ -39,6 +39,18 @@ describe("renderOutcome", () => {
     expect(container.querySelectorAll("button").length).toBe(2);
   });
 
+  /** A real bug, found live: the id/label read as "Username"/"Password" to Chrome's autofill
+   * heuristics even though this is a read-only display, not a login form. Without this attribute
+   * Chrome silently overwrites the value set above with a *saved* credential for the same
+   * registrable domain - a viewer who had just typed a login on the Keycloak page moments earlier
+   * saw that old value here instead of the one this response actually minted. */
+  it("turns off autofill on both fields, so the browser cannot overwrite what was minted", () => {
+    renderOutcome(container, { kind: "minted", tenant: TENANT }, NOW);
+
+    const inputs = [...container.querySelectorAll("input")];
+    expect(inputs.every((i) => i.getAttribute("autocomplete") === "off")).toBe(true);
+  });
+
   /** The other half of the same requirement. A person who reloads loses the password permanently and
    * will find the cap or the rate limit waiting when they press the button again. */
   it("says plainly that the password cannot be recovered", () => {

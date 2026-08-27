@@ -51,6 +51,10 @@ export class ChatWidget {
   private readonly container: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly title: HTMLHeadingElement;
+  /** `11-10`: null exactly when `config.demoNotice === "none"` (a real shop's embed) - the same
+   * three-state read `applyStrings` re-does to keep this element's text in the site's real language,
+   * see that method's own remarks for the bug this field exists to close. */
+  private readonly notice: HTMLDivElement | null;
   private readonly toggle: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly messages: HTMLDivElement;
@@ -179,7 +183,7 @@ export class ChatWidget {
       config.demoNotice === "public" ? this.strings.publicDemoNotice
       : config.demoNotice === "private" ? this.strings.privateDemoNotice
       : null;
-    const notice = noticeText === null ? null : createDemoNotice(noticeText);
+    this.notice = noticeText === null ? null : createDemoNotice(noticeText);
 
     this.messages = document.createElement("div");
     this.messages.className = "ago-messages";
@@ -244,8 +248,8 @@ export class ChatWidget {
 
     composer.append(this.attachButton, this.fileInput, this.input, this.sendButton);
     this.panel.append(header);
-    if (notice) {
-      this.panel.append(notice);
+    if (this.notice) {
+      this.panel.append(this.notice);
     }
 
     this.composer = composer;
@@ -342,6 +346,15 @@ export class ChatWidget {
     this.panel.setAttribute("aria-label", strings.chatLabel);
     this.title.textContent = strings.chatWithUs;
     this.closeButton.setAttribute("aria-label", strings.closeChat);
+    // Found live: `this.notice`'s text was set once in the constructor from that moment's
+    // `this.strings` (the English default) and never revisited - unlike every other element here, it
+    // has no line of its own until this one, so a Russian-locale site's demo notice stayed in English
+    // forever. Re-derives the same `config.demoNotice` three-way read the constructor made, against
+    // the now-resolved `strings`.
+    if (this.notice) {
+      this.notice.textContent =
+        this.config.demoNotice === "public" ? strings.publicDemoNotice : strings.privateDemoNotice;
+    }
     if (this.bookButton) {
       this.bookButton.textContent = this.isBooking ? strings.chatLabel : strings.book;
       this.bookButton.setAttribute(

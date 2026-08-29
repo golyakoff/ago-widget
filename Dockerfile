@@ -12,7 +12,7 @@
 # able to collide on one tag, which is exactly the property 15-06 bought and this item must not
 # spend. Both args below therefore carry the deployment's own value as a committed default, and CI
 # passes neither.
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

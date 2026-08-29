@@ -45,13 +45,20 @@ export interface HistoryPage {
  *
  * `11-10`: `widgetLocale` joins on the identical terms - a flat, additive sibling field carrying
  * `Ago.Chat.Domain.Locale`'s own PascalCase member name (`"En"`/`"Ru"`), normalised by
- * `i18n/resolve.ts`'s `parseWidgetLocale`, the same split `parseWidgetPosition` already draws. */
+ * `i18n/resolve.ts`'s `parseWidgetLocale`, the same split `parseWidgetPosition` already draws.
+ *
+ * `16-04`: `widgetNoticeText`/`widgetNoticeUrl` join on the identical terms - two more additive,
+ * nullable fields, both `null` for every site that has not configured a processing notice. Normalised
+ * by `ui/appearance.ts`'s `parseNoticeText`/`parseNoticeUrl`, the same courtesy-re-check split every
+ * other field on this response already gets. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
   widgetPrimaryColorHex: string | null;
   widgetPosition: string;
   widgetLocale: string;
+  widgetNoticeText: string | null;
+  widgetNoticeUrl: string | null;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

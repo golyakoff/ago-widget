@@ -366,6 +366,8 @@ export class VisitorSessionManager {
       widgetPrimaryColorHex: body.widgetPrimaryColorHex,
       widgetPosition: body.widgetPosition,
       widgetLocale: body.widgetLocale,
+      widgetNoticeText: body.widgetNoticeText,
+      widgetNoticeUrl: body.widgetNoticeUrl,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

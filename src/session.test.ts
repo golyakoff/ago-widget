@@ -76,6 +76,8 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetPrimaryColorHex: null,
     widgetPosition: null,
     widgetLocale: null,
+    widgetNoticeText: null,
+    widgetNoticeUrl: null,
   });
   return token;
 }
@@ -347,6 +349,8 @@ describe("a stored token this widget cannot read", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
 
     const sessionManager = manager();

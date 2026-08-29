@@ -99,16 +99,27 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
-**24.9 KB gzipped** (91.3 KB raw, minified), measured 2026-08-26 against a clean build of this
-commit — up from 22.2 KB by `20-06`'s booking module (`src/booking/`: the step model, the flow, the
-calendar client and the panel), which is **+2.7 KB gzipped** and leaves 20.1 KB of the 45 KB budget
-unused. That number is the answer to the question `20-06` was told to ask out loud: the first
-feature that could plausibly have threatened the budget did not, so **no lazy-loaded module was
-needed** and none was built. If a later booking feature changes that, the fix is the split, not a
-bigger budget.
+**28.7 KB gzipped** (110.0 KB raw, minified), measured 2026-08-29 against a clean build of this
+commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) — **+0.6 KB gzipped** over the same
+commit's pre-`16-04` baseline (28.1 KB, measured the same way against `git stash`), from the
+processing-notice mechanism (`ui/appearance.ts`'s `parseNoticeText`/`parseNoticeUrl`, the notice
+element and its two-line render/apply path in `ui/widget.ts`, one new i18n string). Leaves 16.3 KB of
+the 45 KB budget unused - real headroom, not close to the ceiling.
 
-The paragraph below is the history that produced the previous number, kept because each step of it
-is a measurement rather than a claim.
+**The 28.1 KB pre-`16-04` baseline does not match the 24.9 KB this section last recorded on
+2026-08-26**, and that gap predates this item - found while measuring, not caused by it. Several
+items landed on `main` between that measurement and this one (at minimum the widget's own i18n
+system, `11-10`'s locale support and its `ru`/`en` string tables, and the notice-locale fix these
+commits build on) without anyone re-running this section's own build-and-record step. Stated here
+rather than silently overwritten with a number that would misattribute roughly 3.2 KB of somebody
+else's work to this item. A worker picking this file up next should treat 28.1 KB (this commit,
+pre-`16-04`) as the trustworthy baseline, not 24.9 KB.
+
+That earlier number was itself the answer to the question `20-06` was told to ask out loud: the
+first feature that could plausibly have threatened the budget did not, so **no lazy-loaded module
+was needed** and none was built for that item. Kept below as history rather than deleted, along with
+everything before it - each step is a measurement rather than a claim, even the one this note now
+qualifies.
 
 **22.1 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of that
 commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`) -

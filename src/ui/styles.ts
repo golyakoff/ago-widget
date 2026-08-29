@@ -127,6 +127,36 @@ export const widgetStyles = /* css */ `
     padding: 0.5rem 0.75rem;
   }
 
+  /* 16-04. Deliberately the opposite call from .ago-notice just above: that one is a warning and
+     stays fixed-palette on purpose; this one is the tenant's own routine disclosure, not an alarm, so
+     a neutral strip is the right register - painting it amber would make an ordinary privacy notice
+     read as urgent, which it is not. .ago-processing-notice__link *is* tinted with --ago-accent,
+     unlike the notice text around it: it is the one interactive element in the strip, and every other
+     interactive element in this panel already uses the site's own brand colour to say so. */
+  .ago-processing-notice {
+    background: #f3f4f6;
+    border-bottom: 0.0625rem solid #e5e7eb;
+    color: #4b5563;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .ago-processing-notice__link {
+    color: var(--ago-accent);
+    font-weight: 600;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  .ago-processing-notice__link:focus-visible {
+    outline: 0.1875rem solid var(--ago-accent);
+    outline-offset: 0.125rem;
+  }
+
   .ago-messages {
     flex: 1;
     overflow-y: auto;

@@ -47,6 +47,7 @@ export const en: WidgetStrings = {
   privateDemoNotice:
     "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.",
   autoReplyLabel: "Automatic reply",
+  processingNoticeLinkText: "Read more",
 
   unsupportedFileTypeSuffix: "isn't supported. Try an image or a PDF.",
   unknownFileType: "unknown type",

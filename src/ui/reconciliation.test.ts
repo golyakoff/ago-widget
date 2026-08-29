@@ -28,7 +28,8 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  booking: null,
+  bookingModuleEnabled: false,
+  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
 };
 
 /** The server's own copy of a message coming back over the connection. `clientMessageId` is what

@@ -16,14 +16,8 @@ export interface WidgetStrings {
   // ui/widget.ts - the launcher, panel chrome and connection/composer states.
   readonly openChat: string;
   readonly closeChat: string;
-  /** The panel's own `aria-label` ("Chat"), and the booking button's text once booking is showing
-   * (also "Chat" - "back to the conversation"). One key for both: they are the same word doing the
-   * same job ("this is the chat"), not two English words that happen to collide. */
   readonly chatLabel: string;
   readonly chatWithUs: string;
-  readonly book: string;
-  readonly bookAnAppointment: string;
-  readonly backToConversation: string;
   readonly connecting: string;
   readonly reconnecting: string;
   readonly disconnectedReconnecting: string;
@@ -66,35 +60,10 @@ export interface WidgetStrings {
   readonly unknownFileType: string;
   readonly fileTooLarge: (maxMb: number) => string;
 
-  // booking/panel.ts
+  // ui/primitives/render.ts - the generic `form` primitive's fallback label and its submit button.
+  // `20-07`: these two used to live under a "booking/panel.ts" heading because that was their only
+  // caller; they are exactly as generic as the rest of this table now that a `form` step can arrive
+  // from any module, and stay here rather than moving into a module's own lazily-loaded strings.
   readonly yourAnswer: string;
   readonly continueLabel: string;
-  readonly loadingAvailableTimes: string;
-
-  // booking/flow.ts - every step body and retry message the flow itself produces.
-  readonly nothingToBookYet: string;
-  readonly whichCalendar: string;
-  readonly notAnOption: string;
-  /** The connector between a formatted slot and the worker's own (untranslated) display name -
-   * `` `${formatSlot(slot)} ${withWorker} ${slot.workerDisplayName}.` ``. */
-  readonly withWorker: string;
-  readonly whatIsYourPhoneNumber: string;
-  readonly phoneNumberRequired: string;
-  readonly namePrompt: string;
-  readonly bookingFinished: string;
-  readonly whatWouldYouLikeToBook: string;
-  /** `` `(${n} min)` `` - the service-duration suffix next to an (untranslated) service name. */
-  readonly minutesUnit: (durationMinutes: number) => string;
-  readonly nobodyAvailable: string;
-  readonly anyone: string;
-  readonly whoWouldYouLikeToSee: string;
-  readonly noFreeTimes: string;
-  readonly whenWouldYouLikeToCome: string;
-  readonly youAreBookedPrefix: string;
-  readonly hereIsWhatIsStillFree: string;
-
-  // booking/calendarClient.ts - the three fixed failure messages a visitor can see.
-  readonly bookingUnavailable: string;
-  readonly slotTaken: string;
-  readonly tooManyBookingAttempts: string;
 }

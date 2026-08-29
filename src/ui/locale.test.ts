@@ -25,7 +25,11 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  booking: { publicKey: "barbershop", apiBaseUrl: "https://calendar.test.invalid" },
+  // `20-07`: the module chip's own locale is `ui/modules.test.ts`'s job (it loads asynchronously
+  // from a lazy bundle this file has no reason to mock) - panel chrome and connection status are
+  // this file's whole subject, unrelated to whether a booking module is enabled.
+  bookingModuleEnabled: false,
+  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
 };
 
 function joinResult() {
@@ -47,7 +51,6 @@ interface Panel {
   input: HTMLTextAreaElement;
   send: HTMLButtonElement;
   attach: HTMLButtonElement;
-  book: HTMLButtonElement;
   status: HTMLDivElement;
 }
 
@@ -70,7 +73,6 @@ function panelOf(root: ShadowRoot): Panel {
     input: query<HTMLTextAreaElement>(".ago-input"),
     send: query<HTMLButtonElement>(".ago-send"),
     attach: query<HTMLButtonElement>(".ago-attach"),
-    book: query<HTMLButtonElement>(".ago-book"),
     status: query<HTMLDivElement>(".ago-status"),
   };
 }
@@ -141,8 +143,6 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
     expect(panel.input.placeholder).toBe("Введите сообщение…");
     expect(panel.send.textContent).toBe("Отправить");
     expect(panel.attach.getAttribute("aria-label")).toBe("Прикрепить файл");
-    expect(panel.book.textContent).toBe("Запись");
-    expect(panel.book.getAttribute("aria-label")).toBe("Записаться на приём");
   });
 
   it("renders the closed-launcher aria-label in Russian before the panel is ever opened", async () => {
@@ -154,16 +154,6 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
     const host = document.querySelector("[data-ago-chat-widget]");
     const toggle = host?.shadowRoot?.querySelector(".ago-toggle");
     expect(toggle?.getAttribute("aria-label")).toBe("Открыть чат");
-  });
-
-  it("swaps the booking button's label and aria-label to Russian when booking is shown", async () => {
-    const panel = await openWidget();
-
-    panel.book.click();
-    await flush();
-
-    expect(panel.book.textContent).toBe("Чат");
-    expect(panel.book.getAttribute("aria-label")).toBe("Вернуться к переписке");
   });
 
   it("renders the connection status in Russian", async () => {
@@ -260,8 +250,6 @@ describe("a widget booted against a site with no WidgetLocale set", () => {
     expect(panel.input.placeholder).toBe("Type a message…");
     expect(panel.send.textContent).toBe("Send");
     expect(panel.attach.getAttribute("aria-label")).toBe("Attach a file");
-    expect(panel.book.textContent).toBe("Book");
-    expect(panel.book.getAttribute("aria-label")).toBe("Book an appointment");
   });
 
   it("renders the connection status in English", async () => {

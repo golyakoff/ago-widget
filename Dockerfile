@@ -60,6 +60,12 @@ COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.ma
 # only these demo pages ever load it, and no tenant embedding the widget downloads a byte of it.
 COPY --from=build /app/dist/demo-boot.js /usr/share/nginx/html/demo-boot.js
 COPY --from=build /app/dist/demo-boot.js.map /usr/share/nginx/html/demo-boot.js.map
+# `20-07`: the booking module's own lazily-loaded chunk (build.mjs's third entry point). Served as a
+# sibling of ago-chat.js because ui/moduleLoader.ts resolves it relative to the widget's own <script
+# src> - the same directory a real deployment already serves ago-chat.js from, which this static-file
+# image happens to be nginx's document root.
+COPY --from=build /app/dist/ago-chat-module-booking.js /usr/share/nginx/html/ago-chat-module-booking.js
+COPY --from=build /app/dist/ago-chat-module-booking.js.map /usr/share/nginx/html/ago-chat-module-booking.js.map
 # DEMO_PAGE_DIR selects which demo page this image embeds - `public-demo` (demo-shop1, the
 # original 8-02 page, `data-site="demo_site"`) by default, or `public-demo-2` (demo-shop2, a
 # second, independent tenant seeded specifically to demonstrate tenant isolation live: a different

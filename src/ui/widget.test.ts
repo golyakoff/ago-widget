@@ -24,7 +24,8 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  booking: null,
+  bookingModuleEnabled: false,
+  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
 };
 
 function message(id: string, sequence: number, authorKind: MessageDto["authorKind"] = "Operator"): MessageDto {

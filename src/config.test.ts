@@ -74,47 +74,36 @@ describe("readConfig", () => {
   });
 });
 
-// `20-06`. The default is what matters most here too: a shop that bought chat and not booking must
-// not get a Book button, and must not have the bundle contact a product it does not have.
-describe("readConfig booking", () => {
-  it("offers no booking unless the embed asks for it", () => {
-    expect(readConfig(scriptWith({ "data-site": "shop_1" })).booking).toBeNull();
+// `20-07`. Down from `20-06`'s two required attributes to one boolean - the default is still what
+// matters most: a shop that bought chat and not booking must not get a module chip, and must not
+// have the bundle fetch a lazy module bundle it has no use for.
+describe("readConfig booking module", () => {
+  it("offers no booking module unless the embed asks for it", () => {
+    expect(readConfig(scriptWith({ "data-site": "shop_1" })).bookingModuleEnabled).toBe(false);
   });
 
-  it("needs both the key and the calendar API origin, because there is no default for either", () => {
-    // `data-api` has a built-in default; `data-booking-api` deliberately does not. AGO Calendar is a
-    // separate deployable a shop may not have bought at all, so a default here would be this bundle
-    // asserting an address for a product that might not be running.
-    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "barbershop" })).booking).toBeNull();
-    expect(
-      readConfig(scriptWith({ "data-site": "shop_1", "data-booking-api": "https://cal.example" })).booking,
-    ).toBeNull();
-  });
-
-  it("reads the calendar tenant key and origin, stripping trailing slashes", () => {
-    const booking = readConfig(
-      scriptWith({
-        "data-site": "shop_1",
-        "data-booking": "barbershop",
-        "data-booking-api": "https://cal.example//",
-      }),
-    ).booking;
-
-    expect(booking).toEqual({ publicKey: "barbershop", apiBaseUrl: "https://cal.example" });
-  });
-
-  it("keeps the calendar key separate from the chat site key", () => {
-    // Two products, two tenants, two databases (`adr/0027`). A shop running both holds two keys, and
-    // the widget must never assume one is the other.
-    const config = readConfig(
-      scriptWith({
-        "data-site": "shop_1",
-        "data-booking": "barbershop",
-        "data-booking-api": "https://cal.example",
-      }),
+  it("needs the exact value \"true\", not merely the attribute's presence", () => {
+    // Mirrors `data-public-demo`'s own convention (`readDemoNotice`): a typo or a stray
+    // `data-booking="false"` must not silently enable a module.
+    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "false" })).bookingModuleEnabled).toBe(
+      false,
     );
+    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "" })).bookingModuleEnabled).toBe(false);
+  });
 
-    expect(config.siteKey).toBe("shop_1");
-    expect(config.booking?.publicKey).toBe("barbershop");
+  it("enables the booking module on data-booking=\"true\"", () => {
+    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "true" })).bookingModuleEnabled).toBe(
+      true,
+    );
+  });
+});
+
+// `20-07`. `ui/moduleLoader.ts`'s only way to find a lazy module bundle's sibling file.
+describe("readConfig scriptUrl", () => {
+  it("reads the script tag's own absolute src, resolved by the DOM rather than read as a raw attribute", () => {
+    const config = readConfig(
+      scriptWith({ "data-site": "shop_1", src: "https://cdn.example/dist/ago-chat.js" }),
+    );
+    expect(config.scriptUrl).toBe("https://cdn.example/dist/ago-chat.js");
   });
 });

@@ -263,7 +263,8 @@ export class VisitorSessionManager {
    * existing one.
    *
    * The response carries the same shape as the mint, so a renewal also refreshes the cached
-   * `widgetPrimaryColorHex`/`widgetPosition`. That closes `storage.ts`'s own `11-03` limitation as a
+   * `widgetPrimaryColorHex`/`widgetPosition`/`widgetLocale` (`11-10`'s own addition to this same
+   * shape). That closes `storage.ts`'s own `11-03` limitation as a
    * side effect: it says fixing it "needs a session endpoint that can return current config without
    * minting a new visitor", and this is that endpoint. The config a returning visitor sees is now at
    * most one renewal window stale instead of frozen at the moment their identity was first minted.
@@ -364,6 +365,9 @@ export class VisitorSessionManager {
       visitorId: body.visitorId,
       widgetPrimaryColorHex: body.widgetPrimaryColorHex,
       widgetPosition: body.widgetPosition,
+      widgetLocale: body.widgetLocale,
+      widgetNoticeText: body.widgetNoticeText,
+      widgetNoticeUrl: body.widgetNoticeUrl,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

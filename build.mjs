@@ -74,6 +74,25 @@ const result = await build({
   },
 });
 
+// `20-07`: the booking module's own lazily-loaded chunk - a genuinely separate esbuild entry point,
+// not code reached through esbuild's own code-splitting (that mechanism needs `format: "esm"` +
+// `splitting: true` and emits shared chunks across *entry points*, which is not this shape: the base
+// bundle above stays a single `iife` file loaded by one `<script>` tag, and this is the one thing a
+// browser fetches on its own, later, via `ui/moduleLoader.ts`'s runtime `import()`). `format: "esm"`
+// here (not `iife`) because native dynamic `import()` expects an ES module on the other end; the
+// specifier `ui/moduleLoader.ts` builds is a runtime string esbuild cannot see while bundling
+// `src/index.ts` above, which is what keeps `src/modules/**` out of `dist/ago-chat.js`'s own inputs
+// (`bundleInputs.test.ts` proves this holds).
+await build({
+  entryPoints: ["src/modules/booking/chip.ts"],
+  bundle: true,
+  minify: true,
+  format: "esm",
+  target: "es2022",
+  outfile: "dist/ago-chat-module-booking.js",
+  sourcemap: true,
+});
+
 const bundleBytes = readFileSync("dist/ago-chat.js");
 const gzipBytes = gzipSync(bundleBytes).length;
 const gzipKb = (gzipBytes / 1024).toFixed(1);
@@ -88,6 +107,12 @@ if (gzipBytes > GZIP_BUDGET_BYTES) {
 
 const demoGzipKb = (gzipSync(readFileSync("dist/demo-boot.js")).length / 1024).toFixed(1);
 console.log(`Demo boot: ${demoGzipKb} KB gzipped (demo pages only, not part of the widget budget)`);
+
+// `20-07`: fetched only by a site with the booking module enabled, only once - not part of the base
+// budget above, the same accounting `demo-boot.js` already gets, for the same reason (a different
+// artifact, downloaded by a different subset of visitors, if at all).
+const bookingModuleGzipKb = (gzipSync(readFileSync("dist/ago-chat-module-booking.js")).length / 1024).toFixed(2);
+console.log(`Booking module: ${bookingModuleGzipKb} KB gzipped (lazily loaded, not part of the widget budget)`);
 
 if (process.env["AGO_WRITE_METAFILE"]) {
   const { writeFileSync } = await import("node:fs");

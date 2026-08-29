@@ -32,6 +32,17 @@ export interface VisitorSession {
    */
   widgetPrimaryColorHex: string | null;
   widgetPosition: string | null;
+  /** `11-10`: cached alongside color/position on the identical terms - the same `POST
+   * /api/v1/visitor-sessions`(`/renew`) response, refreshed on every renewal. `null` for a session
+   * written before this field existed, or for a site with no override - `i18n/resolve.ts`'s
+   * `parseWidgetLocale` treats that identically to "not set" and falls back to English. */
+  widgetLocale: string | null;
+  /** `16-04`: cached alongside the rest on the identical terms - the tenant's own processing-notice
+   * text and link, refreshed on every renewal. `null` for a session written before this field existed,
+   * or for a site that has not configured a notice - `ui/appearance.ts`'s `parseNoticeText`/
+   * `parseNoticeUrl` treat that identically to "not set" and render nothing. */
+  widgetNoticeText: string | null;
+  widgetNoticeUrl: string | null;
 }
 
 export class WidgetStorage {
@@ -76,6 +87,9 @@ export class WidgetStorage {
       visitorId,
       widgetPrimaryColorHex: this.readSafe("widget-color"),
       widgetPosition: this.readSafe("widget-position"),
+      widgetLocale: this.readSafe("widget-locale"),
+      widgetNoticeText: this.readSafe("widget-notice-text"),
+      widgetNoticeUrl: this.readSafe("widget-notice-url"),
     };
   }
 
@@ -83,8 +97,8 @@ export class WidgetStorage {
     this.writeSafe("visitor-token", session.token);
     this.writeSafe("visitor-id", session.visitorId);
 
-    // Written as two separate keys, matching every other value this class stores - only written
-    // when present, so a stale key from a differently-configured site never lingers past an update.
+    // Written as separate keys, matching every other value this class stores - only written when
+    // present, so a stale key from a differently-configured site never lingers past an update.
     if (session.widgetPrimaryColorHex) {
       this.writeSafe("widget-color", session.widgetPrimaryColorHex);
     } else {
@@ -95,6 +109,24 @@ export class WidgetStorage {
       this.writeSafe("widget-position", session.widgetPosition);
     } else {
       this.removeSafe("widget-position");
+    }
+
+    if (session.widgetLocale) {
+      this.writeSafe("widget-locale", session.widgetLocale);
+    } else {
+      this.removeSafe("widget-locale");
+    }
+
+    if (session.widgetNoticeText) {
+      this.writeSafe("widget-notice-text", session.widgetNoticeText);
+    } else {
+      this.removeSafe("widget-notice-text");
+    }
+
+    if (session.widgetNoticeUrl) {
+      this.writeSafe("widget-notice-url", session.widgetNoticeUrl);
+    } else {
+      this.removeSafe("widget-notice-url");
     }
   }
 

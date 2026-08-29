@@ -127,6 +127,36 @@ export const widgetStyles = /* css */ `
     padding: 0.5rem 0.75rem;
   }
 
+  /* 16-04. Deliberately the opposite call from .ago-notice just above: that one is a warning and
+     stays fixed-palette on purpose; this one is the tenant's own routine disclosure, not an alarm, so
+     a neutral strip is the right register - painting it amber would make an ordinary privacy notice
+     read as urgent, which it is not. .ago-processing-notice__link *is* tinted with --ago-accent,
+     unlike the notice text around it: it is the one interactive element in the strip, and every other
+     interactive element in this panel already uses the site's own brand colour to say so. */
+  .ago-processing-notice {
+    background: #f3f4f6;
+    border-bottom: 0.0625rem solid #e5e7eb;
+    color: #4b5563;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .ago-processing-notice__link {
+    color: var(--ago-accent);
+    font-weight: 600;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  .ago-processing-notice__link:focus-visible {
+    outline: 0.1875rem solid var(--ago-accent);
+    outline-offset: 0.125rem;
+  }
+
   .ago-messages {
     flex: 1;
     overflow-y: auto;
@@ -177,7 +207,11 @@ export const widgetStyles = /* css */ `
   }
 
   .ago-message--auto::before {
-    content: "Automatic reply";
+    /* 11-10: threaded through as a CSS custom property, the same mechanism --ago-accent already uses
+       for the site's color - a content: pseudo-element string is not a DOM text node, so the widget's
+       ordinary string-table lookup (ui/widget.ts's applyStrings) cannot reach it any other way. Set at
+       the same point locale is resolved, defaulting to the English default until then. */
+    content: var(--ago-auto-reply-label, "Automatic reply");
     display: block;
     font-size: 0.6875rem;
     letter-spacing: 0.04em;
@@ -274,31 +308,60 @@ export const widgetStyles = /* css */ `
     white-space: nowrap;
     border: 0;
   }
-  /* 20-06: the booking module's own surface, inside the same panel and the same Shadow DOM.
-     A list of choices, never a calendar grid - see booking/steps.ts for why the shape of the UI is
-     the shape of a message. */
-  .ago-booking {
+  /* 20-07: the module invocation chip - a small affordance in the header, not a second panel. Its
+     only behaviour is inserting and sending a trigger phrase (ui/widget.ts's invokeModule), so it
+     needs no view state of its own beyond disabled/hidden. */
+  .ago-module-chip {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0 0.5rem;
+  }
+
+  .ago-module-chip:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* 20-07: the closed primitive vocabulary's own rendering (ui/primitives/render.ts), appended
+     inside an ordinary incoming bubble - never a separate panel, because a step is a message now,
+     not a view. Sized to sit comfortably under a bubble's own body text rather than as a card of its
+     own, matching how the same content would read as a numbered list over a text-only channel. */
+  .ago-primitive {
+    margin-top: 0.5rem;
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .ago-primitive-title {
+    font-weight: 600;
+  }
+
+  .ago-primitive-line {
+    display: flex;
+    justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.75rem;
-    overflow-y: auto;
-    flex: 1;
+    font-size: 0.875rem;
   }
 
-  .ago-booking-body {
-    margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.4;
+  .ago-primitive-line-label {
+    color: #6b7280;
   }
 
-  .ago-booking-choices {
+  .ago-message--visitor .ago-primitive-line-label {
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .ago-primitive-choices {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
   }
 
-  .ago-booking-choice {
+  .ago-primitive-choice {
     border: 1px solid var(--ago-accent);
     border-radius: 0.5rem;
     background: transparent;
@@ -309,40 +372,46 @@ export const widgetStyles = /* css */ `
     cursor: pointer;
   }
 
-  .ago-booking-choice:disabled {
+  .ago-message--visitor .ago-primitive-choice {
+    border-color: #fff;
+  }
+
+  .ago-primitive-choice:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  .ago-booking-form {
+  .ago-primitive-form {
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.375rem;
   }
 
-  .ago-booking-input {
-    flex: 1;
+  .ago-primitive-form-label {
+    font-size: 0.8125rem;
+  }
+
+  .ago-primitive-form-input {
     font: inherit;
     padding: 0.5rem;
     border: 1px solid #d5d9e0;
     border-radius: 0.5rem;
+    color: #1a1a1a;
   }
 
-  .ago-booking-send {
+  .ago-primitive-form-submit {
+    align-self: flex-start;
     border: none;
     border-radius: 0.5rem;
     background: var(--ago-accent);
     color: #fff;
-    padding: 0 0.75rem;
+    padding: 0.375rem 0.75rem;
     cursor: pointer;
     font: inherit;
   }
 
-  .ago-book {
-    border: none;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-    padding: 0 0.5rem;
+  .ago-primitive-form-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 `;

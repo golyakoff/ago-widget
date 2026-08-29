@@ -14,6 +14,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -21,6 +23,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
   });
 
@@ -31,6 +35,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -44,6 +50,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -51,6 +59,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
   });
 
@@ -63,6 +73,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: "Ru",
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -70,10 +82,35 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: "Ru",
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
   });
 
-  it("clears a previously-cached color/position/locale once a later write omits them", () => {
+  // `16-04`: the fourth and fifth cached fields, round-tripped the same way.
+  it("round-trips the widget notice text and link alongside the identity, 16-04", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: "We read what you send us.",
+      widgetNoticeUrl: "https://tenant.example/privacy",
+    });
+    expect(storage.getVisitorSession()).toEqual({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: "We read what you send us.",
+      widgetNoticeUrl: "https://tenant.example/privacy",
+    });
+  });
+
+  it("clears a previously-cached color/position/locale/notice once a later write omits them", () => {
     const storage = new WidgetStorage("site_a");
     storage.setVisitorSession({
       token: "t",
@@ -81,6 +118,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: "#2F6FED",
       widgetPosition: "BottomLeft",
       widgetLocale: "Ru",
+      widgetNoticeText: "We read what you send us.",
+      widgetNoticeUrl: "https://tenant.example/privacy",
     });
     storage.setVisitorSession({
       token: "t",
@@ -88,6 +127,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -95,6 +136,8 @@ describe("WidgetStorage", () => {
       widgetPrimaryColorHex: null,
       widgetPosition: null,
       widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
     });
   });
 

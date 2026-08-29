@@ -51,6 +51,12 @@ export interface WidgetStrings {
    * label is a `content:` pseudo-element string, the same mechanism `--ago-accent` already uses for
    * the site's color. */
   readonly autoReplyLabel: string;
+  /** `16-04`: the link text next to the tenant's own processing-notice sentence - the widget's own
+   * frame around a tenant-authored URL, the same "the widget owns the frame, the tenant owns the
+   * content" split `downloadAttachment`'s own icon-plus-frame text already draws. The tenant's own
+   * notice text itself is never a key in this table - it is per-site data from `WidgetConfig`, not a
+   * fixed sentence this widget authors, so it is never translated (`ui/notice.ts`'s own remarks). */
+  readonly processingNoticeLinkText: string;
 
   // attachments.ts - the courtesy upload checks.
   /** Appended after the quoted, untranslated MIME type: `` `"${type}" ${unsupportedFileTypeSuffix}` ``. */

@@ -38,6 +38,7 @@ export const ru: WidgetStrings = {
   privateDemoNotice:
     "Это ваш собственный демо-тенант. Прочитать этот диалог может только тот, у кого есть выданный вам логин оператора, а сам тенант удалится примерно через сутки.",
   autoReplyLabel: "Автоматический ответ",
+  processingNoticeLinkText: "Подробнее",
 
   unsupportedFileTypeSuffix: "не поддерживается. Попробуйте изображение или PDF.",
   unknownFileType: "неизвестный тип",

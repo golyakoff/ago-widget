@@ -142,6 +142,8 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetPrimaryColorHex: null,
     widgetPosition: null,
     widgetLocale: null,
+    widgetNoticeText: null,
+    widgetNoticeUrl: null,
   });
   return token;
 }

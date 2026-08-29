@@ -335,3 +335,152 @@ describe("the panel's demo notice", () => {
     expect(noticeFor("none")).toBeNull();
   });
 });
+
+/**
+ * `16-04`: the tenant's own processing notice - who processes what a visitor is about to write, and
+ * a link to read more. Unlike the demo notice above, this one is server/handshake-driven, not
+ * config-time, so every test here stubs the handshake response and mounts (not opens) the widget -
+ * proving the notice is present as soon as the panel exists, before the visitor has typed anything
+ * and without ever needing a connection or an open panel.
+ */
+describe("the panel's processing notice", () => {
+  function stubHandshake(overrides: Record<string, unknown> = {}): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              token: "visitor-token",
+              visitorId: "99999999-9999-9999-9999-999999999999",
+              widgetPrimaryColorHex: null,
+              widgetPosition: "BottomRight",
+              widgetLocale: "En",
+              widgetNoticeText: null,
+              widgetNoticeUrl: null,
+              ...overrides,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+  }
+
+  async function mountAndWait(): Promise<ShadowRoot> {
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    if (host?.shadowRoot == null) {
+      throw new Error("the widget did not mount");
+    }
+
+    return host.shadowRoot;
+  }
+
+  it("renders the tenant's notice text before any message is typed, with no open panel and no connection", async () => {
+    stubHandshake({ widgetNoticeText: "We use your messages to answer your questions." });
+
+    const root = await mountAndWait();
+
+    const notice = root.querySelector<HTMLDivElement>(".ago-processing-notice");
+    expect(notice?.textContent).toContain("We use your messages to answer your questions.");
+    // Never opened, never typed into, never connected (no HubConnection exists at all yet - the
+    // widget only builds one on first open, `5-09`'s lazy-on-first-open rule) - the notice does not
+    // depend on any of that.
+    expect(root.querySelector<HTMLDivElement>(".ago-panel")?.hidden).toBe(true);
+    expect(root.querySelector<HTMLTextAreaElement>(".ago-input")?.disabled).toBe(true);
+  });
+
+  it("renders the notice link with an href, opened in a new context, never following the host page", async () => {
+    stubHandshake({
+      widgetNoticeText: "We read what you send us.",
+      widgetNoticeUrl: "https://tenant.example/privacy",
+    });
+
+    const root = await mountAndWait();
+
+    const link = root.querySelector<HTMLAnchorElement>(".ago-processing-notice__link");
+    if (link === null) {
+      throw new Error("no notice link rendered");
+    }
+    expect(link.getAttribute("href")).toBe("https://tenant.example/privacy");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("renders text with no link when only the text is configured", async () => {
+    stubHandshake({ widgetNoticeText: "We read what you send us." });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector<HTMLDivElement>(".ago-processing-notice")?.hidden).toBe(false);
+    expect(root.querySelector(".ago-processing-notice__link")).toBeNull();
+  });
+
+  it("renders a link with no text when only the link is configured", async () => {
+    stubHandshake({ widgetNoticeUrl: "https://tenant.example/privacy" });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector<HTMLDivElement>(".ago-processing-notice")?.hidden).toBe(false);
+    expect(root.querySelector(".ago-processing-notice__text")).toBeNull();
+    expect(root.querySelector(".ago-processing-notice__link")).not.toBeNull();
+  });
+
+  // The default, and the one that matters most: every site that predates this item, and every tenant
+  // who deliberately leaves both fields empty, gets no notice - never an AGO-authored placeholder.
+  it("shows nothing when neither field is configured", async () => {
+    stubHandshake();
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector<HTMLDivElement>(".ago-processing-notice")?.hidden).toBe(true);
+    expect(root.querySelector<HTMLDivElement>(".ago-processing-notice")?.textContent).toBe("");
+  });
+
+  // 16-04's own Scope: text is text, escaped, never HTML. A value containing markup-shaped characters
+  // must render as literal text, not be interpreted - proven the same way `attachments.ts`/`renderBubble`
+  // are already trusted, by asserting textContent (which never parses markup) rather than innerHTML.
+  it("renders notice text containing markup-shaped characters as literal text, never as HTML", async () => {
+    const dangerous = '<img src=x onerror=alert(1)> & "quotes" & <b>bold</b>';
+    stubHandshake({ widgetNoticeText: dangerous });
+
+    const root = await mountAndWait();
+
+    const textNode = root.querySelector(".ago-processing-notice__text");
+    expect(textNode?.textContent).toBe(dangerous);
+    expect(textNode?.querySelector("img")).toBeNull();
+    expect(textNode?.querySelector("b")).toBeNull();
+    expect(root.querySelector<HTMLDivElement>(".ago-processing-notice")?.innerHTML).not.toContain("<img");
+  });
+
+  // A malformed URL from the wire (never trusted blindly, even though the server already validates
+  // it) must never become an href - falls back to "no link", the same posture every other field in
+  // ui/appearance.ts already takes, and never throws on the host page.
+  it("falls back to no link for a non-https URL, without dropping the text", async () => {
+    stubHandshake({
+      widgetNoticeText: "We read what you send us.",
+      widgetNoticeUrl: "javascript:alert(1)",
+    });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-processing-notice__text")?.textContent).toBe("We read what you send us.");
+    expect(root.querySelector(".ago-processing-notice__link")).toBeNull();
+  });
+
+  it("renders the link text in the resolved locale", async () => {
+    stubHandshake({
+      widgetLocale: "Ru",
+      widgetNoticeText: "Мы читаем то, что вы нам присылаете.",
+      widgetNoticeUrl: "https://tenant.example/privacy",
+    });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-processing-notice__link")?.textContent).toBe("Подробнее");
+  });
+});

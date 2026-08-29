@@ -8,7 +8,7 @@ import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDow
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
-import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 import { BookingPanel } from "../booking/panel.js";
 import { en } from "../i18n/en.js";
 import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
@@ -38,6 +38,25 @@ function createDemoNotice(text: string): HTMLDivElement {
 }
 
 /**
+ * `16-04`: the tenant's own processing notice - who processes what a visitor is about to write, and
+ * a link to read more. Built empty and `hidden` in the constructor (this widget's config is not known
+ * synchronously the way `config.demoNotice` is - it arrives on the handshake response `bootstrapSession`
+ * awaits), then populated and revealed by `applyProcessingNotice` once that response resolves. Kept as
+ * its own element, positioned identically to `createDemoNotice`'s own result (directly under the
+ * header, outside `.ago-messages`) rather than folded into it: the demo notice is this widget's own
+ * fixed sentence about *our* pages, always in `this.strings`; this one is per-tenant data from
+ * `WidgetConfig`, never translated (`i18n/strings.ts`'s own remarks on `processingNoticeLinkText`), and
+ * a site can show either, both, or neither.
+ */
+function createProcessingNotice(): HTMLDivElement {
+  const notice = document.createElement("div");
+  notice.className = "ago-processing-notice";
+  notice.setAttribute("role", "note");
+  notice.hidden = true;
+  return notice;
+}
+
+/**
  * Assembles the widget's whole visible surface inside one Shadow DOM root. This is intentionally
  * one class rather than a component framework: the panel has a fixed, small set of views (closed,
  * connecting, open) and pulling in a UI framework's runtime for that would blow the bundle budget
@@ -55,6 +74,10 @@ export class ChatWidget {
    * three-state read `applyStrings` re-does to keep this element's text in the site's real language,
    * see that method's own remarks for the bug this field exists to close. */
   private readonly notice: HTMLDivElement | null;
+  /** `16-04`: never `null` - unlike `notice` above, this element always exists (so its position in the
+   * DOM is stable from the constructor onward) and is simply `hidden` until `applyProcessingNotice`
+   * has something to show. See that method for why "exists but hidden" beats "created on demand" here. */
+  private readonly processingNotice: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly messages: HTMLDivElement;
@@ -185,6 +208,12 @@ export class ChatWidget {
       : null;
     this.notice = noticeText === null ? null : createDemoNotice(noticeText);
 
+    // `16-04`: directly under the demo notice (if any) and outside `.ago-messages`, for the identical
+    // reason `8-06`'s own comment states - the first thing read when the panel opens, never scrollable
+    // away, present before the visitor can type anything (the composer below stays disabled until
+    // connected regardless, so there is no race to win here, only a DOM position to get right).
+    this.processingNotice = createProcessingNotice();
+
     this.messages = document.createElement("div");
     this.messages.className = "ago-messages";
     // aria-live for incoming messages (embeddable-widget skill's accessibility baseline) -
@@ -251,6 +280,7 @@ export class ChatWidget {
     if (this.notice) {
       this.panel.append(this.notice);
     }
+    this.panel.append(this.processingNotice);
 
     this.composer = composer;
     this.panel.append(this.messages, this.status, composer);
@@ -323,7 +353,60 @@ export class ChatWidget {
       this.host.style.setProperty("--ago-accent", color);
     }
 
+    this.applyProcessingNotice(session.widgetNoticeText, session.widgetNoticeUrl);
+
     return session;
+  }
+
+  /**
+   * `16-04`: populates and reveals `this.processingNotice` from the resolved handshake, or leaves it
+   * hidden - the widget's own default, matching "a default notice written by AGO would be AGO
+   * asserting a legal position on the tenant's behalf" (the backlog item's own Scope). Both values are
+   * independent and optional: a tenant may set text with no link, a link with no text, or neither.
+   *
+   * <b>Text is text, never markup.</b> `textContent`, the identical rule every other piece of
+   * server-supplied or user-supplied content in this file already follows (`renderBubble`'s own
+   * remarks) - a tenant's notice string is exactly as untrusted as a visitor's message body, and
+   * nothing here ever touches `innerHTML`.
+   *
+   * <b>The link opens in a new context.</b> `target="_blank"` plus `rel="noopener noreferrer"`,
+   * identical to `renderAttachmentInto`'s own attachment-download link - the tenant's policy page is a
+   * different origin from this host page, and the visitor should be able to read it without losing
+   * their place in the conversation or handing the new tab a `window.opener` back into this one.
+   *
+   * <b>Never throws.</b> `parseNoticeUrl` already rejects anything that is not an absolute `https://`
+   * URL before it ever reaches `href` - a malformed value degrades to "no link", never a broken host
+   * page, the same posture `parseWidgetColor`/`parseWidgetPosition` already take for their own fields.
+   */
+  private applyProcessingNotice(rawText: string | null, rawUrl: string | null): void {
+    const text = parseNoticeText(rawText);
+    const url = parseNoticeUrl(rawUrl);
+
+    this.processingNotice.textContent = "";
+
+    if (text === undefined && url === undefined) {
+      this.processingNotice.hidden = true;
+      return;
+    }
+
+    if (text !== undefined) {
+      const textSpan = document.createElement("span");
+      textSpan.className = "ago-processing-notice__text";
+      textSpan.textContent = text;
+      this.processingNotice.append(textSpan);
+    }
+
+    if (url !== undefined) {
+      const link = document.createElement("a");
+      link.className = "ago-processing-notice__link";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = this.strings.processingNoticeLinkText;
+      this.processingNotice.append(link);
+    }
+
+    this.processingNotice.hidden = false;
   }
 
   /**

@@ -16,7 +16,7 @@
     "@microsoft/signalr": "^10.0.11"
   },
   "devDependencies": {
-    "@eslint/js": "^9.38.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.38.0",

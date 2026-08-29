@@ -29,7 +29,8 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  booking: null,
+  bookingModuleEnabled: false,
+  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
 };
 
 /** : the connection takes a token *provider*, not a session - see its constructor for why

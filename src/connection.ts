@@ -174,12 +174,21 @@ export class VisitorConnection {
    * method (`5-07`) and this server's SignalR dispatcher does not fill a missing trailing argument
    * from the C# default - found live (`8-02`), omitting it here made every real send fail with a
    * generic "error on the server", never reaching `SendVisitorMessageHandler` at all.
+   *
+   * `20-07`: `contentKind`/`content` are the two trailing arguments a **structured reply** carries -
+   * "reply-by-id, never free text, on any channel including the widget": clicking a primitive's
+   * action, or submitting its `form` input, sends an ordinary message through this same method with
+   * `contentKind` set to the kind being replied to and `content` set to `{ value }`. A plain typed
+   * message never sets either, so this stays the one function every visitor-authored message goes
+   * through, structured or not - never a second call path to a module.
    */
   async sendMessage(
     conversationId: string,
     body: string,
     clientMessageId: string,
     attachmentId?: string,
+    contentKind?: string,
+    content?: unknown,
   ): Promise<number> {
     if (this.connection.state !== signalR.HubConnectionState.Connected) {
       throw new NotConnectedError();
@@ -192,6 +201,8 @@ export class VisitorConnection {
         body,
         attachmentId ?? null,
         clientMessageId,
+        contentKind ?? null,
+        content ?? null,
       );
     } catch (error) {
       if (this.connection.state !== signalR.HubConnectionState.Connected) {

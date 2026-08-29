@@ -36,7 +36,8 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  booking: null,
+  bookingModuleEnabled: false,
+  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
 };
 
 function tokenMintedAt(mintedAt: number): string {
@@ -136,7 +137,15 @@ afterEach(() => {
 
 function storeSessionMintedAt(mintedAt: number): string {
   const token = tokenMintedAt(mintedAt);
-  storage.setVisitorSession({ token, visitorId: VISITOR_ID, widgetPrimaryColorHex: null, widgetPosition: null });
+  storage.setVisitorSession({
+    token,
+    visitorId: VISITOR_ID,
+    widgetPrimaryColorHex: null,
+    widgetPosition: null,
+    widgetLocale: null,
+    widgetNoticeText: null,
+    widgetNoticeUrl: null,
+  });
   return token;
 }
 

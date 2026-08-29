@@ -9,9 +9,9 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "npm"
@@ -68,7 +68,7 @@ jobs:
       # Only *reading* a private package would, which is exactly why adr/0047 wants these public.
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # No docker/login-action: `docker login` with the workflow token does the same thing with one
       # fewer third-party action in the supply chain.

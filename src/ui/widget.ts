@@ -8,51 +8,31 @@ import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDow
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
-import { parseWidgetColor, parseWidgetPosition } from "./appearance.js";
-import { BookingPanel } from "../booking/panel.js";
+import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import { renderPrimitiveContent } from "./primitives/render.js";
+import { loadModule } from "./moduleLoader.js";
+import { en } from "../i18n/en.js";
+import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
+import type { WidgetStrings } from "../i18n/strings.js";
+// `20-07`: type-only, so it never adds an input to the base bundle (`isolatedModules`/esbuild strip
+// `import type` before the bundler's own module graph sees it) - the one place in this file allowed
+// to say "booking" is `loadBookingModuleChip` below, which names the lazy chunk's file name and
+// nothing else about it.
+import type { ModuleChipSpec } from "../modules/booking/chip.js";
 
 /**
- * `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
- * short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
- * polite banner people skim is worth less than a blunt one they finish reading.
+ * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1`/`demo-shop2` (public) or a
+ * tenant minted by `8-07`'s button (private) must have read before typing - three short statements of
+ * fact for the public case, a precise reassurance plus the tenant's own disposability for the private
+ * one. Full reasoning for both sentences' wording stays where it always has: `i18n/en.ts`'s own
+ * `publicDemoNotice`/`privateDemoNotice` doc comments.
  *
- * `8-11` did not touch a word of it. What changed is *when* it appears: it used to be attached to
- * the page and is now attached to the tenant, because on a tenant minted by `8-07`'s button it was
- * simply false.
- *
- * Fixed text owned by the widget rather than passed in from the host page: `config.ts` explains why
- * the script tag carries an enum and not a string.
+ * `11-10`: the two sentences moved out of this file and into `i18n/en.ts`/`ru.ts` as the first two
+ * entries in the widget's new string table - they were always fixed text owned by the widget rather
+ * than passed in from the host page (`config.ts` explains why the script tag carries an enum and not
+ * a string), which is exactly what belongs in the string table alongside every other widget-owned
+ * sentence, translated the same way.
  */
-const PUBLIC_DEMO_NOTICE =
-  "This is a public demo. Anyone who opens the demo operator console can read what you type here. Do not type anything real.";
-
-/**
- * `8-11`: the same sentence's counterpart on a minted tenant, and the answer to that item's own open
- * question - whether the widget should say anything here at all.
- *
- * **It should.** `8-06`'s argument was that the warning belongs where the typing happens, because a
- * visitor can open the launcher from any scroll position without having read the page. That argument
- * does not care which way the fact points: the reassurance belongs there for exactly the same
- * reason, and the tenant's own lifetime is currently stated nowhere in the widget at all. Silence
- * would also have left the panel visually identical in the two cases, so a reviewer comparing them
- * could not tell that the notice had become conditional rather than simply deleted.
- *
- * **Precise rather than generous.** "Only the operator login you were given" and not "nobody else",
- * which is what `8-09`'s panel says and is the one place that copy over-claims: the visitor was
- * handed a `?site=` link and a password, and either can be passed on. What the widget states is what
- * the deployment actually enforces.
- *
- * **No "do not type anything real."** On a public tenant that is proportionate; here it would
- * re-create the contradiction this item exists to remove, in a softer form. The disposability is
- * said instead, which is the true version of the same caution.
- *
- * The lifetime is a fixed phrase, not a formatted timestamp: the widget is not told the expiry, and
- * an attribute carrying one would put a second copy of a number `8-09`'s panel already renders
- * exactly, a few centimetres away, where the two could disagree.
- */
-const PRIVATE_DEMO_NOTICE =
-  "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.";
-
 function createDemoNotice(text: string): HTMLDivElement {
   const notice = document.createElement("div");
   notice.className = "ago-notice";
@@ -60,6 +40,25 @@ function createDemoNotice(text: string): HTMLDivElement {
   // nothing to announce - it is read in document order like the rest of the panel.
   notice.setAttribute("role", "note");
   notice.textContent = text;
+  return notice;
+}
+
+/**
+ * `16-04`: the tenant's own processing notice - who processes what a visitor is about to write, and
+ * a link to read more. Built empty and `hidden` in the constructor (this widget's config is not known
+ * synchronously the way `config.demoNotice` is - it arrives on the handshake response `bootstrapSession`
+ * awaits), then populated and revealed by `applyProcessingNotice` once that response resolves. Kept as
+ * its own element, positioned identically to `createDemoNotice`'s own result (directly under the
+ * header, outside `.ago-messages`) rather than folded into it: the demo notice is this widget's own
+ * fixed sentence about *our* pages, always in `this.strings`; this one is per-tenant data from
+ * `WidgetConfig`, never translated (`i18n/strings.ts`'s own remarks on `processingNoticeLinkText`), and
+ * a site can show either, both, or neither.
+ */
+function createProcessingNotice(): HTMLDivElement {
+  const notice = document.createElement("div");
+  notice.className = "ago-processing-notice";
+  notice.setAttribute("role", "note");
+  notice.hidden = true;
   return notice;
 }
 
@@ -76,6 +75,15 @@ export class ChatWidget {
   private readonly root: ShadowRoot;
   private readonly container: HTMLDivElement;
   private readonly panel: HTMLDivElement;
+  private readonly title: HTMLHeadingElement;
+  /** `11-10`: null exactly when `config.demoNotice === "none"` (a real shop's embed) - the same
+   * three-state read `applyStrings` re-does to keep this element's text in the site's real language,
+   * see that method's own remarks for the bug this field exists to close. */
+  private readonly notice: HTMLDivElement | null;
+  /** `16-04`: never `null` - unlike `notice` above, this element always exists (so its position in the
+   * DOM is stable from the constructor onward) and is simply `hidden` until `applyProcessingNotice`
+   * has something to show. See that method for why "exists but hidden" beats "created on demand" here. */
+  private readonly processingNotice: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly messages: HTMLDivElement;
@@ -85,13 +93,26 @@ export class ChatWidget {
   private readonly attachButton: HTMLButtonElement;
   private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
-  /** `20-06`: null unless the embed carried `data-booking`. Both of these being nullable is what
-   * makes "a shop without booking pays nothing" a property of the object graph rather than a
-   * promise. */
-  private readonly bookButton: HTMLButtonElement | null;
-  private readonly booking: BookingPanel | null;
+  /** `20-07`: null unless the embed carried `data-booking="true"`. Nullable is what makes "a shop
+   * without booking pays nothing" a property of the object graph rather than a promise - and even
+   * when non-null, its label stays empty and it stays `hidden` until `loadBookingModuleChip` below
+   * resolves, so no calendar-flavored copy exists anywhere before the lazy module bundle is actually
+   * fetched. Clicking it does not open a second view - it inserts and sends a trigger phrase exactly
+   * as if the visitor had typed it (`invokeModule`), so nothing else in this class's own state
+   * changes because of it. */
+  private readonly moduleChip: HTMLButtonElement | null;
   private readonly composer: HTMLFormElement;
-  private isBooking = false;
+  /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
+   * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
+   * against whatever `this.strings` holds at the time - initially this English default, so "no
+   * `WidgetLocale` set" renders identically to before this item existed. */
+  private strings: WidgetStrings = en;
+  /** `20-07`: mirrors `this.strings` one level down - `applyStrings` sets both from the same
+   * resolved value. A lazily-loaded module owns its own tiny string table keyed by this same
+   * `SupportedLocale` (`modules/booking/chip.ts`) rather than reading `WidgetStrings`, so the base
+   * bundle's own string table never grows a module's copy - this is the one piece of resolved
+   * locale state a module needs and the base bundle already has. */
+  private locale: SupportedLocale = "en";
 
   private connection: VisitorConnection | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -140,7 +161,7 @@ export class ChatWidget {
     this.toggle.className = "ago-toggle";
     this.toggle.setAttribute("aria-haspopup", "dialog");
     this.toggle.setAttribute("aria-expanded", "false");
-    this.toggle.setAttribute("aria-label", "Open chat");
+    this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.toggle.textContent = "💬";
     this.toggle.addEventListener("click", () => this.toggleOpen());
 
@@ -148,7 +169,7 @@ export class ChatWidget {
     this.panel.className = "ago-panel";
     this.panel.setAttribute("role", "dialog");
     this.panel.setAttribute("aria-modal", "false");
-    this.panel.setAttribute("aria-label", "Chat");
+    this.panel.setAttribute("aria-label", this.strings.chatLabel);
     this.panel.hidden = true;
     this.panel.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -158,33 +179,33 @@ export class ChatWidget {
 
     const header = document.createElement("div");
     header.className = "ago-header";
-    const title = document.createElement("h1");
-    title.textContent = "Chat with us";
+    this.title = document.createElement("h1");
+    this.title.textContent = this.strings.chatWithUs;
     this.closeButton = document.createElement("button");
     this.closeButton.type = "button";
     this.closeButton.className = "ago-close";
-    this.closeButton.setAttribute("aria-label", "Close chat");
+    this.closeButton.setAttribute("aria-label", this.strings.closeChat);
     this.closeButton.textContent = "✕";
     this.closeButton.addEventListener("click", () => this.close());
 
-    // `20-06`: **one script tag, one launcher, one panel.** Booking is a view inside the widget the
-    // shop already embeds, reached by this button - not a second embed with a second floating
-    // circle. The 2026-08-26 boundary review settled that on product grounds: booking must work from
-    // Telegram, MAX and SMS too, and some shops run with no widget at all, so a booking-only embed
-    // would be the one shape the product model rules out.
+    // `20-07`: **one script tag, one launcher, one panel, one transcript.** Booking is no longer a
+    // second view swapped in over the conversation (`20-06`'s `BookingPanel`) - it is the
+    // conversation, carried by ordinary chat messages (`ui/primitives/render.ts`). This chip is
+    // purely an invocation shortcut: clicking it sends the module's trigger phrase, exactly as if
+    // the visitor had typed it themselves (`invokeModule`), and everything that follows renders
+    // inline in `.ago-messages` like any other message.
     //
-    // Absent entirely unless the embed asked for booking. A shop with chat and no booking gets the
-    // same panel it had before, byte for byte.
-    this.bookButton = config.booking === null ? null : document.createElement("button");
-    if (this.bookButton) {
-      this.bookButton.type = "button";
-      this.bookButton.className = "ago-book";
-      this.bookButton.textContent = "Book";
-      this.bookButton.setAttribute("aria-label", "Book an appointment");
-      this.bookButton.addEventListener("click", () => this.toggleBooking());
-      header.append(title, this.bookButton, this.closeButton);
+    // Absent entirely unless the embed asked for booking, and even then empty/hidden until the lazy
+    // module bundle resolves - see this field's own doc comment.
+    this.moduleChip = config.bookingModuleEnabled ? document.createElement("button") : null;
+    if (this.moduleChip) {
+      this.moduleChip.type = "button";
+      this.moduleChip.className = "ago-module-chip";
+      this.moduleChip.hidden = true;
+      this.moduleChip.disabled = true;
+      header.append(this.title, this.moduleChip, this.closeButton);
     } else {
-      header.append(title, this.closeButton);
+      header.append(this.title, this.closeButton);
     }
 
     // `8-06`: directly under the header and outside `.ago-messages`, so it is the first thing read
@@ -196,10 +217,16 @@ export class ChatWidget {
     // `8-11`: three states, and the default is silence. A real shop's embed asks for neither
     // sentence and gets neither.
     const noticeText =
-      config.demoNotice === "public" ? PUBLIC_DEMO_NOTICE
-      : config.demoNotice === "private" ? PRIVATE_DEMO_NOTICE
+      config.demoNotice === "public" ? this.strings.publicDemoNotice
+      : config.demoNotice === "private" ? this.strings.privateDemoNotice
       : null;
-    const notice = noticeText === null ? null : createDemoNotice(noticeText);
+    this.notice = noticeText === null ? null : createDemoNotice(noticeText);
+
+    // `16-04`: directly under the demo notice (if any) and outside `.ago-messages`, for the identical
+    // reason `8-06`'s own comment states - the first thing read when the panel opens, never scrollable
+    // away, present before the visitor can type anything (the composer below stays disabled until
+    // connected regardless, so there is no race to win here, only a DOM position to get right).
+    this.processingNotice = createProcessingNotice();
 
     this.messages = document.createElement("div");
     this.messages.className = "ago-messages";
@@ -210,7 +237,7 @@ export class ChatWidget {
 
     this.status = document.createElement("div");
     this.status.className = "ago-status";
-    this.status.textContent = "Connecting…";
+    this.status.textContent = this.strings.connecting;
 
     const composer = document.createElement("form");
     composer.className = "ago-composer";
@@ -222,8 +249,8 @@ export class ChatWidget {
     this.input = document.createElement("textarea");
     this.input.className = "ago-input";
     this.input.rows = 1;
-    this.input.setAttribute("aria-label", "Message");
-    this.input.placeholder = "Type a message…";
+    this.input.setAttribute("aria-label", this.strings.messageAriaLabel);
+    this.input.placeholder = this.strings.typeAMessage;
     this.input.disabled = true;
     this.input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -236,7 +263,7 @@ export class ChatWidget {
     this.sendButton = document.createElement("button");
     this.sendButton.type = "submit";
     this.sendButton.className = "ago-send";
-    this.sendButton.textContent = "Send";
+    this.sendButton.textContent = this.strings.send;
     this.sendButton.disabled = true;
 
     // A native file picker, not a drag-and-drop zone or a custom widget - the skill's
@@ -257,27 +284,21 @@ export class ChatWidget {
     this.attachButton = document.createElement("button");
     this.attachButton.type = "button";
     this.attachButton.className = "ago-attach";
-    this.attachButton.setAttribute("aria-label", "Attach a file");
+    this.attachButton.setAttribute("aria-label", this.strings.attachAFile);
     this.attachButton.textContent = "📎";
     this.attachButton.disabled = true;
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
     composer.append(this.attachButton, this.fileInput, this.input, this.sendButton);
     this.panel.append(header);
-    if (notice) {
-      this.panel.append(notice);
+    if (this.notice) {
+      this.panel.append(this.notice);
     }
+    this.panel.append(this.processingNotice);
 
     this.composer = composer;
     this.panel.append(this.messages, this.status, composer);
 
-    // `20-06`: built only when the embed asked for booking, and hidden until the button is pressed.
-    // Nothing in booking/ is reachable otherwise, so a chat-only shop makes no request to a product
-    // it does not have.
-    this.booking = config.booking === null ? null : new BookingPanel(config.booking);
-    if (this.booking) {
-      this.panel.append(this.booking.element);
-    }
     container.append(this.panel, this.toggle);
     this.root.appendChild(container);
 
@@ -292,6 +313,15 @@ export class ChatWidget {
     guardAsync(async () => {
       await this.sessionPromise;
     });
+
+    // `20-07`: kicked off here, not on first open and not on chip click - "when the widget's config
+    // says a module chip should render" (the item's own words), which is knowable the moment
+    // `bookingModuleEnabled` is read off the script tag. Never touches `src/modules/` statically -
+    // `loadBookingModuleChip`'s own doc comment explains why the base bundle stays unaffected either
+    // way, whether or not this ever runs.
+    if (this.moduleChip) {
+      guardAsync(() => this.loadBookingModuleChip());
+    }
   }
 
   mount(parent: HTMLElement): void {
@@ -317,14 +347,22 @@ export class ChatWidget {
    * more. The note is written into the message list here rather than at open time so it sits above
    * whatever the (new, empty) conversation goes on to contain, and it is written only for a visitor
    * who actually lost something - never for a first-ever arrival.
+   *
+   * `11-10`: also where the widget's own language resolves, in the same place and at the same time as
+   * color and position - `applyStrings` is called *first*, before the `restarted` note, so that note
+   * itself already renders in the resolved language rather than this widget's built-in default. There
+   * is no reason to delay it: `session.widgetLocale` is already in hand at this point, the same way
+   * `session.widgetPosition`/`widgetPrimaryColorHex` are already in hand for the two lines below it.
    */
   private async bootstrapSession(): Promise<VisitorSession> {
     const { session, restarted } = await this.sessionManager.start();
     this.session = session;
+    const locale = parseWidgetLocale(session.widgetLocale);
+    this.locale = locale;
+    this.applyStrings(locale);
+
     if (restarted) {
-      this.renderSystemNote(
-        "Your previous chat has expired, so this is a new conversation. Anything you sent before is no longer shown here.",
-      );
+      this.renderSystemNote(this.strings.previousChatExpired);
     }
 
     this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
@@ -333,7 +371,101 @@ export class ChatWidget {
       this.host.style.setProperty("--ago-accent", color);
     }
 
+    this.applyProcessingNotice(session.widgetNoticeText, session.widgetNoticeUrl);
+
     return session;
+  }
+
+  /**
+   * `16-04`: populates and reveals `this.processingNotice` from the resolved handshake, or leaves it
+   * hidden - the widget's own default, matching "a default notice written by AGO would be AGO
+   * asserting a legal position on the tenant's behalf" (the backlog item's own Scope). Both values are
+   * independent and optional: a tenant may set text with no link, a link with no text, or neither.
+   *
+   * <b>Text is text, never markup.</b> `textContent`, the identical rule every other piece of
+   * server-supplied or user-supplied content in this file already follows (`renderBubble`'s own
+   * remarks) - a tenant's notice string is exactly as untrusted as a visitor's message body, and
+   * nothing here ever touches `innerHTML`.
+   *
+   * <b>The link opens in a new context.</b> `target="_blank"` plus `rel="noopener noreferrer"`,
+   * identical to `renderAttachmentInto`'s own attachment-download link - the tenant's policy page is a
+   * different origin from this host page, and the visitor should be able to read it without losing
+   * their place in the conversation or handing the new tab a `window.opener` back into this one.
+   *
+   * <b>Never throws.</b> `parseNoticeUrl` already rejects anything that is not an absolute `https://`
+   * URL before it ever reaches `href` - a malformed value degrades to "no link", never a broken host
+   * page, the same posture `parseWidgetColor`/`parseWidgetPosition` already take for their own fields.
+   */
+  private applyProcessingNotice(rawText: string | null, rawUrl: string | null): void {
+    const text = parseNoticeText(rawText);
+    const url = parseNoticeUrl(rawUrl);
+
+    this.processingNotice.textContent = "";
+
+    if (text === undefined && url === undefined) {
+      this.processingNotice.hidden = true;
+      return;
+    }
+
+    if (text !== undefined) {
+      const textSpan = document.createElement("span");
+      textSpan.className = "ago-processing-notice__text";
+      textSpan.textContent = text;
+      this.processingNotice.append(textSpan);
+    }
+
+    if (url !== undefined) {
+      const link = document.createElement("a");
+      link.className = "ago-processing-notice__link";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = this.strings.processingNoticeLinkText;
+      this.processingNotice.append(link);
+    }
+
+    this.processingNotice.hidden = false;
+  }
+
+  /**
+   * `11-10`: resolves `this.strings` to the site's real language and re-applies every static piece of
+   * text this class built with the English default in its constructor - the DOM-building code and
+   * this method deliberately read the same `this.strings.*` fields rather than each owning its own
+   * copy, so a new translatable string only ever needs adding once.
+   *
+   * Deliberately does **not** touch `this.status` - `renderConnectionState`/`handleSessionExpired`
+   * are the only writers of that element and both already read `this.strings` at the time they run,
+   * which by construction (`connect()` awaits the same `sessionPromise` this method is part of) is
+   * always after this method has already resolved it. Re-writing it here on top of a state those
+   * methods may already have set would be the bug, not the fix.
+   */
+  private applyStrings(locale: SupportedLocale): void {
+    this.strings = getStrings(locale);
+    const strings = this.strings;
+
+    this.toggle.setAttribute("aria-label", this.isOpen ? strings.closeChat : strings.openChat);
+    this.panel.setAttribute("aria-label", strings.chatLabel);
+    this.title.textContent = strings.chatWithUs;
+    this.closeButton.setAttribute("aria-label", strings.closeChat);
+    // Found live: `this.notice`'s text was set once in the constructor from that moment's
+    // `this.strings` (the English default) and never revisited - unlike every other element here, it
+    // has no line of its own until this one, so a Russian-locale site's demo notice stayed in English
+    // forever. Re-derives the same `config.demoNotice` three-way read the constructor made, against
+    // the now-resolved `strings`.
+    if (this.notice) {
+      this.notice.textContent =
+        this.config.demoNotice === "public" ? strings.publicDemoNotice : strings.privateDemoNotice;
+    }
+    this.input.setAttribute("aria-label", strings.messageAriaLabel);
+    this.input.placeholder = strings.typeAMessage;
+    this.sendButton.textContent = strings.send;
+    this.attachButton.setAttribute("aria-label", strings.attachAFile);
+
+    // `ui/styles.ts`'s own remarks: a CSS `content:` pseudo-element string cannot be reached by
+    // rewriting a DOM text node, so it is threaded through as a custom property instead, the same
+    // mechanism `--ago-accent` already uses for the site's color. `JSON.stringify` produces a
+    // correctly quoted-and-escaped CSS string literal for any text, not just the two this item ships.
+    this.host.style.setProperty("--ago-auto-reply-label", JSON.stringify(strings.autoReplyLabel));
   }
 
   private toggleOpen(): void {
@@ -348,7 +480,7 @@ export class ChatWidget {
     this.isOpen = true;
     this.panel.hidden = false;
     this.toggle.setAttribute("aria-expanded", "true");
-    this.toggle.setAttribute("aria-label", "Close chat");
+    this.toggle.setAttribute("aria-label", this.strings.closeChat);
     this.focusTrap.activate();
     this.closeButton.focus();
 
@@ -361,44 +493,52 @@ export class ChatWidget {
     this.isOpen = false;
     this.panel.hidden = true;
     this.toggle.setAttribute("aria-expanded", "false");
-    this.toggle.setAttribute("aria-label", "Open chat");
+    this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
   }
 
   /**
-   * `20-06`: swaps the panel between the conversation and the booking flow.
+   * `20-07`: loads the booking module's own chip copy from its lazily-built bundle
+   * (`build.mjs`'s third entry point, `dist/ago-chat-module-booking.js`) and reveals the chip only
+   * once it has it. `ui/moduleLoader.ts`'s own doc comment covers why the specifier reaching
+   * `import()` is a runtime-computed URL rather than a literal - that, not this method, is what keeps
+   * `src/modules/booking/` out of the base bundle's inputs.
    *
-   * <b>A swap, not a second panel and not a modal over the first.</b> The panel is already a small
-   * fixed surface on somebody else's page; stacking a second layer inside it would fight the focus
-   * trap that makes the first one keyboard-usable. The transcript is hidden rather than torn down,
-   * so coming back from booking returns to the same conversation with the same connection - nothing
-   * here touches the hub at all.
-   *
-   * <b>Booking does not require a conversation.</b> It works whether or not the visitor has ever
-   * sent a message, because a booking is not a chat message today - `21-01` is the item that would
-   * make it one, and this button is the widget-shaped shortcut that exists until then.
+   * Awaits `sessionPromise` first so `this.locale` is already resolved - the chip is built once,
+   * after locale is known, and never rebuilt, so `applyStrings` has no line of its own revisiting it.
+   * A failure here (the lazy bundle 404s, a host page blocks the request) is caught by this method's
+   * own `guardAsync` caller and simply leaves the chip absent, never a throw onto the host page.
    */
-  private toggleBooking(): void {
-    if (this.booking === null || this.bookButton === null) {
+  private async loadBookingModuleChip(): Promise<void> {
+    if (this.moduleChip === null) {
       return;
     }
 
-    this.isBooking = !this.isBooking;
+    await this.sessionPromise;
+    const bookingModule = await loadModule<{ bookingChipSpec: (locale: SupportedLocale) => ModuleChipSpec }>(
+      this.config.scriptUrl,
+      "ago-chat-module-booking.js",
+    );
+    const spec = bookingModule.bookingChipSpec(this.locale);
 
-    this.messages.hidden = this.isBooking;
-    this.status.hidden = this.isBooking;
-    this.composer.hidden = this.isBooking;
+    this.moduleChip.textContent = spec.label;
+    this.moduleChip.setAttribute("aria-label", spec.ariaLabel);
+    this.moduleChip.hidden = false;
+    this.moduleChip.disabled = !this.isConnected;
+    this.moduleChip.addEventListener("click", () => this.invokeModule(spec.triggerText));
+  }
 
-    if (this.isBooking) {
-      this.booking.show();
-      this.bookButton.textContent = "Chat";
-      this.bookButton.setAttribute("aria-label", "Back to the conversation");
-    } else {
-      this.booking.hide();
-      this.bookButton.textContent = "Book";
-      this.bookButton.setAttribute("aria-label", "Book an appointment");
-    }
+  /**
+   * `18-03`'s own interaction shape (`ago-console`'s `Composer.tsx`), read as a UX convention rather
+   * than shared code: inserting the trigger phrase and sending it is **structurally identical to the
+   * visitor typing it themselves**, not a second code path into the module - `sendCurrentMessage`
+   * below is the exact function a keystroke-driven send already goes through.
+   */
+  private invokeModule(triggerText: string): void {
+    this.input.value = triggerText;
+    this.updateSendButtonEnabled();
+    this.sendCurrentMessage();
   }
 
   /** Lazy-init on first open, not on page load (embeddable-widget skill: "nothing heavy before
@@ -426,7 +566,7 @@ export class ChatWidget {
     } catch (error) {
       logWidgetError(error);
       if (!this.isSessionExpired) {
-        this.status.textContent = "Chat is unavailable right now. Please try again later.";
+        this.status.textContent = this.strings.chatUnavailable;
       }
     }
   }
@@ -481,7 +621,7 @@ export class ChatWidget {
     this.input.disabled = true;
     this.attachButton.disabled = true;
     this.sendButton.disabled = true;
-    this.status.textContent = "This chat session has expired. Reload the page to start a new one.";
+    this.status.textContent = this.strings.sessionExpired;
 
     const connection = this.connection;
     this.connection = null;
@@ -502,14 +642,19 @@ export class ChatWidget {
     this.isConnected = state === "connected";
     this.input.disabled = !this.isConnected;
     this.attachButton.disabled = !this.isConnected;
+    // `hidden` guards this too (still loading, or booking never asked for) - `disabled` only matters
+    // once `loadBookingModuleChip` has actually revealed it.
+    if (this.moduleChip && !this.moduleChip.hidden) {
+      this.moduleChip.disabled = !this.isConnected;
+    }
     this.updateSendButtonEnabled();
     this.status.textContent =
       state === "connecting"
-        ? "Connecting…"
+        ? this.strings.connecting
         : state === "reconnecting"
-          ? "Reconnecting…"
+          ? this.strings.reconnecting
           : state === "disconnected"
-            ? "Disconnected. Trying to reconnect…"
+            ? this.strings.disconnectedReconnecting
             : "";
   }
 
@@ -531,7 +676,14 @@ export class ChatWidget {
     this.dispatchSend(body);
   }
 
-  private dispatchSend(body: string, attachmentId?: string): void {
+  /**
+   * `20-07`: `contentKind`/`content` are how a **structured reply** rides this same send path -
+   * "reply-by-id, never free text, on any channel including the widget". Both are `undefined` for a
+   * plain typed message and for `invokeModule`'s trigger-phrase send, which is the whole point:
+   * clicking a primitive's action or the module chip is never a second call, only a different pair of
+   * arguments to the one function every visitor-authored message already goes through.
+   */
+  private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: unknown): void {
     if (this.connection === null || this.conversationId === null) {
       return;
     }
@@ -548,7 +700,7 @@ export class ChatWidget {
     this.pendingSends.set(clientMessageId, bubble);
 
     connection
-      .sendMessage(conversationId, body, clientMessageId, attachmentId)
+      .sendMessage(conversationId, body, clientMessageId, attachmentId, contentKind, content)
       .then(() => {
         bubble.classList.remove("ago-message--pending");
       })
@@ -572,7 +724,7 @@ export class ChatWidget {
           // fresh one when nothing was sent. Both sides treat that id as still live exactly when the
           // server may already hold it. This widget does not retry at all - out of scope, and
           // `dispatchSend`'s own message says so - but "still live" means the same thing here.
-          this.markBubbleFailed(bubble, "Not sure this was sent - the connection dropped mid-request.");
+          this.markBubbleFailed(bubble, this.strings.sendOutcomeUnknownNote);
         } else {
           // Nothing reached the server. `NotConnectedError` never invoked at all; anything else came
           // back while the socket was still up, i.e. the hub refused it. No delivery can ever carry
@@ -582,9 +734,7 @@ export class ChatWidget {
           this.pendingSends.delete(clientMessageId);
           this.markBubbleFailed(
             bubble,
-            error instanceof NotConnectedError
-              ? "Not sent - reconnecting. It will not be retried automatically."
-              : "Failed to send.",
+            error instanceof NotConnectedError ? this.strings.notConnectedRetryNote : this.strings.sendFailedNote,
           );
         }
 
@@ -610,7 +760,7 @@ export class ChatWidget {
    * message) reuses `dispatchSend` - an attachment is just a message that happens to carry one.
    */
   private handleFileSelected(file: File): void {
-    const rejection = courtesyValidate(file);
+    const rejection = courtesyValidate(file, this.strings);
     if (rejection) {
       this.renderSystemNote(rejection);
       return;
@@ -628,7 +778,7 @@ export class ChatWidget {
     const bubble = this.renderBubble("Visitor", body, "sending");
     const progress = document.createElement("div");
     progress.className = "ago-status";
-    progress.textContent = "Uploading… 0%";
+    progress.textContent = `${this.strings.uploading} 0%`;
     bubble.appendChild(progress);
 
     this.uploadThenSend(file, body, conversationId, bubble, progress);
@@ -650,14 +800,14 @@ export class ChatWidget {
     (async () => {
       const created = await createAttachment(this.config, await this.currentToken(), conversationId, file);
       await uploadToPresignedUrl(created.uploadUrl, file, (fraction) => {
-        progress.textContent = `Uploading… ${Math.round(fraction * 100)}%`;
+        progress.textContent = `${this.strings.uploading} ${Math.round(fraction * 100)}%`;
       });
       await confirmAttachment(this.config, await this.currentToken(), created.attachmentId);
 
       bubble.remove();
       this.dispatchSend(body, created.attachmentId);
     })().catch((error: unknown) => {
-      this.markBubbleFailed(bubble, "Couldn't send the attachment.");
+      this.markBubbleFailed(bubble, this.strings.uploadFailedNote);
       logWidgetError(error);
     });
   }
@@ -692,6 +842,32 @@ export class ChatWidget {
     if (message.attachmentId) {
       this.renderAttachmentInto(bubble, message.attachmentId);
     }
+
+    // `20-07`: only a message from the *other* side of the conversation is a step to render richly.
+    // A visitor's own message can carry `contentKind`/`content` too - it is the reply this same
+    // widget just sent (`sendStructuredReply`, `{ value }` only, no `actions`) - and re-running the
+    // primitive renderer against it would either render nothing useful (no `prompt`/`title`/`fieldId`
+    // to read) or, worse, a second set of buttons under a bubble that already answered them.
+    if (message.authorKind !== "Visitor") {
+      const primitive = renderPrimitiveContent(message, this.strings, (contentKind, value, displayText) =>
+        this.sendStructuredReply(contentKind, value, displayText),
+      );
+      if (primitive) {
+        bubble.appendChild(primitive);
+      }
+    }
+  }
+
+  /**
+   * `20-07`: what a click on a primitive's action, or a submitted `form` input, actually sends -
+   * `contentKind` equal to the kind being replied to, `content: { value }`, no `actions`
+   * (`ui/primitives/render.ts`'s own contract, matched byte-for-byte against the `ago-chat`/
+   * `ago-calendar` workers' identical spec). `displayText` is what the visitor's own bubble shows
+   * back to them - the action's label for a button, or the typed text itself for a form - never the
+   * raw `value`, which for many kinds is an id or a slot token nobody typed or read.
+   */
+  private sendStructuredReply(contentKind: string, value: string, displayText: string): void {
+    this.dispatchSend(displayText, undefined, contentKind, { value });
   }
 
   private renderBubble(authorKind: MessageDto["authorKind"], body: string, state?: "sending"): HTMLDivElement {
@@ -752,10 +928,10 @@ export class ChatWidget {
           const img = document.createElement("img");
           img.className = "ago-attachment-image";
           img.src = info.thumbnailUrl ?? info.url;
-          img.alt = "Attachment";
+          img.alt = this.strings.attachmentAlt;
           link.appendChild(img);
         } else {
-          link.textContent = "📎 Download attachment";
+          link.textContent = this.strings.downloadAttachment;
         }
 
         bubble.appendChild(link);
@@ -765,7 +941,7 @@ export class ChatWidget {
         logWidgetError(error);
         const note = document.createElement("div");
         note.className = "ago-status";
-        note.textContent = "Attachment unavailable.";
+        note.textContent = this.strings.attachmentUnavailable;
         bubble.appendChild(note);
       });
   }

@@ -1,5 +1,6 @@
 import type { AttachmentDownloadInfo, CreateAttachmentResponse, ProblemDetails } from "./protocol/types.js";
 import type { WidgetConfig } from "./config.js";
+import type { WidgetStrings } from "./i18n/strings.js";
 
 /**
  * Mirrors `Ago.Chat.Application.UseCases.CreateAttachment.AttachmentOptions`'s defaults - a
@@ -21,14 +22,16 @@ const COURTESY_ALLOWED_CONTENT_TYPES = new Set([
 export class AttachmentRejectedError extends Error {}
 export class AttachmentUploadFailedError extends Error {}
 
-/** Returns a human-readable reason the file fails the courtesy check, or `null` if it passes. */
-export function courtesyValidate(file: File): string | null {
+/** Returns a human-readable reason the file fails the courtesy check, or `null` if it passes.
+ * `11-10`: the frame text is translated, `file.type` (or its own "unknown type" filler) is not - it
+ * is a value read off the file, not prose this widget wrote. */
+export function courtesyValidate(file: File, strings: WidgetStrings): string | null {
   if (!COURTESY_ALLOWED_CONTENT_TYPES.has(file.type)) {
-    return `"${file.type || "unknown type"}" isn't supported. Try an image or a PDF.`;
+    return `"${file.type || strings.unknownFileType}" ${strings.unsupportedFileTypeSuffix}`;
   }
 
   if (file.size > COURTESY_MAX_SIZE_BYTES) {
-    return `File is too large (max ${Math.floor(COURTESY_MAX_SIZE_BYTES / (1024 * 1024))} MB).`;
+    return strings.fileTooLarge(Math.floor(COURTESY_MAX_SIZE_BYTES / (1024 * 1024)));
   }
 
   return null;

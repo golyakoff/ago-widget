@@ -31,12 +31,27 @@ src/
   storage.ts         namespaced localStorage, scoped per site
   connection.ts      @microsoft/signalr wrapper: resume-by-sequence, jittered reconnect,
                      the sender's-own-echo dedup
-  protocol/          pure, unit-tested: backoff.ts, dedup.ts, sequence.ts, types.ts
+  protocol/          pure, unit-tested: backoff.ts, dedup.ts, sequence.ts, types.ts (20-07:
+                     MessageDto gained contentKind/content/actions, adr/0065's closed
+                     primitive vocabulary on the wire)
   testing/           a hand-written @microsoft/signalr fake for the behaviour tests - never
                      imported by index.ts, so it never reaches the bundle
   ui/                Shadow DOM host, the widget's own visible surface, focus trap, styles,
                      appearance.ts (11-03: parses the per-site color/position the handshake
                      returns, never trusting the wire value blindly)
+    primitives/      20-07: the closed primitive vocabulary, rendered - a labelled button
+                     list for choice_list/confirmation_card/date_time_picker, a labelled
+                     text input for form. Generic, permanent, base-bundle code: it has never
+                     heard of Calendar and never will (adr/0065 §4)
+    moduleLoader.ts  20-07: the generic "fetch a lazily-built module bundle" mechanism -
+                     a runtime-computed URL, never a literal import(), which is what keeps
+                     a module directory out of the base bundle's own inputs
+modules/
+  booking/           20-07: what is left of 20-06's src/booking/ once booking runs through
+                     the conversation instead of beside it - just the chip's own copy and
+                     trigger phrase (build.mjs's third, lazily-loaded esbuild entry point).
+                     calendarClient.ts/flow.ts/panel.ts/steps.ts are deleted outright, not
+                     moved here: there is no direct HTTP call to AGO Calendar left anywhere
 demo/
   index.html         a deliberately hostile host page - see its own comments
 public-demo/
@@ -99,16 +114,56 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
-**24.9 KB gzipped** (91.3 KB raw, minified), measured 2026-08-26 against a clean build of this
-commit — up from 22.2 KB by `20-06`'s booking module (`src/booking/`: the step model, the flow, the
-calendar client and the panel), which is **+2.7 KB gzipped** and leaves 20.1 KB of the 45 KB budget
-unused. That number is the answer to the question `20-06` was told to ask out loud: the first
-feature that could plausibly have threatened the budget did not, so **no lazy-loaded module was
-needed** and none was built. If a later booking feature changes that, the fix is the split, not a
-bigger budget.
+**26.5 KB gzipped** (99.3 KB raw, minified), measured 2026-08-29 against a clean build of this commit
+- the first measurement taken after `16-04`'s processing-notice mechanism and `20-07`'s
+module-contract rework landed on the same branch together (`AGO_API_BASE_URL=http://localhost:5009
+AGO_COMMIT=$(git rev-parse HEAD) npm run build`). Neither number in the two paragraphs immediately
+below, each taken in isolation against its own base commit, reflects what actually ships - this one
+does. Leaves 18.5 KB of the 45 KB budget unused. `dist/ago-chat-module-booking.js` stays 0.23 KB
+gzipped, unaffected by `16-04` (a different file, not counted against this budget).
 
-The paragraph below is the history that produced the previous number, kept because each step of it
-is a measurement rather than a claim.
+**28.7 KB gzipped** (110.0 KB raw, minified), `16-04` measured 2026-08-29 against a clean build of
+that commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) — **+0.6 KB gzipped** over the
+same commit's pre-`16-04` baseline (28.1 KB, measured the same way against `git stash`), from the
+processing-notice mechanism (`ui/appearance.ts`'s `parseNoticeText`/`parseNoticeUrl`, the notice
+element and its two-line render/apply path in `ui/widget.ts`, one new i18n string).
+
+**The 28.1 KB pre-`16-04` baseline does not match the 24.9 KB this section last recorded on
+2026-08-26**, and that gap predates this item - found while measuring, not caused by it. Several
+items landed on `main` between that measurement and this one (at minimum the widget's own i18n
+system, `11-10`'s locale support and its `ru`/`en` string tables, and the notice-locale fix these
+commits build on) without anyone re-running this section's own build-and-record step. Stated here
+rather than silently overwritten with a number that would misattribute roughly 3.2 KB of somebody
+else's work to this item.
+
+**25.8 KB gzipped** (96.7 KB raw, minified), `20-07` measured 2026-08-29 against a clean build of
+that commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`,
+taken from a base that did not yet include `16-04`) - up from `20-06`'s 24.9 KB, and **not** a
+straightforward decrease despite `20-07` deleting `src/booking/`'s whole direct-HTTP flow
+(`calendarClient.ts`, `flow.ts`, `panel.ts`, `steps.ts` - roughly 830 lines, including a full step
+state machine and an HTTP client) outright. What replaced it - `ui/primitives/render.ts`'s four
+generic, permanent renderers plus the reply-wiring in `ui/widget.ts` - is genuinely new, permanent
+widget functionality (it is what makes ADR-0065 §4's claim true: "the widget is written once and does
+not grow per module"), and it costs more than the single-purpose booking flow it replaces saved.
+
+**`20-07`'s own lazy module bundle, `dist/ago-chat-module-booking.js`, is 0.23 KB gzipped** - not
+counted against the widget budget above (fetched, if at all, only by a site with booking enabled,
+the same accounting `demo-boot.js` already gets). This is the honest answer to "how much of
+`src/booking/` turned out to be genuinely module-specific once the generic renderers existed":
+almost nothing - a chip's label, aria-label and trigger phrase, in two locales. `bundleInputs.test.ts`
+is what makes "zero inputs from `src/modules/` in the base bundle" a checked property rather than an
+assertion - the same technique `8-11` used for `src/demo/`, now actually in code for the first time
+(see `20-07`'s own backlog item: no automated version of this guard existed before it).
+
+The paragraphs below are the history that produced the previous numbers, kept because each step of
+it is a measurement rather than a claim.
+
+**24.9 KB gzipped** (91.3 KB raw, minified), measured 2026-08-26 against a clean build of that
+commit — up from 22.2 KB by `20-06`'s booking module (`src/booking/`: the step model, the flow, the
+calendar client and the panel), which was **+2.7 KB gzipped**. That number was the answer to the
+question `20-06` was told to ask out loud: the first feature that could plausibly have threatened
+the budget did not, so no lazy-loaded module was built at the time - `20-07` is the item that later
+found a real reason to split one out (the closed-primitive-vocabulary guard, not the byte count).
 
 **22.1 KB gzipped** (80.7 KB raw, minified), measured 2026-08-25 against a clean build of that
 commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`) -
@@ -129,6 +184,14 @@ page and must never be read by the widget, because a widget that read its host p
 repointed at another tenant by any page embedding it. Only the demo pages load it; **no tenant
 embedding the widget downloads a byte of it**, which the build's own metafile confirms - `dist/ago-chat.js`
 has zero inputs from `src/demo/`. The widget bundle is byte-for-byte unaffected by that item.
+
+**`20-07` adds a third bundle, and it is not loaded by a `<script>` tag at all.**
+`dist/ago-chat-module-booking.js` is an ES module, fetched at runtime by `ui/moduleLoader.ts`'s
+`loadModule` via a genuine, browser-native dynamic `import()` of a URL computed relative to the
+widget's own `<script src>` - never a literal `import()` esbuild could resolve and quietly inline
+back into `dist/ago-chat.js`, which is what a hand-rolled code-splitting scheme this small has to get
+right for the split to mean anything. Only a site with `data-booking="true"` ever fetches it, and it
+fetches once, at boot, not on the visitor's first click.
 
 `@microsoft/signalr` is the only dependency and the large majority of this size. The `Open
 questions` section of `../ago-root/docs/backlog/5-09-widget-bootstrap-and-messaging.md` called for
@@ -204,6 +267,21 @@ section. What this repository actually has:
   the shadow root, it adds exactly one global and never touches the page's own, every storage key is
   namespaced, a malformed embed degrades to no widget instead of throwing into the page, a page whose
   `localStorage` throws still gets a widget, and the snippet pasted twice mounts once.
+- **`20-07`'s closed primitive vocabulary** (`ui/primitives/render.test.ts`, pure): each of the four
+  kinds renders its labelled buttons or text input, an unrecognised kind returns `null` rather than
+  throwing, malformed `content` on a *known* kind degrades field-by-field instead of throwing, and a
+  reply calls back with exactly `(contentKind, value, displayText)` - never a field name invented by
+  this file.
+- **The module chip and the wire contract, as behaviour** (`ui/modules.test.ts`): the chip is absent
+  and the lazy module bundle is never fetched unless the embed asked for booking; clicking the chip
+  sends the trigger phrase through the *same* function a typed-and-Entered message uses, not a second
+  code path; a step arriving as an ordinary operator/system message renders richly and a reply to it
+  carries `contentKind`/`content: { value }`/no `actions` byte-for-byte; a numeric-looking `form`
+  answer still submits as free text, never reinterpreted as an action's value; and no request this
+  widget makes ever names `calendar` in its URL, because there is no HTTP client left that could.
+- **The base bundle's own inputs** (`bundleInputs.test.ts`): builds the real bundle and reads
+  esbuild's own metafile - `dist/ago-chat.js` contains zero files from `src/modules/`. The first
+  automated version of `adr/0065`'s bundle-input guard in this repository; see "Bundle size" above.
 
 **Deliberately not tested, and why**
 

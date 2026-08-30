@@ -78,8 +78,11 @@ describe("a connection that drops and comes back", () => {
     currentHub().completeReconnect();
     await Promise.resolve();
 
-    expect(currentHub().invocationsOf("JoinAsync")).toHaveLength(2);
-    expect(currentHub().invocationAt("JoinAsync", 1).args).toEqual([13]);
+    // `18-12`: the initial join now calls `JoinWithTrafficSourceAsync` (one call), and only the
+    // resume after reconnect still calls plain `JoinAsync` (one call, at index 0 - it is the only one).
+    expect(currentHub().invocationsOf("JoinWithTrafficSourceAsync")).toHaveLength(1);
+    expect(currentHub().invocationsOf("JoinAsync")).toHaveLength(1);
+    expect(currentHub().invocationAt("JoinAsync", 0).args).toEqual([13]);
   });
 
   it("delivers what arrived while it was gone", async () => {
@@ -147,7 +150,9 @@ describe("a connection that drops and comes back", () => {
     currentHub().completeReconnect();
     await Promise.resolve();
 
-    expect(currentHub().invocationAt("JoinAsync", 1).args).toEqual([20]);
+    // `18-12`: only the resume calls `JoinAsync` now - the initial join above is
+    // `JoinWithTrafficSourceAsync`, so the resume is `JoinAsync`'s own first and only call.
+    expect(currentHub().invocationAt("JoinAsync", 0).args).toEqual([20]);
   });
 
   it("reports reconnecting and then connected, so the panel can say so", async () => {
@@ -180,7 +185,18 @@ describe("a page reloaded after a conversation was already open", () => {
     joinQueue.push(joinResult([]));
     await second.start();
 
-    expect(currentHub().invocationAt("JoinAsync", 0).args).toEqual([12]);
+    // `18-12`: every fresh `.start()` (never a resume) now calls `JoinWithTrafficSourceAsync` -
+    // `lastKnownSequence` first, then the four traffic-source fields. jsdom's default
+    // `document.referrer` is `""` and its default URL carries no query string, so all four read
+    // `undefined` here - the common, unremarkable case this item's own Scope calls out by name,
+    // not a gap in this test.
+    expect(currentHub().invocationAt("JoinWithTrafficSourceAsync", 0).args).toEqual([
+      12,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   it("asks for everything when there is nothing stored yet", async () => {
@@ -188,7 +204,13 @@ describe("a page reloaded after a conversation was already open", () => {
     joinQueue.push(joinResult([]));
     await connection.start();
 
-    expect(currentHub().invocationAt("JoinAsync", 0).args).toEqual([undefined]);
+    expect(currentHub().invocationAt("JoinWithTrafficSourceAsync", 0).args).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });
 

@@ -222,7 +222,17 @@ describe("a visitor coming back after their token has already expired", () => {
     joinQueue.push(joinResult());
     await openWidget();
 
-    expect(currentHub().invocationAt("JoinAsync", 0).args).toEqual([undefined]);
+    // `18-12`: a fresh open is always `JoinWithTrafficSourceAsync` now, never plain `JoinAsync` - see
+    // that method's own doc comment on `connection.ts`. `lastKnownSequence` stays the first argument
+    // and stays `undefined`, which is this test's own point: the new identity must not resume from the
+    // old one's cursor.
+    expect(currentHub().invocationAt("JoinWithTrafficSourceAsync", 0).args).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   it("presents the newly minted token, not the expired one it arrived with", async () => {

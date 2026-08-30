@@ -38,9 +38,12 @@ export interface Invocation {
 }
 
 /**
- * Answers to `JoinAsync`, consumed in order across every hub built. Shared rather than per-hub on
- * purpose: a test that drives the widget through its own UI cannot reach the `HubConnection` before
- * `ChatWidget.connect()` builds it, so the answers have to be primed in advance.
+ * Answers to `JoinAsync`/`JoinWithTrafficSourceAsync` (`18-12`: the widget's own initial join now
+ * calls the latter, the resume path still calls the former - both drain this same queue, since a test
+ * priming an answer does not care which of the two the code under test happens to invoke), consumed in
+ * order across every hub built. Shared rather than per-hub on purpose: a test that drives the widget
+ * through its own UI cannot reach the `HubConnection` before `ChatWidget.connect()` builds it, so the
+ * answers have to be primed in advance.
  */
 export const joinQueue: unknown[] = [];
 
@@ -91,7 +94,7 @@ export class FakeHubConnection {
 
   invoke(method: string, ...args: unknown[]): Promise<unknown> {
     this.invocations.push({ method, args });
-    if (method === "JoinAsync") {
+    if (method === "JoinAsync" || method === "JoinWithTrafficSourceAsync") {
       return Promise.resolve(joinQueue.shift() ?? { conversationId: null, isNew: false, history: [] });
     }
 

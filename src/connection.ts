@@ -5,6 +5,7 @@ import type { WidgetStorage } from "./storage.js";
 import { defaultBackoffOptions, jitteredDelayMs } from "./protocol/backoff.js";
 import { SeenMessageIds } from "./protocol/dedup.js";
 import { SequenceTracker } from "./protocol/sequence.js";
+import { captureTrafficSource } from "./traffic.js";
 
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
 
@@ -140,6 +141,17 @@ export class VisitorConnection {
     this.stateListener = listener;
   }
 
+  /**
+   * `18-12`: this is the "conversation actually starts" moment the backlog item means, not widget
+   * mount/page load - `ui/widget.ts`'s own `connect()` (the only caller) already runs this lazily, on
+   * first open, not eagerly at mount (that method's own doc comment: "a widget can sit open on a page
+   * a visitor never messages through" is exactly the case this avoids). `captureTrafficSource` is read
+   * here, once, and travels on `JoinWithTrafficSourceAsync` - a second hub method rather than more
+   * parameters on `JoinAsync`, matching the arity-safety split that method's own server-side doc
+   * comment (`VisitorHub.cs`) explains. `resumeAfterReconnect` below keeps calling plain `JoinAsync`
+   * with no source at all: a resumed connection always has an existing conversation, and a source is
+   * captured once, at start, never resent.
+   */
   async start(): Promise<VisitorJoinResult> {
     this.stateListener?.("connecting");
     await this.connection.start();
@@ -149,9 +161,14 @@ export class VisitorConnection {
       storedConversationId !== null ? this.storage.getLastKnownSequence(storedConversationId) : null;
     this.sequenceTracker = new SequenceTracker(lastKnownSequence);
 
+    const source = captureTrafficSource();
     const result = await this.connection.invoke<VisitorJoinResult>(
-      "JoinAsync",
+      "JoinWithTrafficSourceAsync",
       lastKnownSequence ?? undefined,
+      source.referrerHost,
+      source.utmSource,
+      source.utmMedium,
+      source.utmCampaign,
     );
 
     this.conversationId = result.conversationId;

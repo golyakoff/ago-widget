@@ -192,12 +192,17 @@ export class VisitorConnection {
    * from the C# default - found live (`8-02`), omitting it here made every real send fail with a
    * generic "error on the server", never reaching `SendVisitorMessageHandler` at all.
    *
-   * `20-07`: `contentKind`/`content` are the two trailing arguments a **structured reply** carries -
+   * `20-07`, corrected: `contentKind`/`content` are how a **structured reply** rides the send path -
    * "reply-by-id, never free text, on any channel including the widget": clicking a primitive's
-   * action, or submitting its `form` input, sends an ordinary message through this same method with
-   * `contentKind` set to the kind being replied to and `content` set to `{ value }`. A plain typed
-   * message never sets either, so this stays the one function every visitor-authored message goes
-   * through, structured or not - never a second call path to a module.
+   * action, or submitting its `form` input, sends the reply through this same function. But
+   * `VisitorHub.SendMessageAsync` and `VisitorHub.SendStructuredMessageAsync` (`5-19`) are two
+   * separate hub methods, not one four-parameter method that happens to grow two more when a reply
+   * is structured - this is the identical arity rule the comment above already states, applied to
+   * the case that slipped through when `20-07` landed: every deployed client's send failed at once
+   * (invoking `SendMessageAsync` with six arguments against a method declared to take four), found
+   * live against the real demo, not in a test, because `20-07`'s own Done-when never got a live
+   * click-through. This method now picks the target by whether `contentKind` is set, the same
+   * branch `5-19`'s own server-side split already makes structural.
    */
   async sendMessage(
     conversationId: string,
@@ -212,15 +217,24 @@ export class VisitorConnection {
     }
 
     try {
-      return await this.connection.invoke<number>(
-        "SendMessageAsync",
-        conversationId,
-        body,
-        attachmentId ?? null,
-        clientMessageId,
-        contentKind ?? null,
-        content ?? null,
-      );
+      return contentKind === undefined
+        ? await this.connection.invoke<number>(
+            "SendMessageAsync",
+            conversationId,
+            body,
+            attachmentId ?? null,
+            clientMessageId,
+          )
+        : await this.connection.invoke<number>(
+            "SendStructuredMessageAsync",
+            conversationId,
+            body,
+            attachmentId ?? null,
+            clientMessageId,
+            contentKind,
+            content ?? null,
+            null,
+          );
     } catch (error) {
       if (this.connection.state !== signalR.HubConnectionState.Connected) {
         throw new SendOutcomeUnknownError(error);

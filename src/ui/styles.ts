@@ -252,6 +252,18 @@ export const widgetStyles = /* css */ `
     padding: 0 0.75rem 0.5rem;
   }
 
+  /* Found live: a failed-send note is appended inside the visitor's own bubble
+     (markBubbleFailed, ui/widget.ts), whose background is the site's --ago-accent color (blue by
+     default) - measured, not assumed: the plain .ago-status gray above (#6b7280) against the default
+     accent (#2f6fed) computes to roughly 1.06:1, functionally invisible, not merely "muted". A reduced-
+     opacity white (matching .ago-message--visitor .ago-primitive-line-label's own 0.75 a few rules
+     below) computes to only ~3.7:1 here - short of WCAG AA's 4.5:1 for this font-size, since this note
+     is a failure state a visitor needs to actually read, not a decorative label. Full white, matching
+     .ago-message--visitor's own body text color exactly, computes to ~4.55:1 and passes. */
+  .ago-message--visitor .ago-status {
+    color: #fff;
+  }
+
   .ago-composer {
     display: flex;
     gap: 0.5rem;

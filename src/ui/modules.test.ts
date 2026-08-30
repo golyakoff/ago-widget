@@ -169,12 +169,11 @@ describe("the module invocation chip", () => {
     const bubbles = [...root.querySelectorAll(".ago-message--visitor")];
     expect(bubbles.some((bubble) => bubble.textContent?.includes("/booking"))).toBe(true);
 
+    // Plain text, not a structured reply - SendMessageAsync (4 args), the same method and arity a
+    // visitor typing "/booking" and pressing Enter would produce, never SendStructuredMessageAsync.
     const invocation = currentHub().invocationAt("SendMessageAsync", 0);
     expect(invocation.args[1]).toBe("/booking");
-    // Plain text, not a structured reply - contentKind/content are both null, exactly as a visitor
-    // typing "/booking" and pressing Enter would produce.
-    expect(invocation.args[4]).toBeNull();
-    expect(invocation.args[5]).toBeNull();
+    expect(invocation.args.length).toBe(4);
   });
 
   it("never makes a direct HTTP request to AGO Calendar - there is no client left in this bundle that could", async () => {
@@ -215,10 +214,14 @@ describe("rendering a step-shaped message from a module", () => {
     choices[0]!.click();
     await flush();
 
-    const invocation = currentHub().invocationAt("SendMessageAsync", 0);
+    // A structured reply - SendStructuredMessageAsync, not SendMessageAsync: the two are separate
+    // hub methods with separate arities (VisitorHub's own arity-rule comment), not one method that
+    // grows two more parameters when a reply happens to be structured.
+    const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
     expect(invocation.args[1]).toBe("Haircut (45 min)"); // the human-readable body of the reply
     expect(invocation.args[4]).toBe("choice_list");
     expect(invocation.args[5]).toEqual({ value: "svc-1" });
+    expect(invocation.args[6]).toBeNull(); // actions - the widget never populates this
   });
 
   it("degrades an unrecognised contentKind to the plain body, without throwing", async () => {
@@ -267,7 +270,7 @@ describe("rendering a step-shaped message from a module", () => {
     );
     await flush();
 
-    const invocation = currentHub().invocationAt("SendMessageAsync", 0);
+    const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
     expect(invocation.args[1]).toBe("12345");
     expect(invocation.args[4]).toBe("form"); // still a "form" reply, never reinterpreted as a choice
     expect(invocation.args[5]).toEqual({ value: "12345" });

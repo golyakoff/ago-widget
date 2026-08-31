@@ -53,6 +53,10 @@ LABEL org.opencontainers.image.source="https://github.com/golyakoff/ago-widget" 
       org.opencontainers.image.description="AGO Chat public demo page + widget bundle" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.revision="${GIT_COMMIT}"
+# `15-08`: without this, nginx's own stock config sends no Cache-Control at all - see nginx.conf's own
+# header comment for the incident that found it and why `no-cache` (revalidate-always) is the correct
+# policy for every file this image serves, not `no-store` or a long max-age.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/ago-chat.js /usr/share/nginx/html/ago-chat.js
 COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.map
 # `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget tag, wires the

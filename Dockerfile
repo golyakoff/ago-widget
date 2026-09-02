@@ -25,7 +25,17 @@ COPY . .
 # the origin here rather than in build.mjs keeps the product build honest and makes this image a
 # function of the commit alone. Still an ARG, so a fork or a local experiment can override it - but
 # nothing in CI does, so nothing that is ever pushed under a SHA tag does either.
-ARG AGO_API_BASE_URL=https://chat.reserve-me.ru
+# Moved from `chat.` to `chat-api.` on 2026-09-02. The naming scheme settled that day gives the bare
+# product name to the human-facing console and the `-api` suffix to the API, so `chat.` becomes the
+# chat console and this bundle must stop pointing at it.
+#
+# **This value is the reason that rename had to be staged rather than simply done.** It is baked into
+# the bundle at build time, so a visitor's cached copy keeps calling whatever origin it was built
+# with - there is no way to re-point an already-served widget. `ago-deploy` therefore serves the API
+# on *both* names first; only once every consumer is on `chat-api.` and verified does `chat.` change
+# meaning. Merging this ahead of that is safe: nothing is deployed by merging, and `ago-deploy` pins
+# images by SHA rather than following a tag.
+ARG AGO_API_BASE_URL=https://chat-api.reserve-me.ru
 # The commit this image is built from (15-07). Defaults to "unknown" rather than failing: a local
 # `docker build` to try something is legitimate, and it should say "unknown" out loud instead of
 # lying or refusing. build.mjs bakes it into the bundle as window.AgoChat.commit.

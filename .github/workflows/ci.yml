@@ -49,6 +49,29 @@ jobs:
           AGO_API_BASE_URL: "http://localhost:5009"
           AGO_COMMIT: ${{ github.sha }}
 
+      - name: Install the UX gate's browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Rendered UX gate
+        # `15-11`. **Blocking here, unlike in `ago-calendar-console`** - this repository's gate is
+        # green, so there is nothing to grandfather. Ten checks over two states (launcher and open
+        # panel) at two viewports, plus three fails-before proofs.
+        #
+        # The gate rebuilds the widget itself through `playwright.config.ts`'s own `webServer`, so it
+        # measures the same bundle this job just built rather than a differently-configured one.
+        run: npm run ux-gate
+
+      - name: Upload UX gate screenshots
+        # On failure too: a picture of the screen a failing assertion describes is most useful exactly
+        # when the gate is red.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-gate-screenshots
+          path: ux-gate/screenshots/
+          retention-days: 30
+          if-no-files-found: warn
+
   # `15-07`/`adr/0051`: the two public demo images are published to GHCR from here, not built on the
   # deployment node. Only on `main`, and only after build-test passed - a pull request never
   # publishes, so a fork or a draft branch cannot put an image into the registry a deploy might

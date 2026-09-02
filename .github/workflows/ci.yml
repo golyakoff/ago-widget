@@ -103,11 +103,27 @@ jobs:
       # which is the only thing that lets ${{ github.sha }} keep being a truthful name for it.
       # DEMO_PAGE_DIR is passed, and is not an exception: it picks which of the two images is being
       # built, and that choice is already in the image name.
-      - name: Build the two demo images
+      - name: Build the images
         env:
           DOCKER_BUILDKIT: "1"
         run: |
           set -euo pipefail
+          # `adr/0092`: the bundle with no demo page attached - what a tenant's own `<script src>`
+          # points at, served at chat-api.reserve-me.ru/widget/. Same Dockerfile, `--target assets`,
+          # so it and the demo images below serve byte-identical bundles by construction rather than
+          # by anybody remembering to keep two files in step.
+          build_assets() {
+            local repo="ghcr.io/${{ github.repository_owner }}/ago-widget-assets"
+            echo "::group::${repo}"
+            docker build \
+              --target assets \
+              --build-arg "GIT_COMMIT=${{ github.sha }}" \
+              -t "${repo}:${{ github.sha }}" \
+              -t "${repo}:main" \
+              .
+            echo "::endgroup::"
+          }
+          build_assets
           build_one() {
             local name="$1" page="$2"
             local repo="ghcr.io/${{ github.repository_owner }}/${name}"
@@ -132,7 +148,7 @@ jobs:
       - name: Check the images can name their own commit
         run: |
           set -euo pipefail
-          for name in ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             served=$(docker run --rm --entrypoint cat "${repo}:${{ github.sha }}" /usr/share/nginx/html/version.json)
             echo "${name}: ${served}"
@@ -151,7 +167,7 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
-          for name in ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             echo "::group::${repo}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
@@ -165,10 +181,10 @@ jobs:
             exit 1
           fi
 
-      - name: Push the two demo images
+      - name: Push the images
         run: |
           set -euo pipefail
-          for name in ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             docker push "${repo}:${{ github.sha }}"
             docker push "${repo}:main"
@@ -181,7 +197,7 @@ jobs:
             echo
             echo "Deploy with: \`./deploy.sh demo-shop1 ${{ github.sha }}\` (ago-deploy/k8s, on the node)"
             echo
-            for n in demo-shop1 demo-shop2; do
+            for n in widget-assets demo-shop1 demo-shop2; do
               echo "- \`ghcr.io/${{ github.repository_owner }}/ago-${n}:${{ github.sha }}\`"
             done
           } >> "$GITHUB_STEP_SUMMARY"

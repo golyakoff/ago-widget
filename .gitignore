@@ -2,3 +2,10 @@ node_modules/
 dist/
 coverage/
 *.log
+
+# `15-11`: `ux-gate/` is source; what it produces is a build artifact. CI publishes the screenshots
+# with `actions/upload-artifact` rather than committing them.
+/ux-gate/screenshots/
+/ux-gate/test-results/
+/ux-gate/playwright-report/
+/ux-gate/blob-report/

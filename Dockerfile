@@ -46,7 +46,18 @@ RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" AGO_COMMIT="${GIT_COMMIT}" npm run bu
 # that actually exists for nginx (Chiseled itself is a .NET/Microsoft base-image family with no
 # nginx equivalent): official image, not a bespoke build, with the dynamic modules this
 # static-file-only container never uses (image filter, mail proxy, stream) stripped out.
-FROM nginx:1.31-alpine-slim
+#
+# **`adr/0092`: this stage is also an image in its own right.** `--target assets` builds the widget
+# bundle with no demo page attached - what a real tenant's `<script src>` points at, published as
+# `ago-widget-assets` and served at `chat-api.reserve-me.ru/widget/`. Until that decision there was
+# no public URL serving the widget at all, and the only copy a browser could reach belonged to a demo
+# shop. Building it as a *stage of this Dockerfile* rather than a second file is deliberate: the two
+# images must serve byte-identical bundles with identical cache headers, and a copy of this file
+# would only be identical until somebody edited one of them.
+#
+# The default target is still the demo image below, so nothing that builds this Dockerfile without
+# `--target` changes behaviour.
+FROM nginx:1.31-alpine-slim AS assets
 # `17-04`: the base tag names the image nginx's own maintainers published, not the Alpine packages
 # inside it *today* - Alpine ships security fixes into its package repositories continuously,
 # independent of when a base image was last rebuilt from them. `apk upgrade` reaches into the live
@@ -60,7 +71,7 @@ ARG GIT_COMMIT=unknown
 # only documentation - GHCR uses it to link the published package back to this repository, which is
 # what makes the package inherit the repository's own visibility instead of arriving orphaned.
 LABEL org.opencontainers.image.source="https://github.com/golyakoff/ago-widget" \
-      org.opencontainers.image.description="AGO Chat public demo page + widget bundle" \
+      org.opencontainers.image.description="AGO Chat widget bundle" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.revision="${GIT_COMMIT}"
 # `15-08`: without this, nginx's own stock config sends no Cache-Control at all - see nginx.conf's own
@@ -69,17 +80,38 @@ LABEL org.opencontainers.image.source="https://github.com/golyakoff/ago-widget" 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/ago-chat.js /usr/share/nginx/html/ago-chat.js
 COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.map
-# `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget tag, wires the
-# "get your own tenant" button. A separate bundle from the widget on purpose (build.mjs, adr/0058):
-# only these demo pages ever load it, and no tenant embedding the widget downloads a byte of it.
-COPY --from=build /app/dist/demo-boot.js /usr/share/nginx/html/demo-boot.js
-COPY --from=build /app/dist/demo-boot.js.map /usr/share/nginx/html/demo-boot.js.map
 # `20-07`: the booking module's own lazily-loaded chunk (build.mjs's third entry point). Served as a
 # sibling of ago-chat.js because ui/moduleLoader.ts resolves it relative to the widget's own <script
 # src> - the same directory a real deployment already serves ago-chat.js from, which this static-file
 # image happens to be nginx's document root.
 COPY --from=build /app/dist/ago-chat-module-booking.js /usr/share/nginx/html/ago-chat-module-booking.js
 COPY --from=build /app/dist/ago-chat-module-booking.js.map /usr/share/nginx/html/ago-chat-module-booking.js.map
+# The nginx base image ships its own `index.html` - the stock "Welcome to nginx!" page. Harmless in
+# the demo images, which overwrite it, but this stage is served at a *public* URL where it would
+# answer `/widget/` with a default welcome page that also announces what the server is. Removed here;
+# the demo stage below copies its own back in, so nothing about those images changes. `50x.html` is
+# deliberately left alone: it is referenced only by the stock `default.conf` that nginx.conf replaces,
+# so it is already dead, and deleting it would change the demo images for no reason.
+RUN rm -f /usr/share/nginx/html/index.html
+# The assets image's own version marker. Overwritten by the demo stage below with a richer one that
+# also names the page, so `--target assets` and the default build each report themselves accurately
+# rather than one of them lying about which artifact it is.
+RUN printf '{"app":"ago-widget-assets","commit":"%s"}\n' "${GIT_COMMIT}" \
+      > /usr/share/nginx/html/version.json
+EXPOSE 80
+
+# --- the demo images ---------------------------------------------------------------------------
+# Everything above, plus a demo page and its boot script. This is the default target, so
+# `docker build .` with no `--target` still produces exactly what it produced before `adr/0092`.
+FROM assets AS demo
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.description="AGO Chat public demo page + widget bundle"
+# `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget tag, wires the
+# "get your own tenant" button. A separate bundle from the widget on purpose (build.mjs, adr/0058):
+# only these demo pages ever load it, and no tenant embedding the widget downloads a byte of it -
+# which is exactly why it is here and not in the assets stage above.
+COPY --from=build /app/dist/demo-boot.js /usr/share/nginx/html/demo-boot.js
+COPY --from=build /app/dist/demo-boot.js.map /usr/share/nginx/html/demo-boot.js.map
 # DEMO_PAGE_DIR selects which demo page this image embeds - `public-demo` (demo-shop1, the
 # original 8-02 page, `data-site="demo_site"`) by default, or `public-demo-2` (demo-shop2, a
 # second, independent tenant seeded specifically to demonstrate tenant isolation live: a different

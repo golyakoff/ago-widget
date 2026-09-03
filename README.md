@@ -75,9 +75,17 @@ AGO_API_BASE_URL=http://localhost:5009 npm run build
 project to default to, and `build.mjs` refuses to guess one (`CLAUDE.md`: "do not invent numbers,
 benchmarks, or 'typical' production figures"). Point it at whatever `Ago.Chat.Api` origin this
 build should talk to - `http://localhost:5009` for the local cluster
-(`../ago-root/docs/runbooks/local-dev.md`). A per-embed override is also available as the script
-tag's own `data-api` attribute, for exactly the case this repository's own demo page needs: one
-built bundle, pointed at a different API origin without a second build.
+(`../ago-root/docs/runbooks/local-dev.md`).
+
+At runtime `config.ts` resolves the API origin in three steps (`#337`): the script tag's own
+`data-api` attribute, if present; otherwise the origin the widget's own `<script>` was loaded from
+(`adr/0092` - the canonical bundle is served from the API's own origin, so for a real hosted tenant
+that origin already is the right answer, and a future hostname rename no longer needs a bundle
+already cached in a visitor's browser to be rebuilt); otherwise this build's baked-in
+`AGO_API_BASE_URL`. `data-api` still exists because inference is wrong for `public-demo/` and
+`public-demo-2/`, which each serve their own copy of the bundle from their own origin -
+`src/demo/boot.ts`'s `bootWidget` sets `data-api` on the injected tag explicitly so those two pages
+never fall through to inferring themselves as the API.
 
 `AGO_COMMIT` is optional and defaults to `unknown`. It is the commit the bundle was built from, and
 it ends up on `window.AgoChat.commit` in the browser - `15-07`/`adr/0051`. The .NET hosts answer the

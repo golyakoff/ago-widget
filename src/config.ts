@@ -1,11 +1,20 @@
 /**
  * `data-site` on the `<script>` tag identifies the tenant (embeddable-widget skill's Bootstrap
- * section) - the one piece of config every embed must supply. `data-api` is additive: the public
- * bundle's own default points at the real deployment, and a local build (the demo page, this
- * repo's own dev loop) overrides it to the local cluster's `Ago.Chat.Api` instead of baking a
- * second build just for that - config the CI-built artifact and the demo page both consume through
- * the same script tag, matching the site key's own precedent rather than inventing a build-time
- * environment-variable story a single static bundle does not otherwise need.
+ * section) - the one piece of config every embed must supply.
+ *
+ * `#337`: `apiBaseUrl` resolves in three steps, `data-api` (explicit) -> the script's own origin
+ * (inferred) -> `__AGO_DEFAULT_API_BASE_URL__` (baked at build time). `adr/0092` is what makes the
+ * middle step sound: the canonical bundle is now served from the API's own origin
+ * (`https://chat-api.reserve-me.ru/widget/`), so for a real hosted tenant the origin the script was
+ * *loaded from* already is the right answer, and a future hostname rename stops needing a new
+ * build baked into every browser that already cached the old one (the three-step migration
+ * `adr/0091` paid once). The baked constant still exists for the one case inference cannot cover -
+ * a local `npx serve` loop with no real origin to speak of - and `data-api` still exists to force an
+ * origin explicitly, which is load-bearing for `public-demo/`/`public-demo-2/`: those two pages
+ * serve their own copy of the bundle from their own origin (`demo-shop1`/`demo-shop2`), so inferring
+ * from `script.src` there would resolve to the demo shop, not the API. `src/demo/boot.ts`'s
+ * `bootWidget` sets `data-api` on the injected tag for exactly that reason - the demo pages must
+ * win the resolution at step one, never fall through to step two.
  *
  * `8-06`: `data-demo-notice` is the third, and is a flag rather than a free-text notice string on
  * purpose. The sentence it turns on is *this widget's* sentence about *our* demo pages, not a
@@ -84,7 +93,7 @@ export function readConfig(script: HTMLScriptElement): WidgetConfig {
     throw new MissingSiteKeyError();
   }
 
-  const apiBaseUrl = script.dataset["api"] ?? __AGO_DEFAULT_API_BASE_URL__;
+  const apiBaseUrl = script.dataset["api"] ?? inferApiBaseUrl(script.src) ?? __AGO_DEFAULT_API_BASE_URL__;
   return {
     siteKey,
     apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
@@ -92,6 +101,33 @@ export function readConfig(script: HTMLScriptElement): WidgetConfig {
     bookingModuleEnabled: script.dataset["booking"] === "true",
     scriptUrl: script.src,
   };
+}
+
+/**
+ * `#337`: the middle step of `readConfig`'s resolution order - `script.src`'s own origin, stripped
+ * of the `/widget/ago-chat.js` path `scriptUrl` (above) deliberately keeps. `undefined` rather than
+ * a guess or a throw whenever the origin is not one a request could actually reach, so the caller's
+ * `??` falls through to the baked constant exactly as if this step were not run at all:
+ *
+ * - **No `src` at all** (an inline `<script>`, or one whose attribute was never set) - the DOM
+ *   itself gives `""` for `.src` in that case, not a URL to parse.
+ * - **An opaque origin** - `about:blank`, `data:`, and similar give a `URL#origin` of the literal
+ *   string `"null"` per the URL Standard. Returning that string would make `apiBaseUrl` the four
+ *   characters `"null"`, which is worse than falling through: it looks like a configured value.
+ * - **Anything `new URL` cannot parse** - defensive; `script.src` is already DOM-resolved and
+ *   absolute, so this should not happen outside a test double.
+ */
+function inferApiBaseUrl(scriptSrc: string): string | undefined {
+  if (!scriptSrc) {
+    return undefined;
+  }
+
+  try {
+    const origin = new URL(scriptSrc).origin;
+    return origin === "null" ? undefined : origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

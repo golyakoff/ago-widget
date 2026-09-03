@@ -7,7 +7,10 @@
   glance, not just true underneath.
 
   Served from its own nginx container (Dockerfile, DEMO_PAGE_DIR=public-demo-2 build arg) at
-  https://demo-shop2.reserve-me.ru - same-origin script/page, same as demo-shop1's own page.
+  https://demo-shop2.reserve-me.ru - same-origin script/page, same as demo-shop1's own page, and
+  the same reason demo-boot.js's data-api attribute is load-bearing here too (#337, see
+  public-demo/index.html's own comment): left to adr/0092's origin inference, this page's widget
+  would infer its own origin - demo-shop2's, not the API's.
 -->
 <html lang="en">
   <head>

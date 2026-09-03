@@ -7,9 +7,13 @@
   operator console").
 
   Served from the same nginx container as the built widget bundle (Dockerfile in this repository's
-  root) at https://demo-shop1.reserve-me.ru - script and page share one origin deliberately, so the
-  <script> tag below can reference ./ago-chat.js with no data-api override: the bundle already has
-  https://chat-api.reserve-me.ru baked in at build time (AGO_API_BASE_URL, build.mjs).
+  root) at https://demo-shop1.reserve-me.ru - script and page share one origin deliberately, which is
+  exactly what makes an explicit data-api override load-bearing rather than optional (#337, adr/0092):
+  the widget now infers its API origin from wherever its own <script> tag was loaded from, and this
+  page's copy of the bundle is loaded from this page's own origin, not the API's. Left to inference,
+  this page's widget would call itself. demo-boot.js (src/demo/boot.ts's bootWidget) sets data-api on
+  the injected <script> tag explicitly, to the same https://chat-api.reserve-me.ru baked in at build
+  time (AGO_API_BASE_URL, build.mjs) - so the value is unchanged, only who states it.
 -->
 <html lang="ru">
   <head>

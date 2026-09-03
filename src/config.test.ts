@@ -74,6 +74,56 @@ describe("readConfig", () => {
   });
 });
 
+/**
+ * `#337`: `apiBaseUrl` resolves `data-api` -> the script's own origin -> the baked-in default
+ * (`adr/0092`'s follow-up). The demo-shop case below is the one that matters most: it is the exact
+ * regression that would take down both public demo pages if the ordering were ever silently
+ * inverted, and it is written to fail if `data-api` stopped winning over inference.
+ */
+describe("readConfig apiBaseUrl resolution (#337)", () => {
+  it("infers the API origin from the script's own src when data-api is absent", () => {
+    const config = readConfig(
+      scriptWith({ "data-site": "shop_1", src: "https://chat-api.reserve-me.ru/widget/ago-chat.js" }),
+    );
+    // Stripped to the origin - not the /widget/ago-chat.js path, and not /widget either.
+    expect(config.apiBaseUrl).toBe("https://chat-api.reserve-me.ru");
+  });
+
+  /**
+   * The regression this item exists to prevent, made concrete: a bundle loaded from a demo shop's
+   * own origin, exactly as `public-demo`/`public-demo-2` serve it, but with the `data-api` attribute
+   * `src/demo/boot.ts`'s `bootWidget` now always sets. If `data-api` ever stopped winning over
+   * inference, this would assert the demo shop's own origin instead and fail.
+   */
+  it("prefers data-api over the inferred origin, even when the script was loaded from a demo shop", () => {
+    const config = readConfig(
+      scriptWith({
+        "data-site": "shop_1",
+        "data-api": "https://chat-api.reserve-me.ru",
+        src: "https://demo-shop1.reserve-me.ru/ago-chat.js",
+      }),
+    );
+    expect(config.apiBaseUrl).toBe("https://chat-api.reserve-me.ru");
+    expect(config.apiBaseUrl).not.toBe("https://demo-shop1.reserve-me.ru");
+  });
+
+  it("falls back to the baked-in default for an inline script, which has no src to infer from", () => {
+    // No `src` attribute at all - the DOM's own `.src` getter is "" in that case, not a URL.
+    expect(readConfig(scriptWith({ "data-site": "shop_1" })).apiBaseUrl).toBe("https://built-in.example");
+  });
+
+  /**
+   * `about:blank` and similar give `URL#origin` the literal string `"null"` (an opaque origin, per
+   * the URL Standard) rather than throwing. Falling through to the baked default is correct;
+   * returning the four characters `"null"` as though it were a configured API origin is not.
+   */
+  it("falls back to the baked-in default rather than the string \"null\" for an opaque origin", () => {
+    expect(readConfig(scriptWith({ "data-site": "shop_1", src: "about:blank" })).apiBaseUrl).toBe(
+      "https://built-in.example",
+    );
+  });
+});
+
 // `20-07`. Down from `20-06`'s two required attributes to one boolean - the default is still what
 // matters most: a shop that bought chat and not booking must not get a module chip, and must not
 // have the bundle fetch a lazy module bundle it has no use for.

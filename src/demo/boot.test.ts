@@ -15,7 +15,7 @@ describe("bootWidget", () => {
   it("injects the widget script carrying the resolved key as data-site", () => {
     bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "public", "https://chat-api.example");
 
-    const script = document.querySelector<HTMLScriptElement>('script[src="./ago-chat.js"]');
+    const script = document.querySelector<HTMLScriptElement>('script[src="./widget.js"]');
     expect(script).not.toBeNull();
     expect(script?.getAttribute("data-site")).toBe("demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071");
     expect(script?.async).toBe(true);
@@ -33,7 +33,7 @@ describe("bootWidget", () => {
   it("sets data-api explicitly, so a demo shop's own origin can never be inferred instead", () => {
     bootWidget(document, "demo_site", "public", "https://chat-api.reserve-me.ru");
 
-    const script = document.querySelector<HTMLScriptElement>('script[src="./ago-chat.js"]');
+    const script = document.querySelector<HTMLScriptElement>('script[src="./widget.js"]');
     expect(script?.getAttribute("data-api")).toBe("https://chat-api.reserve-me.ru");
   });
 

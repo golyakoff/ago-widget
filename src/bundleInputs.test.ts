@@ -13,7 +13,7 @@ import path from "node:path";
  * asserted, for `src/modules/` exactly as that section already covered `src/demo/`.
  *
  * Runs a real build (not a mock, not a hand-parsed source scan) with `AGO_WRITE_METAFILE=1` and reads
- * esbuild's own record of what actually went into `dist/ago-chat.js` - the only source of truth for
+ * esbuild's own record of what actually went into `dist/widget.js` - the only source of truth for
  * "was this file bundled" a comment or a stale assumption cannot fool. The **fails-before** for this
  * test is a static top-level `import` from `src/modules/booking/chip.ts` added to `src/index.ts` or
  * `src/ui/widget.ts` - with that import present this assertion fails, and reverting it (back to the

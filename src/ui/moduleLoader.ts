@@ -6,7 +6,7 @@
  *
  * **Why a runtime-computed URL, not a relative specifier.** `import("../modules/booking/chip.js")`
  * written as a string literal is exactly the shape esbuild *can* resolve at build time, and it would
- * happily inline the whole module back into `dist/ago-chat.js` - silently defeating the split this
+ * happily inline the whole module back into `dist/widget.js` - silently defeating the split this
  * item exists to build. `fileName` only ever becomes part of a URL assembled at runtime
  * (`new URL(...)`), so the argument `import()` actually receives is a variable esbuild cannot
  * statically resolve - the same reason esbuild leaves an unresolvable dynamic import alone rather

@@ -500,7 +500,7 @@ export class ChatWidget {
 
   /**
    * `20-07`: loads the booking module's own chip copy from its lazily-built bundle
-   * (`build.mjs`'s third entry point, `dist/ago-chat-module-booking.js`) and reveals the chip only
+   * (`build.mjs`'s third entry point, `dist/widget-module-booking.js`) and reveals the chip only
    * once it has it. `ui/moduleLoader.ts`'s own doc comment covers why the specifier reaching
    * `import()` is a runtime-computed URL rather than a literal - that, not this method, is what keeps
    * `src/modules/booking/` out of the base bundle's inputs.
@@ -518,7 +518,7 @@ export class ChatWidget {
     await this.sessionPromise;
     const bookingModule = await loadModule<{ bookingChipSpec: (locale: SupportedLocale) => ModuleChipSpec }>(
       this.config.scriptUrl,
-      "ago-chat-module-booking.js",
+      "widget-module-booking.js",
     );
     const spec = bookingModule.bookingChipSpec(this.locale);
 

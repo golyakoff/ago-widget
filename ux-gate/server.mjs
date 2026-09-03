@@ -6,7 +6,7 @@
  * through `build.mjs` and has no server of its own, and adding one (`serve`, `http-server`) would be
  * a production dependency's worth of supply chain for the sake of `GET` on eight files.
  *
- * Serves the repository root, so `demo/index.html`'s own `../dist/ago-chat.js` resolves exactly as it
+ * Serves the repository root, so `demo/index.html`'s own `../dist/widget.js` resolves exactly as it
  * does when a developer opens that page by hand. That matters: this gate measures the widget as the
  * demo page loads it, not as some gate-only harness loads it.
  */

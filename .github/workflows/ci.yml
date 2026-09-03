@@ -154,7 +154,7 @@ jobs:
             echo "${name}: ${served}"
             echo "${served}" | grep -q '"commit":"${{ github.sha }}"'
             docker run --rm --entrypoint grep "${repo}:${{ github.sha }}" \
-              -q '${{ github.sha }}' /usr/share/nginx/html/ago-chat.js
+              -q '${{ github.sha }}' /usr/share/nginx/html/widget.js
           done
 
       # `17-04`/`15-06`: scans before push for the same reason ago-chat's own publish-images job does

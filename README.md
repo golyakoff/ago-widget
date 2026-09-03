@@ -3,7 +3,7 @@
 The script a shop embeds on its own site:
 
 ```html
-<script src="https://cdn.example/ago-chat.js" data-site="shop_7f3a" async></script>
+<script src="https://cdn.example/widget.js" data-site="shop_7f3a" async></script>
 ```
 
 It has its own repository because it has its own release cadence: a shop cannot be forced to update
@@ -127,7 +127,7 @@ survives being embedded on somebody else's origin.
 module-contract rework landed on the same branch together (`AGO_API_BASE_URL=http://localhost:5009
 AGO_COMMIT=$(git rev-parse HEAD) npm run build`). Neither number in the two paragraphs immediately
 below, each taken in isolation against its own base commit, reflects what actually ships - this one
-does. Leaves 18.5 KB of the 45 KB budget unused. `dist/ago-chat-module-booking.js` stays 0.23 KB
+does. Leaves 18.5 KB of the 45 KB budget unused. `dist/widget-module-booking.js` stays 0.23 KB
 gzipped, unaffected by `16-04` (a different file, not counted against this budget).
 
 **28.7 KB gzipped** (110.0 KB raw, minified), `16-04` measured 2026-08-29 against a clean build of
@@ -154,7 +154,7 @@ generic, permanent renderers plus the reply-wiring in `ui/widget.ts` - is genuin
 widget functionality (it is what makes ADR-0065 §4's claim true: "the widget is written once and does
 not grow per module"), and it costs more than the single-purpose booking flow it replaces saved.
 
-**`20-07`'s own lazy module bundle, `dist/ago-chat-module-booking.js`, is 0.23 KB gzipped** - not
+**`20-07`'s own lazy module bundle, `dist/widget-module-booking.js`, is 0.23 KB gzipped** - not
 counted against the widget budget above (fetched, if at all, only by a site with booking enabled,
 the same accounting `demo-boot.js` already gets). This is the honest answer to "how much of
 `src/booking/` turned out to be genuinely module-specific once the generic renderers existed":
@@ -190,14 +190,14 @@ gzipped**) is the two public demo pages' own boot script - it resolves `?site=`,
 esbuild entry point on purpose (`ago-root/docs/adr/0058`): the query parameter belongs to the demo
 page and must never be read by the widget, because a widget that read its host page's URL could be
 repointed at another tenant by any page embedding it. Only the demo pages load it; **no tenant
-embedding the widget downloads a byte of it**, which the build's own metafile confirms - `dist/ago-chat.js`
+embedding the widget downloads a byte of it**, which the build's own metafile confirms - `dist/widget.js`
 has zero inputs from `src/demo/`. The widget bundle is byte-for-byte unaffected by that item.
 
 **`20-07` adds a third bundle, and it is not loaded by a `<script>` tag at all.**
-`dist/ago-chat-module-booking.js` is an ES module, fetched at runtime by `ui/moduleLoader.ts`'s
+`dist/widget-module-booking.js` is an ES module, fetched at runtime by `ui/moduleLoader.ts`'s
 `loadModule` via a genuine, browser-native dynamic `import()` of a URL computed relative to the
 widget's own `<script src>` - never a literal `import()` esbuild could resolve and quietly inline
-back into `dist/ago-chat.js`, which is what a hand-rolled code-splitting scheme this small has to get
+back into `dist/widget.js`, which is what a hand-rolled code-splitting scheme this small has to get
 right for the split to mean anything. Only a site with `data-booking="true"` ever fetches it, and it
 fetches once, at boot, not on the visitor's first click.
 
@@ -221,7 +221,7 @@ AGO_API_BASE_URL=http://localhost:5009 npm run build
 npx serve -l 8080 .
 ```
 
-The whole repository, not just `demo/` - `demo/index.html` references `../dist/ago-chat.js`, and a
+The whole repository, not just `demo/` - `demo/index.html` references `../dist/widget.js`, and a
 static server rooted at `demo/` alone cannot serve a path outside its own root (found live: `serve -l
 8080 demo` 404s on the bundle). With the local cluster up
 (`../ago-root/docs/runbooks/local-dev.md`) and the demo tenant seeded, open
@@ -288,7 +288,7 @@ section. What this repository actually has:
   answer still submits as free text, never reinterpreted as an action's value; and no request this
   widget makes ever names `calendar` in its URL, because there is no HTTP client left that could.
 - **The base bundle's own inputs** (`bundleInputs.test.ts`): builds the real bundle and reads
-  esbuild's own metafile - `dist/ago-chat.js` contains zero files from `src/modules/`. The first
+  esbuild's own metafile - `dist/widget.js` contains zero files from `src/modules/`. The first
   automated version of `adr/0065`'s bundle-input guard in this repository; see "Bundle size" above.
 
 **Deliberately not tested, and why**

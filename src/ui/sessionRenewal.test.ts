@@ -37,7 +37,7 @@ const config: WidgetConfig = {
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
   bookingModuleEnabled: false,
-  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
+  scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
 function tokenMintedAt(mintedAt: number): string {

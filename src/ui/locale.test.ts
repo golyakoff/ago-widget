@@ -29,7 +29,7 @@ const config: WidgetConfig = {
   // from a lazy bundle this file has no reason to mock) - panel chrome and connection status are
   // this file's whole subject, unrelated to whether a booking module is enabled.
   bookingModuleEnabled: false,
-  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
+  scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
 function joinResult() {

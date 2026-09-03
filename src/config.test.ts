@@ -83,9 +83,9 @@ describe("readConfig", () => {
 describe("readConfig apiBaseUrl resolution (#337)", () => {
   it("infers the API origin from the script's own src when data-api is absent", () => {
     const config = readConfig(
-      scriptWith({ "data-site": "shop_1", src: "https://chat-api.reserve-me.ru/widget/ago-chat.js" }),
+      scriptWith({ "data-site": "shop_1", src: "https://chat-api.reserve-me.ru/widget/widget.js" }),
     );
-    // Stripped to the origin - not the /widget/ago-chat.js path, and not /widget either.
+    // Stripped to the origin - not the /widget/widget.js path, and not /widget either.
     expect(config.apiBaseUrl).toBe("https://chat-api.reserve-me.ru");
   });
 
@@ -100,7 +100,7 @@ describe("readConfig apiBaseUrl resolution (#337)", () => {
       scriptWith({
         "data-site": "shop_1",
         "data-api": "https://chat-api.reserve-me.ru",
-        src: "https://demo-shop1.reserve-me.ru/ago-chat.js",
+        src: "https://demo-shop1.reserve-me.ru/widget.js",
       }),
     );
     expect(config.apiBaseUrl).toBe("https://chat-api.reserve-me.ru");
@@ -152,8 +152,8 @@ describe("readConfig booking module", () => {
 describe("readConfig scriptUrl", () => {
   it("reads the script tag's own absolute src, resolved by the DOM rather than read as a raw attribute", () => {
     const config = readConfig(
-      scriptWith({ "data-site": "shop_1", src: "https://cdn.example/dist/ago-chat.js" }),
+      scriptWith({ "data-site": "shop_1", src: "https://cdn.example/dist/widget.js" }),
     );
-    expect(config.scriptUrl).toBe("https://cdn.example/dist/ago-chat.js");
+    expect(config.scriptUrl).toBe("https://cdn.example/dist/widget.js");
   });
 });

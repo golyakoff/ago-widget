@@ -45,7 +45,7 @@ const chatOnly: WidgetConfig = {
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
   bookingModuleEnabled: false,
-  scriptUrl: "https://cdn.test.invalid/dist/ago-chat.js",
+  scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
 const withBooking: WidgetConfig = { ...chatOnly, bookingModuleEnabled: true };
@@ -132,7 +132,7 @@ describe("the module invocation chip", () => {
     const root = await mountAndOpen(withBooking);
     await flush();
 
-    expect(loadModuleMock).toHaveBeenCalledWith(withBooking.scriptUrl, "ago-chat-module-booking.js");
+    expect(loadModuleMock).toHaveBeenCalledWith(withBooking.scriptUrl, "widget-module-booking.js");
 
     const chip = root.querySelector<HTMLButtonElement>(".ago-module-chip")!;
     expect(chip.hidden).toBe(false);

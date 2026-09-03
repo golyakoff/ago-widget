@@ -9,14 +9,14 @@ import { moduleBundleUrl } from "./moduleLoader.js";
  */
 describe("moduleBundleUrl", () => {
   it("resolves a sibling file next to the widget's own script, not the host page's own address", () => {
-    expect(moduleBundleUrl("https://cdn.example/dist/ago-chat.js", "ago-chat-module-booking.js")).toBe(
-      "https://cdn.example/dist/ago-chat-module-booking.js",
+    expect(moduleBundleUrl("https://cdn.example/dist/widget.js", "widget-module-booking.js")).toBe(
+      "https://cdn.example/dist/widget-module-booking.js",
     );
   });
 
   it("resolves against a path with query parameters on the widget's own script tag", () => {
-    expect(moduleBundleUrl("https://cdn.example/ago-chat.js?v=3", "ago-chat-module-booking.js")).toBe(
-      "https://cdn.example/ago-chat-module-booking.js",
+    expect(moduleBundleUrl("https://cdn.example/widget.js?v=3", "widget-module-booking.js")).toBe(
+      "https://cdn.example/widget-module-booking.js",
     );
   });
 });

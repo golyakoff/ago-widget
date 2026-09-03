@@ -78,14 +78,14 @@ LABEL org.opencontainers.image.source="https://github.com/golyakoff/ago-widget" 
 # header comment for the incident that found it and why `no-cache` (revalidate-always) is the correct
 # policy for every file this image serves, not `no-store` or a long max-age.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist/ago-chat.js /usr/share/nginx/html/ago-chat.js
-COPY --from=build /app/dist/ago-chat.js.map /usr/share/nginx/html/ago-chat.js.map
+COPY --from=build /app/dist/widget.js /usr/share/nginx/html/widget.js
+COPY --from=build /app/dist/widget.js.map /usr/share/nginx/html/widget.js.map
 # `20-07`: the booking module's own lazily-loaded chunk (build.mjs's third entry point). Served as a
-# sibling of ago-chat.js because ui/moduleLoader.ts resolves it relative to the widget's own <script
-# src> - the same directory a real deployment already serves ago-chat.js from, which this static-file
+# sibling of widget.js because ui/moduleLoader.ts resolves it relative to the widget's own <script
+# src> - the same directory a real deployment already serves widget.js from, which this static-file
 # image happens to be nginx's document root.
-COPY --from=build /app/dist/ago-chat-module-booking.js /usr/share/nginx/html/ago-chat-module-booking.js
-COPY --from=build /app/dist/ago-chat-module-booking.js.map /usr/share/nginx/html/ago-chat-module-booking.js.map
+COPY --from=build /app/dist/widget-module-booking.js /usr/share/nginx/html/widget-module-booking.js
+COPY --from=build /app/dist/widget-module-booking.js.map /usr/share/nginx/html/widget-module-booking.js.map
 # The nginx base image ships its own `index.html` - the stock "Welcome to nginx!" page. Harmless in
 # the demo images, which overwrite it, but this stage is served at a *public* URL where it would
 # answer `/widget/` with a default welcome page that also announces what the server is. Removed here;

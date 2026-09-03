@@ -21,7 +21,7 @@ if (!apiBaseUrl) {
 
 // `15-07`: the commit this bundle was built from, baked in the same way the version already is.
 // The widget is the one artifact here that is *not* loaded from an origin we control - a tenant's
-// page fetches ago-chat.js and nothing else, so the version.json the container serves next to it
+// page fetches widget.js and nothing else, so the version.json the container serves next to it
 // (Dockerfile) is not something that page can see. `window.AgoChat.commit` is the widget's own
 // answer to the question `GET /healthz/version` answers for the .NET hosts.
 //
@@ -64,7 +64,7 @@ const result = await build({
   minify: true,
   format: "iife",
   target: "es2022",
-  outfile: "dist/ago-chat.js",
+  outfile: "dist/widget.js",
   sourcemap: true,
   metafile: true,
   define: {
@@ -81,7 +81,7 @@ const result = await build({
 // browser fetches on its own, later, via `ui/moduleLoader.ts`'s runtime `import()`). `format: "esm"`
 // here (not `iife`) because native dynamic `import()` expects an ES module on the other end; the
 // specifier `ui/moduleLoader.ts` builds is a runtime string esbuild cannot see while bundling
-// `src/index.ts` above, which is what keeps `src/modules/**` out of `dist/ago-chat.js`'s own inputs
+// `src/index.ts` above, which is what keeps `src/modules/**` out of `dist/widget.js`'s own inputs
 // (`bundleInputs.test.ts` proves this holds).
 await build({
   entryPoints: ["src/modules/booking/chip.ts"],
@@ -89,11 +89,11 @@ await build({
   minify: true,
   format: "esm",
   target: "es2022",
-  outfile: "dist/ago-chat-module-booking.js",
+  outfile: "dist/widget-module-booking.js",
   sourcemap: true,
 });
 
-const bundleBytes = readFileSync("dist/ago-chat.js");
+const bundleBytes = readFileSync("dist/widget.js");
 const gzipBytes = gzipSync(bundleBytes).length;
 const gzipKb = (gzipBytes / 1024).toFixed(1);
 const budgetKb = (GZIP_BUDGET_BYTES / 1024).toFixed(0);
@@ -111,7 +111,7 @@ console.log(`Demo boot: ${demoGzipKb} KB gzipped (demo pages only, not part of t
 // `20-07`: fetched only by a site with the booking module enabled, only once - not part of the base
 // budget above, the same accounting `demo-boot.js` already gets, for the same reason (a different
 // artifact, downloaded by a different subset of visitors, if at all).
-const bookingModuleGzipKb = (gzipSync(readFileSync("dist/ago-chat-module-booking.js")).length / 1024).toFixed(2);
+const bookingModuleGzipKb = (gzipSync(readFileSync("dist/widget-module-booking.js")).length / 1024).toFixed(2);
 console.log(`Booking module: ${bookingModuleGzipKb} KB gzipped (lazily loaded, not part of the widget budget)`);
 
 if (process.env["AGO_WRITE_METAFILE"]) {

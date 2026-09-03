@@ -32,7 +32,7 @@ declare const __AGO_DEFAULT_API_BASE_URL__: string;
  * `__AGO_DEFAULT_API_BASE_URL__`, matching `wireMintButton`'s existing pattern of taking it as a
  * parameter rather than reading the module-level `declare const` here, so a test can supply a
  * demo-shop-shaped value and prove it wins). `config.ts`'s resolution order is `data-api` first,
- * then the script's own origin - and this page's script tag has `src="./ago-chat.js"`, resolved by
+ * then the script's own origin - and this page's script tag has `src="./widget.js"`, resolved by
  * the DOM against *this page's own origin* (`demo-shop1`/`demo-shop2`), which is never the API's.
  * Without this attribute, `adr/0092`'s origin-inference would read this demo page's own address as
  * the API to call and both public demo pages would talk to themselves instead of `Ago.Chat.Api`.
@@ -44,7 +44,7 @@ export function bootWidget(
   apiBaseUrl: string,
 ): HTMLScriptElement {
   const script = doc.createElement("script");
-  script.src = "./ago-chat.js";
+  script.src = "./widget.js";
   script.async = true;
   script.setAttribute("data-site", siteKey);
   script.setAttribute("data-api", apiBaseUrl);

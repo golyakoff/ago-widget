@@ -105,7 +105,7 @@ export function readConfig(script: HTMLScriptElement): WidgetConfig {
 
 /**
  * `#337`: the middle step of `readConfig`'s resolution order - `script.src`'s own origin, stripped
- * of the `/widget/ago-chat.js` path `scriptUrl` (above) deliberately keeps. `undefined` rather than
+ * of the `/widget/widget.js` path `scriptUrl` (above) deliberately keeps. `undefined` rather than
  * a guess or a throw whenever the origin is not one a request could actually reach, so the caller's
  * `??` falls through to the baked constant exactly as if this step were not run at all:
  *

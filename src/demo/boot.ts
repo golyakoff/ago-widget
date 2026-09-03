@@ -27,12 +27,27 @@ declare const __AGO_DEFAULT_API_BASE_URL__: string;
  * the attribute has to be correct *before* the element is in the document, and an inline script placed
  * earlier cannot reach a tag the parser has not seen yet. A dynamically appended classic script still
  * gets a valid `document.currentScript`, which is what makes this work at all.
+ *
+ * `#337`: always sets `data-api` explicitly, to `apiBaseUrl` (the caller's own
+ * `__AGO_DEFAULT_API_BASE_URL__`, matching `wireMintButton`'s existing pattern of taking it as a
+ * parameter rather than reading the module-level `declare const` here, so a test can supply a
+ * demo-shop-shaped value and prove it wins). `config.ts`'s resolution order is `data-api` first,
+ * then the script's own origin - and this page's script tag has `src="./ago-chat.js"`, resolved by
+ * the DOM against *this page's own origin* (`demo-shop1`/`demo-shop2`), which is never the API's.
+ * Without this attribute, `adr/0092`'s origin-inference would read this demo page's own address as
+ * the API to call and both public demo pages would talk to themselves instead of `Ago.Chat.Api`.
  */
-export function bootWidget(doc: Document, siteKey: string, notice: DemoNotice): HTMLScriptElement {
+export function bootWidget(
+  doc: Document,
+  siteKey: string,
+  notice: DemoNotice,
+  apiBaseUrl: string,
+): HTMLScriptElement {
   const script = doc.createElement("script");
   script.src = "./ago-chat.js";
   script.async = true;
   script.setAttribute("data-site", siteKey);
+  script.setAttribute("data-api", apiBaseUrl);
   if (notice !== "none") {
     // `8-11`: which sentence, decided from the tenant rather than from the page.
     //
@@ -171,7 +186,9 @@ function start(): void {
 
   const run = (): void => {
     // `8-11`: the notice follows the tenant now, not the page.
-    bootWidget(document, siteKey, notice);
+    // `#337`: the API origin is always passed explicitly - see `bootWidget`'s own comment for why
+    // this page cannot rely on origin inference the way a real tenant's embed now can.
+    bootWidget(document, siteKey, notice, __AGO_DEFAULT_API_BASE_URL__);
 
     if (isOwnTenant) {
       applyOwnTenantPageCopy(document);

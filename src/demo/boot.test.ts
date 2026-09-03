@@ -13,12 +13,28 @@ describe("bootWidget", () => {
    * page hosting it.
    */
   it("injects the widget script carrying the resolved key as data-site", () => {
-    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "public");
+    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "public", "https://chat-api.example");
 
     const script = document.querySelector<HTMLScriptElement>('script[src="./ago-chat.js"]');
     expect(script).not.toBeNull();
     expect(script?.getAttribute("data-site")).toBe("demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071");
     expect(script?.async).toBe(true);
+  });
+
+  /**
+   * `#337`: the whole reason this page cannot rely on `adr/0092`'s origin inference.
+   * `public-demo`/`public-demo-2` each serve their own copy of the bundle from their own origin
+   * (`demo-shop1.reserve-me.ru`/`demo-shop2.reserve-me.ru`), so a script tag with only `data-site` and
+   * no `data-api` would have `config.ts` infer the *demo shop's* origin as the API to call - both
+   * public demo pages would talk to themselves instead of `Ago.Chat.Api`. This asserts the attribute
+   * a demo-shop-shaped embed needs to win `config.ts`'s resolution order at step one, and would fail
+   * exactly the way a silent regression here would: no `data-api` attribute, or the wrong value.
+   */
+  it("sets data-api explicitly, so a demo shop's own origin can never be inferred instead", () => {
+    bootWidget(document, "demo_site", "public", "https://chat-api.reserve-me.ru");
+
+    const script = document.querySelector<HTMLScriptElement>('script[src="./ago-chat.js"]');
+    expect(script?.getAttribute("data-api")).toBe("https://chat-api.reserve-me.ru");
   });
 
   /**
@@ -28,16 +44,16 @@ describe("bootWidget", () => {
    * the panel that had just handed over the credentials.
    */
   it("asks for the public notice on a shared shop and the private one on a minted tenant", () => {
-    bootWidget(document, "demo_site", "public");
+    bootWidget(document, "demo_site", "public", "https://chat-api.example");
     expect(document.querySelector("script")?.getAttribute("data-demo-notice")).toBe("public");
 
     document.body.replaceChildren();
-    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "private");
+    bootWidget(document, "demo_0199a1f2c4d34b7e8a1b2c3d4e5f6071", "private", "https://chat-api.example");
     expect(document.querySelector("script")?.getAttribute("data-demo-notice")).toBe("private");
   });
 
   it("asks for no notice at all when told none", () => {
-    bootWidget(document, "demo_site", "none");
+    bootWidget(document, "demo_site", "none", "https://chat-api.example");
     expect(document.querySelector("script")?.hasAttribute("data-demo-notice")).toBe(false);
   });
 });

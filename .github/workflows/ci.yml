@@ -19,16 +19,38 @@ jobs:
       - name: Install
         run: npm ci
 
-      # 17-04: severity threshold and fail/report policy, stated in full in ago-platform's ci.yml and
-      # docs/runbooks/vulnerability-response.md (ago-root) - Critical/High fails the build, Moderate/Low
-      # is reported but does not, because a check that blocks every branch on an untriaged Low advisory
-      # nobody can act on trains people to ignore red CI rather than read it. `npm audit
-      # --audit-level=high` does both in one command: the human-readable report still lists every
-      # severity (verified locally - a real Low-severity esbuild advisory, GHSA-g7r4-m6w7-qqqr, prints
-      # in full here), and only Critical/High affects the exit code, so nothing needs separate parsing
-      # the way the .NET side does.
+      # `17-13`: `npm audit` exits 1 both when it finds a High/Critical advisory and when it cannot
+      # reach the advisory endpoint at all. Under a step named "Vulnerability check", the second reads
+      # as the first - on 2026-09-04 the registry answered 503 on three consecutive attempts and the
+      # only log line was "Process completed with exit code 1", which says "vulnerable" to every
+      # reader. They are opposite facts: one is something to fix, the other is nothing having been
+      # checked.
+      #
+      # An outage still fails the build, deliberately. Passing on "could not look" is the silent
+      # direction, and it would let a branch merge with its dependencies unchecked while CI reads
+      # green - the same reasoning `tools/queue-audit.sh` (ago-root) states for an unreachable GitHub.
+      # What changes is that the log now says which of the two happened.
+      #
+      # Three attempts with backoff, because a bulk POST to the registry is exactly the shape that
+      # fails transiently. They are not a fix for a sustained outage and are not meant to be: if the
+      # endpoint is genuinely down this stays red, and somebody decides with the reason visible.
       - name: Vulnerability check (npm audit)
-        run: npm audit --audit-level=high
+        run: |
+          for attempt in 1 2 3; do
+            if out=$(npm audit --audit-level=high 2>&1); then
+              echo "$out"
+              exit 0
+            fi
+            echo "$out"
+            if ! echo "$out" | grep -q 'audit endpoint returned an error'; then
+              echo "::error title=Vulnerability found::npm audit reports a High or Critical advisory. Read the report above."
+              exit 1
+            fi
+            echo "Attempt $attempt: the advisory endpoint did not answer. Retrying."
+            sleep $((attempt * 10))
+          done
+          echo "::error title=Not checked, the advisory endpoint is unreachable::This is NOT a vulnerability finding. npm audit could not reach the registry on three attempts, so nothing was checked. See docs/runbooks/vulnerability-response.md in ago-root."
+          exit 1
 
       - name: Typecheck
         run: npm run typecheck

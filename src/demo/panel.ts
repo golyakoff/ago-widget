@@ -78,8 +78,8 @@ function renderCredentials(tenant: MintedDemoTenant, now: Date): HTMLElement {
   steps.appendChild(
     step(
       "Open the operator console in a private window",
-      "console.reserve-me.ru",
-      "https://console.reserve-me.ru",
+      "office.reserve-me.ru",
+      "https://office.reserve-me.ru",
     ),
   );
   steps.appendChild(

@@ -69,6 +69,33 @@ export const FALLBACK_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
  */
 export const RENEWAL_RETRY_THROTTLE_MS = 60 * 1000;
 
+/**
+ * `25-05`: a second, independent reason to renew, alongside the identity-token window above.
+ *
+ * `RENEWAL_THRESHOLD_FRACTION` answers "is this *identity* worth keeping alive" and is deliberately
+ * a fraction of the token's own lifetime, so it moves correctly if that lifetime ever does. Cached
+ * config (`storage.ts`'s `widget-color`/`widget-position`/`widget-locale`/notice fields) is a
+ * different question - "is this *rendering preference* still what the tenant last set" - and tying
+ * its freshness to the identity window means a token minted with a 7-day lifetime lets a returning
+ * visitor's browser hold a stale colour for up to `2/3` of that (the window only opens once less
+ * than a third remains), and pre-`17-07` this was unbounded: the browser never checked at all,
+ * which is what `24-15`'s own note that "the cached colour beside it is not [the interesting fact]"
+ * mattered.
+ *
+ * This is the defect `25-05` fixes: a returning visitor's browser - the ordinary case for anyone who
+ * embedded the widget on their own site to check a change, and identical to any repeat visitor - has
+ * a stored token nowhere near its renewal window on almost every reload, so `start()` made zero
+ * requests and the change from the console sat invisible until the stored session was cleared
+ * outright. `docs/backlog/25-05-*.md` and `adr/0140` have the full incident and the reasoning for
+ * this number over the alternatives (refetch on every load; leave it to the identity window).
+ *
+ * A day, because that is the number the console's own copy now promises and the number a tenant
+ * finds acceptable to explain to a visitor - not derived from any other constant here, and not
+ * meant to be: this is a UX freshness budget, not a security boundary, so it can move independently
+ * of `RENEWAL_THRESHOLD_FRACTION` or the token lifetime without either one caring.
+ */
+export const CONFIG_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 /** What `start()` resolves to. `restarted` is true only when a *stored* session was replaced by a
  * newly minted one, never for a first-ever visitor - the panel says something in that case, and
  * "welcome" is not the thing to say to someone whose conversation just went away. */
@@ -142,8 +169,11 @@ export class VisitorSessionManager {
    *
    * - **No stored session** - mint one. First-ever visitor; `restarted` is false.
    * - **A stored session with life left in it** - use it, renewing first if it is inside the
-   *   renewal window. Same `VisitorId`, so the conversation is still theirs. A renewal that fails
-   *   transiently here is not fatal: the stored token is still valid, and `token()` will try again.
+   *   renewal window **or** its cached config has gone stale (`25-05`: `isConfigStale`, a day, not
+   *   tied to the identity window above - see `CONFIG_REFRESH_INTERVAL_MS`'s own doc comment for
+   *   why the two are separate questions). Same `VisitorId` either way, so the conversation is still
+   *   theirs. A renewal that fails transiently here is not fatal: the stored token is still valid,
+   *   and `token()` will try again next time it is presented.
    * - **A stored session the server will not renew** (expired, or signed by a rotated-out key) -
    *   **mint a new identity, clear the conversation cursor, and report `restarted: true`.** The
    *   widget must keep working on a stranger's page, so refusing to start is not on the table; and
@@ -163,7 +193,7 @@ export class VisitorSessionManager {
     }
 
     this.session = stored;
-    if (!this.isInRenewalWindow(stored.token)) {
+    if (!this.isInRenewalWindow(stored.token) && !this.isConfigStale(stored.token)) {
       return { session: stored, restarted: false };
     }
 
@@ -172,7 +202,10 @@ export class VisitorSessionManager {
     } catch (error) {
       if (!(error instanceof VisitorSessionExpiredError)) {
         // Transient. The stored token has not expired yet - that is what put it in the *window*
-        // rather than past the end - so this page load carries on with it and `token()` retries.
+        // (or made its config stale) rather than past the end - so this page load carries on with
+        // it and `token()` retries the identity renewal on its own schedule. A stale config that
+        // could not be refreshed is not fatal either: the next page load tries again, same as any
+        // other transient renewal failure.
         return { session: stored, restarted: false };
       }
 
@@ -257,6 +290,27 @@ export class VisitorSessionManager {
   }
 
   /**
+   * `25-05`: true once `CONFIG_REFRESH_INTERVAL_MS` has passed since this token - and so the config
+   * cached alongside it - was last minted or renewed. Read from the token's own `nbf`/`iat`
+   * (`readTokenLifetime`) rather than a separate stored timestamp, for the identical reason
+   * `tokenExpiry.ts`'s own doc comment gives for `exp`: one answer, correct for every session already
+   * on a visitor's device rather than only the ones written after this shipped.
+   *
+   * False for a token with no readable issue time, same posture as `isInRenewalWindow`'s own
+   * "cannot tell, so do not guess renew" - an opaque or pre-`17-07` token neither field can compute
+   * a lifetime for gets treated as never stale by this check, exactly as it is never in the identity
+   * window either; the identity check still applies to it as it always did.
+   */
+  private isConfigStale(token: string): boolean {
+    const lifetime = readTokenLifetime(token);
+    if (lifetime === null || lifetime.issuedAtMs === null) {
+      return false;
+    }
+
+    return this.now() - lifetime.issuedAtMs >= CONFIG_REFRESH_INTERVAL_MS;
+  }
+
+  /**
    * `POST /api/v1/visitor-sessions/renew` - a fresh token for the **same** `VisitorId`. Re-minting
    * through the public endpoint instead would "work" and is exactly what loses the history, which is
    * why preserving the identity is the whole point of a separate endpoint rather than a flag on the
@@ -264,10 +318,12 @@ export class VisitorSessionManager {
    *
    * The response carries the same shape as the mint, so a renewal also refreshes the cached
    * `widgetPrimaryColorHex`/`widgetPosition`/`widgetLocale` (`11-10`'s own addition to this same
-   * shape). That closes `storage.ts`'s own `11-03` limitation as a
-   * side effect: it says fixing it "needs a session endpoint that can return current config without
-   * minting a new visitor", and this is that endpoint. The config a returning visitor sees is now at
-   * most one renewal window stale instead of frozen at the moment their identity was first minted.
+   * shape). That closed `storage.ts`'s own `11-03` limitation as a side effect: it says fixing it
+   * "needs a session endpoint that can return current config without minting a new visitor", and
+   * this is that endpoint. What was left after `17-07` was still bounded by the *identity* token's
+   * own renewal window - up to `2/3` of its 7-day lifetime, because the window only opens once less
+   * than a third of it remains - which is what `isConfigStale`/`CONFIG_REFRESH_INTERVAL_MS` (`25-05`)
+   * narrows further to a day, independent of how much life the identity token itself has left.
    */
   private renew(token: string): Promise<VisitorSession> {
     const inFlight = this.renewalInFlight;

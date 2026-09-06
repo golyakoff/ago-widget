@@ -71,7 +71,9 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     holds: "The tenant's configured accent colour for the widget, if they set one.",
     why: "Lets the widget render with the tenant's chosen colour immediately on the next page load, before the server confirms it again.",
     lifetime:
-      "Refreshed on every renewal of the session above; removed the moment the tenant unsets the colour - a cache of that one setting, not a record about the visitor.",
+      "Refreshed at least once a day for a returning visitor, and sooner if the identity token above " +
+      "is itself due for renewal (`25-05`); removed the moment the tenant unsets the colour - a cache " +
+      "of that one setting, not a record about the visitor.",
     survivesTabClose: true,
   },
   {
@@ -129,13 +131,18 @@ export interface VisitorSession {
    * *visitor's* handshake, which only ever happens once per visitor identity (`session.ts`'s
    * `VisitorSessionManager`: re-minting on every page view would fragment one visitor into many).
    *
-   * **`17-07` largely closed this.** The paragraph that stood here said fixing it "needs a session
-   * endpoint that can return current config without minting a new visitor", and that is exactly what
-   * `POST /api/v1/visitor-sessions/renew` is: it returns the same response shape, so every renewal
-   * rewrites these two fields. What is left of the limitation is bounded rather than permanent - a
-   * returning visitor's cached config is at most one renewal window stale (a third of the token
-   * lifetime), instead of frozen at the moment their identity was first minted - and `adr/0029`'s
-   * own stated limitation, that an *already-open* tab does not update live, is untouched.
+   * **`17-07` largely closed this, and `25-05` narrowed what it left.** The paragraph that stood
+   * here said fixing it "needs a session endpoint that can return current config without minting a
+   * new visitor", and that is exactly what `POST /api/v1/visitor-sessions/renew` is: it returns the
+   * same response shape, so every renewal rewrites these two fields. `17-07` alone still bounded a
+   * returning visitor's stale config to the *identity* token's own renewal window - up to `2/3` of
+   * its 7-day lifetime, since that window only opens once a third of it remains - which is what
+   * produced `25-05`: a visitor whose browser already held a live, out-of-window token (the ordinary
+   * case for anyone reloading a page they had open before) saw **no refresh at all** on an ordinary
+   * reload, only on `Clear site data` removing the stored token outright. `session.ts`'s
+   * `isConfigStale`/`CONFIG_REFRESH_INTERVAL_MS` now renews on a day's own schedule, independent of
+   * how much life the identity token has left - and `adr/0029`'s own stated limitation, that an
+   * *already-open* tab does not update live without a reload at all, is still untouched by either.
    *
    * `null` for a session written before this field existed, or for a site with no override -
    * `ui/appearance.ts`'s `parseWidgetColor`/`parseWidgetPosition` treat both identically to "not set".
@@ -143,14 +150,15 @@ export interface VisitorSession {
   widgetPrimaryColorHex: string | null;
   widgetPosition: string | null;
   /** `11-10`: cached alongside color/position on the identical terms - the same `POST
-   * /api/v1/visitor-sessions`(`/renew`) response, refreshed on every renewal. `null` for a session
-   * written before this field existed, or for a site with no override - `i18n/resolve.ts`'s
-   * `parseWidgetLocale` treats that identically to "not set" and falls back to English. */
+   * /api/v1/visitor-sessions`(`/renew`) response, refreshed on the identical schedule (`25-05`).
+   * `null` for a session written before this field existed, or for a site with no override -
+   * `i18n/resolve.ts`'s `parseWidgetLocale` treats that identically to "not set" and falls back to
+   * English. */
   widgetLocale: string | null;
   /** `16-04`: cached alongside the rest on the identical terms - the tenant's own processing-notice
-   * text and link, refreshed on every renewal. `null` for a session written before this field existed,
-   * or for a site that has not configured a notice - `ui/appearance.ts`'s `parseNoticeText`/
-   * `parseNoticeUrl` treat that identically to "not set" and render nothing. */
+   * text and link, refreshed on the identical schedule (`25-05`). `null` for a session written before
+   * this field existed, or for a site that has not configured a notice - `ui/appearance.ts`'s
+   * `parseNoticeText`/`parseNoticeUrl` treat that identically to "not set" and render nothing. */
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
 }

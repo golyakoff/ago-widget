@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WidgetConfig } from "./config.js";
 import { WidgetStorage } from "./storage.js";
 import {
+  CONFIG_REFRESH_INTERVAL_MS,
   RENEWAL_RETRY_THROTTLE_MS,
   VisitorSessionExpiredError,
   VisitorSessionManager,
@@ -105,9 +106,11 @@ describe("a visitor arriving for the first time", () => {
 });
 
 describe("a visitor returning with a token that has life left in it", () => {
-  it("costs no request at all", async () => {
+  it("costs no request at all when the cached config is still fresh", async () => {
     const stored = storeSessionMintedAt(T0);
-    now = T0 + DAY_MS;
+    // Comfortably inside both budgets: nowhere near the identity's own renewal window (day ~4.67)
+    // and nowhere near `CONFIG_REFRESH_INTERVAL_MS` (a day) either.
+    now = T0 + CONFIG_REFRESH_INTERVAL_MS / 2;
 
     const start = await manager().start();
 
@@ -169,10 +172,80 @@ describe("a visitor returning with a token that has life left in it", () => {
   });
 });
 
+/**
+ * `25-05`: the defect the author actually hit. A returning visitor's browser holds a token nowhere
+ * near its own renewal window (day ~4.67 of 7) on almost every ordinary reload - that is the whole
+ * point of `17-07`, keeping the identity cheap to keep alive - so before this test's fix existed,
+ * `start()` made no request at all here and a changed colour or position sat cached indefinitely
+ * short of the visitor clearing their browser's site data outright. These tests fail against the
+ * code as it stood before `isConfigStale`/`CONFIG_REFRESH_INTERVAL_MS` existed: at `T0 + 2 * DAY_MS`
+ * the identity token above is barely a quarter of the way to its own renewal window, so only a
+ * config-specific staleness check makes `start()` ask again.
+ */
+describe("a visitor returning after the cached config itself has gone stale", () => {
+  it("renews well before the identity token's own window opens, and picks up the new config", async () => {
+    storeSessionMintedAt(T0);
+    // Two days in: comfortably past `CONFIG_REFRESH_INTERVAL_MS` (a day), nowhere near the
+    // identity's own renewal window (day ~4.67 of a 7-day lifetime).
+    now = T0 + 2 * DAY_MS;
+    const renewed = tokenMintedAt(now);
+    fetchImpl.mockResolvedValue(
+      sessionResponse(renewed, 200, { widgetPrimaryColorHex: "#2c3e50", widgetPosition: "BottomLeft" }),
+    );
+
+    const start = await manager().start();
+
+    expect(start.restarted).toBe(false);
+    expect(start.session.visitorId).toBe(VISITOR_ID);
+    expect(start.session.widgetPrimaryColorHex).toBe("#2c3e50");
+    expect(start.session.widgetPosition).toBe("BottomLeft");
+    expect(requestsTo("/api/v1/visitor-sessions")).toHaveLength(0);
+    expect(requestsTo("/api/v1/visitor-sessions/renew")).toHaveLength(1);
+    expect(storage.getVisitorSession()?.widgetPrimaryColorHex).toBe("#2c3e50");
+  });
+
+  it("does not renew one tick before the config's own interval is up", async () => {
+    storeSessionMintedAt(T0);
+    now = T0 + CONFIG_REFRESH_INTERVAL_MS - 1;
+
+    const start = await manager().start();
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(start.session.token).toBe(storage.getVisitorSession()?.token);
+  });
+
+  it("does not mint a new identity or touch the conversation cursor - this is a refresh, not a restart", async () => {
+    storeSessionMintedAt(T0);
+    storage.setConversationId("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    storage.setLastKnownSequence("cccccccc-cccc-cccc-cccc-cccccccccccc", 7);
+    now = T0 + 2 * DAY_MS;
+    fetchImpl.mockResolvedValue(sessionResponse(tokenMintedAt(now), 200));
+
+    const start = await manager().start();
+
+    expect(start.restarted).toBe(false);
+    expect(storage.getConversationId()).toBe("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    expect(storage.getLastKnownSequence("cccccccc-cccc-cccc-cccc-cccccccccccc")).toBe(7);
+  });
+
+  it("leaves the visitor on the still-valid stored token when the proactive renewal fails transiently", async () => {
+    const stored = storeSessionMintedAt(T0);
+    now = T0 + 2 * DAY_MS;
+    fetchImpl.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const start = await manager().start();
+
+    expect(start.restarted).toBe(false);
+    expect(start.session.token).toBe(stored);
+  });
+});
+
 describe("the clock moving while the page stays open", () => {
   it("renews when the token enters its window days later, not when the page loaded", async () => {
     storeSessionMintedAt(T0);
-    now = T0 + DAY_MS;
+    // Inside both freshness budgets: not yet a day old (`CONFIG_REFRESH_INTERVAL_MS`), nowhere near
+    // the identity's own renewal window either.
+    now = T0 + CONFIG_REFRESH_INTERVAL_MS / 2;
     const sessionManager = manager();
     await sessionManager.start();
     expect(fetchImpl).not.toHaveBeenCalled();

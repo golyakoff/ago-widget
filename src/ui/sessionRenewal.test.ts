@@ -247,7 +247,9 @@ describe("a visitor coming back after their token has already expired", () => {
 
 describe("a visitor whose token is nowhere near expiring", () => {
   it("costs no mint or renewal request, so this is not a per-page-load round trip", async () => {
-    storeSessionMintedAt(T0 - DAY_MS);
+    // Half a day old: nowhere near the identity's own renewal window, and nowhere near
+    // `CONFIG_REFRESH_INTERVAL_MS` (`25-05`, a day) either - so genuinely nothing to do here.
+    storeSessionMintedAt(T0 - DAY_MS / 2);
     joinQueue.push(joinResult());
     await openWidget();
 
@@ -264,7 +266,7 @@ describe("a visitor whose token is nowhere near expiring", () => {
    * open honestly countable now.
    */
   it("still fires the load and open beacons, independently of there being no session call", async () => {
-    storeSessionMintedAt(T0 - DAY_MS);
+    storeSessionMintedAt(T0 - DAY_MS / 2);
     joinQueue.push(joinResult());
     await openWidget();
 

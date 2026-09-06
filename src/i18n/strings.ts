@@ -66,4 +66,17 @@ export interface WidgetStrings {
   // from any module, and stay here rather than moving into a module's own lazily-loaded strings.
   readonly yourAnswer: string;
   readonly continueLabel: string;
+
+  // `23-09`/`ui/contactCapture.ts` - the out-of-hours name-and-phone control. Deliberately its own
+  // block, not folded into the `form` primitive's strings above - this control is not a primitive
+  // (that file's own doc comment explains why), so its copy is not `adr/0065`'s vocabulary either.
+  readonly contactCaptureNamePlaceholder: string;
+  readonly contactCapturePhonePlaceholder: string;
+  readonly contactCaptureSubmitButton: string;
+  readonly contactCaptureSubmittingButton: string;
+  /** Shown once the phone row (and, if typed, the name row) is recorded - deliberately does not
+   * promise a specific time, only that somebody will follow up, matching `flows.md` 1.2's own "must
+   * never happen: a promise nobody keeps." */
+  readonly contactCaptureConfirmation: string;
+  readonly contactCaptureFailedNote: string;
 }

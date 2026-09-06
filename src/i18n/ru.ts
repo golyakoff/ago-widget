@@ -43,4 +43,11 @@ export const ru: WidgetStrings = {
 
   yourAnswer: "Ваш ответ",
   continueLabel: "Продолжить",
+
+  contactCaptureNamePlaceholder: "Ваше имя (необязательно)",
+  contactCapturePhonePlaceholder: "Номер телефона",
+  contactCaptureSubmitButton: "Отправить",
+  contactCaptureSubmittingButton: "Отправка…",
+  contactCaptureConfirmation: "Спасибо - мы свяжемся с вами.",
+  contactCaptureFailedNote: "Не удалось отправить. Попробуйте ещё раз.",
 };

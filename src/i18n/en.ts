@@ -52,4 +52,11 @@ export const en: WidgetStrings = {
 
   yourAnswer: "Your answer",
   continueLabel: "Continue",
+
+  contactCaptureNamePlaceholder: "Your name (optional)",
+  contactCapturePhonePlaceholder: "Phone number",
+  contactCaptureSubmitButton: "Send",
+  contactCaptureSubmittingButton: "Sending…",
+  contactCaptureConfirmation: "Thanks - we'll get back to you.",
+  contactCaptureFailedNote: "Couldn't send that. Please try again.",
 };

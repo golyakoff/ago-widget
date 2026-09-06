@@ -5,11 +5,13 @@ import { VisitorSessionExpiredError, VisitorSessionManager } from "../session.js
 import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
 import { newClientMessageId } from "../protocol/dedup.js";
 import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
+import { recordContactDetail } from "../contactDetails.js";
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
 import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 import { renderPrimitiveContent } from "./primitives/render.js";
+import { renderContactCaptureControl } from "./contactCapture.js";
 import { loadModule } from "./moduleLoader.js";
 import { en } from "../i18n/en.js";
 import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
@@ -144,6 +146,17 @@ export class ChatWidget {
    * is deliberately neither - see `dispatchSend`'s `SendOutcomeUnknownError` branch.
    */
   private readonly pendingSends = new Map<string, HTMLDivElement>();
+
+  /**
+   * `23-09`: the out-of-hours control's only caller is the auto-reply (`14-04`), which authors
+   * exactly one `System` message per waiting conversation (`SendOfflineAutoReplyHandler`'s own
+   * remarks: the loop guard makes a second one unreachable). Shown once per open panel, not once per
+   * `System` message - a second `System`-authored message (should one ever exist in the future) would
+   * otherwise stack a second copy of the same form under it, which is not this control's job to
+   * guard against on its own. This is the one place that assumption is coupled to code, named here so
+   * a future second producer of `System` messages does not silently inherit it.
+   */
+  private contactCaptureShown = false;
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
@@ -855,6 +868,33 @@ export class ChatWidget {
       if (primitive) {
         bubble.appendChild(primitive);
       }
+    }
+
+    // `23-09`/`decisions.md` §4: the out-of-hours name-and-phone control, offered exactly once,
+    // under the auto-reply bubble that is this item's only caller (this class's own
+    // `contactCaptureShown` remarks).
+    if (message.authorKind === "System" && !this.contactCaptureShown) {
+      this.contactCaptureShown = true;
+      bubble.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result)));
+    }
+  }
+
+  /**
+   * `23-09`: records the phone unconditionally and, only if the visitor typed one, the name as a
+   * second row (`ui/contactCapture.ts`'s own remarks on why two rows rather than a wider schema).
+   * Both calls run under the same visitor token this class already renews for every other
+   * authenticated write (`currentToken`); a failure on either rejects the whole submission so the
+   * control's own catch branch re-enables the form rather than silently losing the name half.
+   */
+  private async submitContactCapture(result: { name: string; phone: string }): Promise<void> {
+    if (!this.conversationId) {
+      throw new Error("No conversation to record a contact detail against.");
+    }
+
+    const token = await this.currentToken();
+    await recordContactDetail(this.config, token, this.conversationId, "Phone", result.phone);
+    if (result.name) {
+      await recordContactDetail(this.config, token, this.conversationId, "Other", result.name);
     }
   }
 

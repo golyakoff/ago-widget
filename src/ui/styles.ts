@@ -450,6 +450,23 @@ export const widgetStyles = /* css */ `
     color: #1a1a1a;
   }
 
+  /* 24-05: the visitor's own consent checkbox(es) - a required one for handing over the contact
+     itself, and an optional, never-required one for anything beyond it (marketing). Both share this
+     one class; only the required attribute set in ui/contactCapture.ts tells them apart. */
+  .ago-contact-capture-consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+
+  .ago-contact-capture-consent-input {
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+  }
+
   .ago-contact-capture-submit {
     align-self: flex-start;
     border: none;

@@ -1,3 +1,4 @@
+import type { ConsentRequirement } from "../consent.js";
 import type { WidgetStrings } from "../i18n/strings.js";
 
 /**
@@ -21,10 +22,18 @@ import type { WidgetStrings } from "../i18n/strings.js";
  * called back. Submitting records the phone as `Kind: "Phone"` and, only if a name was typed, a second
  * row as `Kind: "Other"` (`VisitorContactDetailKind.Other`'s own remarks name "a preferred name" as
  * exactly this case) - two rows rather than a wider domain schema for one item.
+ *
+ * `24-05`: two more, independently-refusable booleans - `acceptContact`/`acceptMarketing`. Both are
+ * `false` unless a checkbox for that purpose was actually rendered *and* ticked; a caller
+ * (`ChatWidget.submitContactCapture`) records a consent acceptance only for the ones that came back
+ * `true`, and records nothing at all for a purpose this control never showed a control for (a site
+ * that never turned `RequireContactConsent` on, or a visitor who already accepted on an earlier visit).
  */
 export interface ContactCaptureResult {
   name: string;
   phone: string;
+  acceptContact: boolean;
+  acceptMarketing: boolean;
 }
 
 export type ContactCaptureSubmitHandler = (result: ContactCaptureResult) => Promise<void>;
@@ -42,10 +51,24 @@ export type ContactCaptureSubmitHandler = (result: ContactCaptureResult) => Prom
  * plain confirmation sentence once it succeeds. There is no "try again" affordance on failure by
  * design - the form simply re-enables and the visitor can press submit again, the same recoverable
  * shape `ui/widget.ts`'s own `markBubbleFailed` gives a failed message send.
+ *
+ * `24-05`: `consent` is `null` for every site that has not turned on `RequireContactConsent` (the
+ * unchanged-default case) and for a visitor who already accepted on an earlier visit
+ * (`contactAlreadyAccepted`/`marketingAlreadyAccepted`) - in both cases this function renders exactly
+ * what `23-09` always rendered, no checkbox at all. When a contact checkbox *is* rendered, it carries
+ * the native `required` attribute, the identical HTML5-validation mechanism `phoneInput.required`
+ * already uses - the browser itself refuses to fire `submit` while it is unticked, so there is no
+ * second, hand-rolled validation path to keep in sync with the server's own gate. The checkbox's own
+ * label is always the tenant's own document title (`ConsentDocumentSummary.title`), rendered as
+ * `textContent` - the identical "escaped, never HTML" posture `applyProcessingNotice` already takes
+ * for `WidgetConfig.NoticeText`, since this is exactly the same shape of risk: a tenant-supplied string
+ * rendered inside a shadow tree this widget's own script controls. AGO never authors this sentence
+ * either way (`adr/0076`'s stance, unchanged by this item).
  */
 export function renderContactCaptureControl(
   strings: WidgetStrings,
   onSubmit: ContactCaptureSubmitHandler,
+  consent?: ConsentRequirement | null,
 ): HTMLElement {
   const container = document.createElement("div");
   container.className = "ago-contact-capture";
@@ -68,6 +91,28 @@ export function renderContactCaptureControl(
   phoneInput.autocomplete = "tel";
   phoneInput.required = true;
 
+  // `24-05`: a contact-consent checkbox exists only when the site requires one and this visitor has
+  // not already accepted it - `showContactCheckbox`/`showMarketingCheckbox` are each independently
+  // false the moment either condition is not met, which is what keeps "already accepted" from nagging
+  // a returning visitor and "not required" from ever showing a control at all.
+  const showContactCheckbox = Boolean(consent?.contactRequired && consent.contact && !consent.contactAlreadyAccepted);
+  const showMarketingCheckbox = Boolean(consent?.marketing && !consent.marketingAlreadyAccepted);
+
+  const contactCheckbox = showContactCheckbox ? document.createElement("input") : null;
+  if (contactCheckbox) {
+    contactCheckbox.type = "checkbox";
+    contactCheckbox.className = "ago-contact-capture-consent-input";
+    contactCheckbox.required = true;
+  }
+
+  const marketingCheckbox = showMarketingCheckbox ? document.createElement("input") : null;
+  if (marketingCheckbox) {
+    marketingCheckbox.type = "checkbox";
+    marketingCheckbox.className = "ago-contact-capture-consent-input";
+    // Deliberately no `.required` - `24-05`'s own crux: anything beyond the contact itself is a
+    // separate, independently *refusable* control, never a second tick that blocks submission.
+  }
+
   const submitButton = document.createElement("button");
   submitButton.type = "submit";
   submitButton.className = "ago-contact-capture-submit";
@@ -78,8 +123,21 @@ export function renderContactCaptureControl(
   errorNote.hidden = true;
   errorNote.setAttribute("role", "alert");
 
-  form.append(nameInput, phoneInput, submitButton);
+  form.append(nameInput, phoneInput);
+  if (contactCheckbox && consent?.contact) {
+    form.appendChild(buildConsentLabel(contactCheckbox, consent.contact.title));
+  }
+
+  if (marketingCheckbox && consent?.marketing) {
+    form.appendChild(buildConsentLabel(marketingCheckbox, consent.marketing.title));
+  }
+
+  form.appendChild(submitButton);
   container.append(form, errorNote);
+
+  const allInputs = [nameInput, phoneInput, contactCheckbox, marketingCheckbox].filter(
+    (el): el is HTMLInputElement => el !== null,
+  );
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -88,13 +146,29 @@ export function renderContactCaptureControl(
       return;
     }
 
+    // `24-05`: the identical manual guard `phone` already gets, for the identical reason - the
+    // checkbox's own `required` attribute asks a real browser's constraint validation to refuse a
+    // *user-driven* submit (a click, an Enter key), but this handler is also reachable via a
+    // programmatically dispatched `submit` event that never runs that validation at all, so the gate
+    // this item's own crux depends on must not rest on the browser alone.
+    if (contactCheckbox && !contactCheckbox.checked) {
+      return;
+    }
+
     errorNote.hidden = true;
-    nameInput.disabled = true;
-    phoneInput.disabled = true;
+    for (const input of allInputs) {
+      input.disabled = true;
+    }
+
     submitButton.disabled = true;
     submitButton.textContent = strings.contactCaptureSubmittingButton;
 
-    onSubmit({ name: nameInput.value.trim(), phone })
+    onSubmit({
+      name: nameInput.value.trim(),
+      phone,
+      acceptContact: contactCheckbox?.checked ?? false,
+      acceptMarketing: marketingCheckbox?.checked ?? false,
+    })
       .then(() => {
         const confirmation = document.createElement("p");
         confirmation.className = "ago-contact-capture-confirmation";
@@ -102,8 +176,10 @@ export function renderContactCaptureControl(
         container.replaceChildren(confirmation);
       })
       .catch(() => {
-        nameInput.disabled = false;
-        phoneInput.disabled = false;
+        for (const input of allInputs) {
+          input.disabled = false;
+        }
+
         submitButton.disabled = false;
         submitButton.textContent = strings.contactCaptureSubmitButton;
         errorNote.textContent = strings.contactCaptureFailedNote;
@@ -112,4 +188,15 @@ export function renderContactCaptureControl(
   });
 
   return container;
+}
+
+/** A `<label>` wrapping one checkbox and its own tenant-supplied sentence - `textContent`, never
+ * `innerHTML`, this function's own doc comment on why. */
+function buildConsentLabel(checkbox: HTMLInputElement, text: string): HTMLLabelElement {
+  const label = document.createElement("label");
+  label.className = "ago-contact-capture-consent";
+  const span = document.createElement("span");
+  span.textContent = text;
+  label.append(checkbox, span);
+  return label;
 }

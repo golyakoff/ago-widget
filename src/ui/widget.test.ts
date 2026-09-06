@@ -251,6 +251,10 @@ describe("an automatic reply", () => {
   it("23-09: offers the out-of-hours contact control under the auto-reply bubble, exactly once", async () => {
     joinQueue.push(joinResult([message("m1", 1, "Visitor"), message("m2", 2, "System"), message("m3", 3, "System")]));
     const panel = await openWidget();
+    // `24-05`: the control is now appended after an async round trip (getConsentRequirement) rather
+    // than synchronously - a second flush lets that promise chain (currentToken -> fetch -> .json())
+    // settle before this test looks at the DOM.
+    await flush();
 
     // Two System messages arrive (a contrived case for this test - production never produces a
     // second one, this class's own `contactCaptureShown` remarks), and the control still appears

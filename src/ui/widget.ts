@@ -6,12 +6,13 @@ import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type Con
 import { newClientMessageId } from "../protocol/dedup.js";
 import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
 import { recordContactDetail } from "../contactDetails.js";
+import { getConsentRequirement, recordConsent, type ConsentRequirement } from "../consent.js";
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
 import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 import { renderPrimitiveContent } from "./primitives/render.js";
-import { renderContactCaptureControl } from "./contactCapture.js";
+import { renderContactCaptureControl, type ContactCaptureResult } from "./contactCapture.js";
 import { loadModule } from "./moduleLoader.js";
 import { en } from "../i18n/en.js";
 import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
@@ -872,11 +873,44 @@ export class ChatWidget {
 
     // `23-09`/`decisions.md` §4: the out-of-hours name-and-phone control, offered exactly once,
     // under the auto-reply bubble that is this item's only caller (this class's own
-    // `contactCaptureShown` remarks).
+    // `contactCaptureShown` remarks). `24-05`: appending it is now async (`appendContactCaptureControl`
+    // below) - it asks the server whether this site requires a recorded consent before rendering, so
+    // the control never shows a checkbox nobody can act on and never omits one the write path would
+    // then refuse.
     if (message.authorKind === "System" && !this.contactCaptureShown) {
       this.contactCaptureShown = true;
-      bubble.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result)));
+      guardAsync(() => this.appendContactCaptureControl(bubble));
     }
+  }
+
+  /**
+   * `24-05`: the one place `getConsentRequirement` is ever called from the widget - right before the
+   * control it decides the shape of. A failure here (the request errors, or times out) is treated the
+   * same as "not required": the visitor still gets the ordinary, unverified control `23-09` always
+   * offered, because a consent *read* failing must never be the reason a visitor cannot leave a
+   * callback number at all - the crux this whole item exists to protect the opposite failure mode of.
+   */
+  private async appendContactCaptureControl(bubble: HTMLElement): Promise<void> {
+    let consent: ConsentRequirement | null = null;
+    if (this.conversationId) {
+      try {
+        const token = await this.currentToken();
+        consent = await getConsentRequirement(this.config, token, this.conversationId);
+      } catch (error) {
+        logWidgetError(error);
+      }
+    }
+
+    // A site that requires consent but has published nothing under this purpose's key yet
+    // (`consent.contact` is `null` while `contactRequired` is `true`) is a real tenant
+    // misconfiguration `GetConsentRequirementHandler`'s own remarks name - offering a phone form with
+    // no way to satisfy the gate would only produce a confusing server refusal on submit, so this
+    // widget declines to offer the control at all rather than guess at a friendlier failure.
+    if (consent?.contactRequired && !consent.contact) {
+      return;
+    }
+
+    bubble.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result), consent));
   }
 
   /**
@@ -885,13 +919,27 @@ export class ChatWidget {
    * Both calls run under the same visitor token this class already renews for every other
    * authenticated write (`currentToken`); a failure on either rejects the whole submission so the
    * control's own catch branch re-enables the form rather than silently losing the name half.
+   *
+   * `24-05`: `recordConsent` runs *before* either contact-detail call, and only for a purpose the
+   * control actually rendered a ticked checkbox for (`result.acceptContact`/`result.acceptMarketing`).
+   * Ordering matters: if the site requires contact consent, the server's own gate
+   * (`RecordVisitorContactDetailHandler`) refuses the phone write until an acceptance already exists,
+   * so recording it first is not a style choice, it is what makes the very next call succeed.
    */
-  private async submitContactCapture(result: { name: string; phone: string }): Promise<void> {
+  private async submitContactCapture(result: ContactCaptureResult): Promise<void> {
     if (!this.conversationId) {
       throw new Error("No conversation to record a contact detail against.");
     }
 
     const token = await this.currentToken();
+    if (result.acceptContact) {
+      await recordConsent(this.config, token, this.conversationId, "Contact");
+    }
+
+    if (result.acceptMarketing) {
+      await recordConsent(this.config, token, this.conversationId, "Marketing");
+    }
+
     await recordContactDetail(this.config, token, this.conversationId, "Phone", result.phone);
     if (result.name) {
       await recordContactDetail(this.config, token, this.conversationId, "Other", result.name);

@@ -241,8 +241,24 @@ describe("an automatic reply", () => {
     ]);
     // Not `.ago-message--system`, which is this widget's own local status note - see renderBubble.
     expect(panel.root.querySelectorAll(".ago-message--system")).toHaveLength(0);
-    // The label is CSS `content`, so the bubble's text is exactly what the shop scripted.
-    expect(panel.bubbleTexts()).toEqual(["message m1", "message m2"]);
+    // The label is CSS `content`, never a DOM text node - `renderBubble`'s own `bubble.textContent =
+    // body` line still writes exactly what the shop scripted and nothing else, proven here against
+    // the bubble's own direct text rather than `bubbleTexts()`'s full `textContent`, which now also
+    // picks up `23-09`'s contact-capture control appended as a child (see the next test).
+    expect(bubbles[1]!.firstChild?.textContent).toBe("message m2");
+  });
+
+  it("23-09: offers the out-of-hours contact control under the auto-reply bubble, exactly once", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor"), message("m2", 2, "System"), message("m3", 3, "System")]));
+    const panel = await openWidget();
+
+    // Two System messages arrive (a contrived case for this test - production never produces a
+    // second one, this class's own `contactCaptureShown` remarks), and the control still appears
+    // only once, under the first bubble it was attached to.
+    expect(panel.root.querySelectorAll(".ago-contact-capture")).toHaveLength(1);
+    const bubbles = [...panel.root.querySelectorAll(".ago-message")];
+    expect(bubbles[1]!.querySelector(".ago-contact-capture")).not.toBeNull();
+    expect(bubbles[2]!.querySelector(".ago-contact-capture")).toBeNull();
   });
 });
 

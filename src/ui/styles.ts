@@ -426,4 +426,48 @@ export const widgetStyles = /* css */ `
     opacity: 0.6;
     cursor: not-allowed;
   }
+
+  /* 23-09: the out-of-hours name-and-phone control (ui/contactCapture.ts). Visually similar to
+     .ago-primitive-form above by deliberate choice - both are "a small form under an incoming bubble"
+     - but under its own class names, because this control is structurally not one of adr/0065's four
+     primitives (that file's own doc comment explains why) and sharing a name would suggest otherwise
+     to a future reader grepping for it. */
+  .ago-contact-capture {
+    margin-top: 0.5rem;
+  }
+
+  .ago-contact-capture-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .ago-contact-capture-input {
+    font: inherit;
+    padding: 0.5rem;
+    border: 1px solid #d5d9e0;
+    border-radius: 0.5rem;
+    color: #1a1a1a;
+  }
+
+  .ago-contact-capture-submit {
+    align-self: flex-start;
+    border: none;
+    border-radius: 0.5rem;
+    background: var(--ago-accent);
+    color: #fff;
+    padding: 0.375rem 0.75rem;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .ago-contact-capture-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .ago-contact-capture-confirmation {
+    margin: 0.5rem 0 0;
+    font-size: 0.875rem;
+  }
 `;

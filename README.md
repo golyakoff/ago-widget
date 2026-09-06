@@ -122,6 +122,12 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**27.1 KB gzipped** (101.3 KB raw, minified), `23-07` measured 2026-09-06 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`)
+- **+0.6 KB gzipped** over the `16-04`/`20-07` baseline immediately below, from `src/beacon.ts` (the
+fire-and-forget `sendBeacon` function) plus the two call sites it adds to `ui/widget.ts`
+(`mount`/`open`) and the one new field (`openBeaconSent`). Leaves 17.9 KB of the 45 KB budget unused.
+
 **26.5 KB gzipped** (99.3 KB raw, minified), measured 2026-08-29 against a clean build of this commit
 - the first measurement taken after `16-04`'s processing-notice mechanism and `20-07`'s
 module-contract rework landed on the same branch together (`AGO_API_BASE_URL=http://localhost:5009

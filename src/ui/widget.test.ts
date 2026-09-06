@@ -505,3 +505,58 @@ describe("the panel's processing notice", () => {
     expect(root.querySelector(".ago-processing-notice__link")?.textContent).toBe("Подробнее");
   });
 });
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input;
+  }
+  return input instanceof URL ? input.href : input.url;
+}
+
+interface BeaconBody {
+  publicKey: string;
+  kind: string;
+}
+
+function beaconBodiesSent(): BeaconBody[] {
+  return vi
+    .mocked(globalThis.fetch)
+    .mock.calls.filter(([url]) => urlOf(url).endsWith("/api/v1/widget-activity"))
+    .map(([, init]) => JSON.parse(init?.body as string) as BeaconBody);
+}
+
+/**
+ * `23-07`: the funnel's own beacon, sent from `mount`/`open` - `sendBeacon` itself is tested in
+ * isolation (`beacon.test.ts`); this describes the two call sites' own behaviour, which a pure
+ * function test cannot reach.
+ */
+describe("the funnel beacon", () => {
+  it("fires a load beacon from mount, independently of the session bootstrap", async () => {
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const bodies = beaconBodiesSent();
+    expect(bodies).toEqual([{ publicKey: config.siteKey, kind: "load" }]);
+  });
+
+  it("fires an open beacon the first time the panel opens", async () => {
+    joinQueue.push(joinResult([]));
+    await openWidget();
+
+    expect(beaconBodiesSent().filter((body) => body.kind === "open")).toHaveLength(1);
+  });
+
+  /** The item's own Done-when: "Opening the panel twice in one session counts one open." */
+  it("does not fire a second open beacon when the panel is closed and reopened", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    panel.toggle.click(); // close
+    await flush();
+    panel.toggle.click(); // open again
+    await flush();
+
+    expect(beaconBodiesSent().filter((body) => body.kind === "open")).toHaveLength(1);
+  });
+});

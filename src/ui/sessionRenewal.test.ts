@@ -246,11 +246,28 @@ describe("a visitor coming back after their token has already expired", () => {
 });
 
 describe("a visitor whose token is nowhere near expiring", () => {
-  it("costs no renewal request, so this is not a per-page-load round trip", async () => {
+  it("costs no mint or renewal request, so this is not a per-page-load round trip", async () => {
     storeSessionMintedAt(T0 - DAY_MS);
     joinQueue.push(joinResult());
     await openWidget();
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(callsTo("/api/v1/visitor-sessions")).toHaveLength(0);
+    expect(callsTo("/api/v1/visitor-sessions/renew")).toHaveLength(0);
+  });
+
+  /**
+   * `23-07`: this is the exact gap `decisions.md` §3's amendment names - "a returning visitor whose
+   * stored token is still valid makes no API call on page load, so loads counted from mints
+   * undercount returning visitors." Before this item, the test above asserted `fetchMock` was never
+   * called at all for this visitor - true, and also the bug. The beacon fires from `mount`/`open`
+   * regardless of whether a session call happens at all, which is what makes this visitor's load and
+   * open honestly countable now.
+   */
+  it("still fires the load and open beacons, independently of there being no session call", async () => {
+    storeSessionMintedAt(T0 - DAY_MS);
+    joinQueue.push(joinResult());
+    await openWidget();
+
+    expect(callsTo("/api/v1/widget-activity")).toHaveLength(2);
   });
 });

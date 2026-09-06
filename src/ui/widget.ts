@@ -2,6 +2,7 @@ import type { MessageDto } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
 import { WidgetStorage, type VisitorSession } from "../storage.js";
 import { VisitorSessionExpiredError, VisitorSessionManager } from "../session.js";
+import { sendBeacon } from "../beacon.js";
 import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
 import { newClientMessageId } from "../protocol/dedup.js";
 import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
@@ -127,6 +128,9 @@ export class ChatWidget {
   private conversationId: string | null = null;
   private isOpen = false;
   private isConnected = false;
+  /** `23-07`: at most one `open` beacon per session (this widget instance's own lifetime), never one
+   * per click - see `open()`'s own doc comment. */
+  private openBeaconSent = false;
   /** `17-07`: set once the server has refused to renew this visitor's token mid-session. Terminal
    * for this page load - see `handleSessionExpired` for why the widget stops rather than quietly
    * minting a second identity underneath a transcript that belongs to the first. */
@@ -338,8 +342,17 @@ export class ChatWidget {
     }
   }
 
+  /**
+   * `23-07`: the load beacon fires here, before and independently of `bootstrapSession`
+   * (`this.sessionPromise`, kicked off from the constructor rather than here) - a mount whose session
+   * bootstrap goes on to fail (a rejected mint, a network error) still honestly counts as a load: this
+   * method's own job is "attach the widget's DOM to the host page", which by definition already
+   * happened by the time this call is reached. `sendBeacon` is fire-and-forget (that function's own
+   * doc comment), so this method's own signature and behaviour are otherwise unchanged.
+   */
   mount(parent: HTMLElement): void {
     parent.appendChild(this.host);
+    sendBeacon(this.config, fetch, "load");
   }
 
   /**
@@ -490,6 +503,13 @@ export class ChatWidget {
     }
   }
 
+  /**
+   * `23-07`: fires the `open` beacon at most once per session - the item's own Done-when, "opening
+   * the panel twice in one session counts one open". `toggleOpen()` only calls this method on the
+   * closed -&gt; open transition (never on close -&gt; open... -&gt; close -&gt; open again without the
+   * flag already being set), so `openBeaconSent` alone is enough; no reason to also gate it on
+   * `isOpen`'s own value.
+   */
   private open(): void {
     this.isOpen = true;
     this.panel.hidden = false;
@@ -497,6 +517,11 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     this.focusTrap.activate();
     this.closeButton.focus();
+
+    if (!this.openBeaconSent) {
+      this.openBeaconSent = true;
+      sendBeacon(this.config, fetch, "open");
+    }
 
     if (this.connectPromise === null) {
       this.connectPromise = this.connect();

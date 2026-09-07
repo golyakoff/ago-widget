@@ -53,8 +53,10 @@ export const en: WidgetStrings = {
   yourAnswer: "Your answer",
   continueLabel: "Continue",
 
-  contactCaptureNamePlaceholder: "Your name (optional)",
+  contactCaptureNamePlaceholder: "Your name",
   contactCapturePhonePlaceholder: "Phone number",
+  contactCaptureEmailPlaceholder: "Email address",
+  contactCaptureIntroLink: "Introduce yourself…",
   contactCaptureSubmitButton: "Send",
   contactCaptureSubmittingButton: "Sending…",
   contactCaptureConfirmation: "Thanks - we'll get back to you.",

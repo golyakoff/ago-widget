@@ -153,15 +153,32 @@ export class ChatWidget {
   private readonly pendingSends = new Map<string, HTMLDivElement>();
 
   /**
-   * `23-09`: the out-of-hours control's only caller is the auto-reply (`14-04`), which authors
-   * exactly one `System` message per waiting conversation (`SendOfflineAutoReplyHandler`'s own
-   * remarks: the loop guard makes a second one unreachable). Shown once per open panel, not once per
-   * `System` message - a second `System`-authored message (should one ever exist in the future) would
-   * otherwise stack a second copy of the same form under it, which is not this control's job to
-   * guard against on its own. This is the one place that assumption is coupled to code, named here so
-   * a future second producer of `System` messages does not silently inherit it.
+   * `23-09`/`23-58`: `true` once the contact form has actually been rendered by *either* of its two
+   * entry points - the out-of-hours auto-reply (`14-04`'s `System` message, unchanged since `23-09`)
+   * or `23-58`'s online link under the visitor's own first message - so that at most one is ever
+   * active in a conversation. `SendOfflineAutoReplyHandler`'s own loop guard makes a second `System`
+   * message unreachable, so the out-of-hours side of this only ever needs "once, not per-message";
+   * `23-58` is what makes "once per open panel" load-bearing across *two* triggers rather than one.
+   * `appendVisitorIntroControl` deliberately does *not* set this the moment the link appears - only a
+   * click (or the out-of-hours path pre-empting it, see the `System` branch in `appendMessageBubble`)
+   * does, because the link on its own has not yet shown the form it is named for.
    */
   private contactCaptureShown = false;
+
+  /**
+   * `23-58`: guards the online entry point's own trigger separately from `contactCaptureShown` above -
+   * "has a link already been offered under *a* visitor message" is a different question from "has the
+   * form been shown," precisely because showing the link does not set `contactCaptureShown`. Without
+   * this flag, every subsequent visitor message would grow its own link.
+   */
+  private visitorIntroControlOffered = false;
+
+  /**
+   * `23-58`: the link's own container, kept so the out-of-hours branch in `appendMessageBubble` can
+   * remove it the moment a `System` auto-reply supersedes it - an unclicked link left in the DOM next
+   * to the real form would be a second, dead entry point into the same control.
+   */
+  private visitorIntroControlEl: HTMLElement | null = null;
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
@@ -904,16 +921,73 @@ export class ChatWidget {
       }
     }
 
+    // `23-58`: the online entry point - a light, link-like control under the visitor's *own first*
+    // message, offered exactly once (`visitorIntroControlOffered`) regardless of how many visitor
+    // messages follow. It does not claim `contactCaptureShown` on its own (see that field's own
+    // remarks) - only being clicked, or the out-of-hours branch below pre-empting it, does.
+    if (message.authorKind === "Visitor" && !this.contactCaptureShown && !this.visitorIntroControlOffered) {
+      this.visitorIntroControlOffered = true;
+      this.appendVisitorIntroControl(bubble);
+    }
+
     // `23-09`/`decisions.md` §4: the out-of-hours name-and-phone control, offered exactly once,
     // under the auto-reply bubble that is this item's only caller (this class's own
     // `contactCaptureShown` remarks). `24-05`: appending it is now async (`appendContactCaptureControl`
     // below) - it asks the server whether this site requires a recorded consent before rendering, so
     // the control never shows a checkbox nobody can act on and never omits one the write path would
     // then refuse.
+    //
+    // `23-58`: if the online link (above) is already showing - unclicked, waiting - this branch is
+    // what an out-of-hours reply arriving mid-conversation looks like: the visitor was online, then
+    // was not. The link is removed rather than left beside a second, active copy of the same form.
     if (message.authorKind === "System" && !this.contactCaptureShown) {
+      this.visitorIntroControlEl?.remove();
+      this.visitorIntroControlEl = null;
       this.contactCaptureShown = true;
       guardAsync(() => this.appendContactCaptureControl(bubble));
     }
+  }
+
+  /**
+   * `23-58`: renders as a sibling placed right *after* `bubble` via `insertAdjacentElement`, never
+   * appended inside it - `bubble` here is the visitor's own accent-colored message
+   * (`.ago-message--visitor`), and this control's light-grey text is contrast-checked against the
+   * panel's white background (`ui/styles.ts`'s own `.ago-contact-capture-intro-link` rule), not
+   * against that bubble's fill; `insertAdjacentElement` keeps the control anchored to *this* message
+   * regardless of what else has since been appended to `this.messages`, which a plain
+   * `this.messages.appendChild` would not.
+   *
+   * A native `<button>`, not a styled `<span>` with a click handler - the backlog item's own "must
+   * look like a link and behave like a button... give it an accessible name and keyboard reach" is
+   * exactly what a real `<button>` gives for free (focusable, activated by Enter/Space, its
+   * `textContent` is its accessible name).
+   */
+  private appendVisitorIntroControl(bubble: HTMLElement): void {
+    const container = document.createElement("div");
+    container.className = "ago-contact-capture-intro";
+
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "ago-contact-capture-intro-link";
+    link.textContent = this.strings.contactCaptureIntroLink;
+
+    link.addEventListener("click", () => {
+      // Defensive: the out-of-hours branch above removes this element from the DOM the moment it
+      // claims `contactCaptureShown`, but a click already queued on the event loop at that instant
+      // could still reach this handler once. Checking the flag again is cheaper than proving that
+      // race cannot happen.
+      if (this.contactCaptureShown) {
+        return;
+      }
+
+      this.contactCaptureShown = true;
+      container.replaceChildren();
+      guardAsync(() => this.appendContactCaptureControl(container));
+    });
+
+    container.appendChild(link);
+    bubble.insertAdjacentElement("afterend", container);
+    this.visitorIntroControlEl = container;
   }
 
   /**
@@ -922,8 +996,13 @@ export class ChatWidget {
    * same as "not required": the visitor still gets the ordinary, unverified control `23-09` always
    * offered, because a consent *read* failing must never be the reason a visitor cannot leave a
    * callback number at all - the crux this whole item exists to protect the opposite failure mode of.
+   *
+   * `23-58`: the same function backs both entry points now - `into` is either the out-of-hours
+   * `System` bubble itself (the form nests inside it, as `23-09` always did) or the online link's own
+   * now-emptied container (`appendVisitorIntroControl`, the form takes the link's place). One render
+   * function, one caller of it, two callers of *that*.
    */
-  private async appendContactCaptureControl(bubble: HTMLElement): Promise<void> {
+  private async appendContactCaptureControl(into: HTMLElement): Promise<void> {
     let consent: ConsentRequirement | null = null;
     if (this.conversationId) {
       try {
@@ -943,17 +1022,20 @@ export class ChatWidget {
       return;
     }
 
-    bubble.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result), consent));
+    into.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result), consent));
   }
 
   /**
-   * `23-09`: records the phone unconditionally and, only if the visitor typed one, the name as a
-   * second row (`ui/contactCapture.ts`'s own remarks on why two rows rather than a wider schema).
-   * Both calls run under the same visitor token this class already renews for every other
-   * authenticated write (`currentToken`); a failure on either rejects the whole submission so the
-   * control's own catch branch re-enables the form rather than silently losing the name half.
+   * `23-09`/`23-58`: records the phone, the name (as `Kind: "Other"`) and the e-mail (as
+   * `Kind: "Email"`) - three unconditional rows now that `ui/contactCapture.ts` requires all three
+   * fields, rather than the two rows `23-09` wrote when the name was optional. `Email` needed no new
+   * domain work on the `ago-chat` side: `VisitorContactDetailKind.Email` already existed (`14-14`),
+   * unused by this widget until now. Both calls run under the same visitor token this class already
+   * renews for every other authenticated write (`currentToken`); a failure on any of the three rejects
+   * the whole submission so the control's own catch branch re-enables the form rather than silently
+   * losing a row.
    *
-   * `24-05`: `recordConsent` runs *before* either contact-detail call, and only for a purpose the
+   * `24-05`: `recordConsent` runs *before* any contact-detail call, and only for a purpose the
    * control actually rendered a ticked checkbox for (`result.acceptContact`/`result.acceptMarketing`).
    * Ordering matters: if the site requires contact consent, the server's own gate
    * (`RecordVisitorContactDetailHandler`) refuses the phone write until an acceptance already exists,
@@ -974,9 +1056,8 @@ export class ChatWidget {
     }
 
     await recordContactDetail(this.config, token, this.conversationId, "Phone", result.phone);
-    if (result.name) {
-      await recordContactDetail(this.config, token, this.conversationId, "Other", result.name);
-    }
+    await recordContactDetail(this.config, token, this.conversationId, "Other", result.name);
+    await recordContactDetail(this.config, token, this.conversationId, "Email", result.email);
   }
 
   /**

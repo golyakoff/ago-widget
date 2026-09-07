@@ -597,7 +597,15 @@ export class ChatWidget {
 
       const joinResult = await connection.start();
       this.conversationId = joinResult.conversationId;
-      for (const message of joinResult.history) {
+      // `23-53`: `joinResult.history` is `GetHistoryAsync`'s "most recent page" shape - newest first,
+      // the same keyset-pagination direction `loadOlderHistory` needs for its own "fetch backward from
+      // a cursor" case (`IConversationReadStore.GetHistoryAsync`'s own remarks). Before this item, this
+      // loop only ever ran on a brand-new conversation with nothing in it yet, so the order was never
+      // visible; a returning visitor's own history is now delivered here too, and a transcript rendered
+      // in the order the query returns it would put the newest message first and the oldest last -
+      // reversed. `resumeAfterReconnect`'s own delta path needs no such reversal (`GetDeltaAsync` is
+      // already oldest-first, matching how `handleIncoming` appends one at a time as messages arrive).
+      for (const message of [...joinResult.history].reverse()) {
         this.appendMessageBubble(message);
       }
 

@@ -44,6 +44,13 @@ export interface Invocation {
  * order across every hub built. Shared rather than per-hub on purpose: a test that drives the widget
  * through its own UI cannot reach the `HubConnection` before `ChatWidget.connect()` builds it, so the
  * answers have to be primed in advance.
+ *
+ * `23-53`: an entry may be a plain answer, or a function from the call's own `args` to one - the
+ * second shape is what lets a test simulate the one piece of real server behaviour this bug lived in:
+ * `VisitorHub.JoinCoreAsync` answers a present `lastKnownSequence` with the delta since it (empty
+ * when nothing changed) and answers `undefined` with the visitor's own history page. A plain object
+ * cannot tell those two calls apart; a function can, which is what makes a test using one an actual
+ * proof that the *right call* was made, not merely a check that a stubbed answer was returned.
  */
 export const joinQueue: unknown[] = [];
 
@@ -95,7 +102,9 @@ export class FakeHubConnection {
   invoke(method: string, ...args: unknown[]): Promise<unknown> {
     this.invocations.push({ method, args });
     if (method === "JoinAsync" || method === "JoinWithTrafficSourceAsync") {
-      return Promise.resolve(joinQueue.shift() ?? { conversationId: null, isNew: false, history: [] });
+      const entry = joinQueue.shift();
+      const answer = typeof entry === "function" ? (entry as (args: unknown[]) => unknown)(args) : entry;
+      return Promise.resolve(answer ?? { conversationId: null, isNew: false, history: [] });
     }
 
     if (method === "SendMessageAsync" && this.failNextSend !== null) {

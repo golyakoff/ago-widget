@@ -151,6 +151,38 @@ export class VisitorConnection {
    * comment (`VisitorHub.cs`) explains. `resumeAfterReconnect` below keeps calling plain `JoinAsync`
    * with no source at all: a resumed connection always has an existing conversation, and a source is
    * captured once, at start, never resent.
+   *
+   * `23-53`: **never sends the stored `lastKnownSequence` on this call.** It used to - the same
+   * cursor `resumeAfterReconnect` below sends to resume a *live* connection that dropped mid-session.
+   * The two situations only look alike; they are not the same request. A live reconnect's DOM already
+   * holds every message up to that cursor, so a delta of only what is *newer* is exactly right. This
+   * method runs once per page load, before this widget has rendered a single bubble - the DOM is
+   * always empty here, no matter how full `storage`'s cursor is. Asking the server for "only what
+   * changed since sequence N" and getting back nothing, because nothing *has* changed since N, then
+   * renders as literally nothing: not stale, not partial, an empty transcript in front of a visitor
+   * who wrote real messages into a conversation the operator can still see in full - `23-53`'s own
+   * bug report. `storage`'s cursor is a resume-a-live-connection concept, and this is a fresh one, so
+   * this call always asks the plain "most recent page" question `JoinCoreAsync` already answers when
+   * `lastKnownSequence` is absent (`VisitorHub.cs`) - the identical shape the very first visit already
+   * used (nothing stored yet); the returning visit is no longer treated as a different case.
+   *
+   * `sequenceTracker` is still seeded from the stored cursor, not reset to empty: it is purely a
+   * forward-tracking device (`rememberSequence` below only ever raises it), and starting it at the
+   * last value this browser is known to have seen is what makes a *live* reconnect later in this same
+   * page load ask for the right delta - the field this constructor doc comment describes is unrelated
+   * to what gets sent on this call, only to what would be sent on the next reconnect after it.
+   *
+   * **The shared-device question, answered rather than left implicit** (`23-53`'s own Scope): a
+   * second person at the same machine, presenting the first visitor's still-valid token, now reads
+   * the first visitor's history as well as continuing it - accepted, on the reasoning `23-53` itself
+   * offers as the cheaper honest option, because the token this call presents already lets that
+   * second person *write* into the same conversation as the first (`sendMessage` takes no further
+   * proof than the same token), so a token that can add to a transcript being able to read it is not
+   * a new trust boundary, only a more complete view across an existing one; the alternative -
+   * bounding what a rejoined connection can see to messages sent since *this* connection, discarding
+   * everything from before it - would hide a visitor's own words from themselves on the device that
+   * wrote them, on every single reload, to guard a sharing scenario this widget already could not
+   * stop at the write path.
    */
   async start(): Promise<VisitorJoinResult> {
     this.stateListener?.("connecting");
@@ -164,7 +196,7 @@ export class VisitorConnection {
     const source = captureTrafficSource();
     const result = await this.connection.invoke<VisitorJoinResult>(
       "JoinWithTrafficSourceAsync",
-      lastKnownSequence ?? undefined,
+      undefined,
       source.referrerHost,
       source.utmSource,
       source.utmMedium,

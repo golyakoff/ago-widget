@@ -173,30 +173,44 @@ describe("a connection that drops and comes back", () => {
 });
 
 describe("a page reloaded after a conversation was already open", () => {
-  it("resumes from the sequence the previous page load persisted", async () => {
+  /**
+   * `23-53`: this used to be named "resumes from the sequence the previous page load persisted" and
+   * asserted the opposite of what is asserted below - that the fresh `.start()` sent the stored
+   * cursor (`12`) as `JoinWithTrafficSourceAsync`'s first argument, and got back `joinResult([])`,
+   * an empty page, with a comment calling that "not a gap in this test". It was a gap: `12` is
+   * exactly the sequence this browser had already seen everything up to, so the server's honest
+   * answer to "what changed since 12" is nothing, and a fresh page load has an empty DOM to put that
+   * nothing into - the visitor's own bug report, "not stale, not partial - nothing". Restated here as
+   * what a fresh page load actually needs: the *history* page, unconditionally, never a delta.
+   */
+  it("asks for the history page on every fresh start, never a delta - even with a cursor already stored", async () => {
     const first = newConnection();
     first.onMessage(() => undefined);
     joinQueue.push(joinResult([message("m1", 11)]));
     await first.start();
     currentHub().push(message("m2", 12));
 
-    // A fresh page load: a new connection, a new storage reader, the same browser storage.
+    // A fresh page load: a new connection, a new storage reader, the same browser storage - which by
+    // now holds a cursor of 12, the highest sequence this browser has seen. A visitor who already read
+    // everything before closing the tab is the *ordinary* case, not an edge one (`23-53`'s own words).
     const second = new VisitorConnection(config, tokenProvider, new WidgetStorage(SITE_KEY));
-    joinQueue.push(joinResult([]));
-    await second.start();
+    joinQueue.push(joinResult([message("m1", 11), message("m2", 12)]));
+    const result = await second.start();
 
-    // `18-12`: every fresh `.start()` (never a resume) now calls `JoinWithTrafficSourceAsync` -
-    // `lastKnownSequence` first, then the four traffic-source fields. jsdom's default
-    // `document.referrer` is `""` and its default URL carries no query string, so all four read
-    // `undefined` here - the common, unremarkable case this item's own Scope calls out by name,
-    // not a gap in this test.
+    // The request never carries the stored cursor - `undefined`, identical to a first-ever visit's
+    // own call below, so the server takes the "most recent page" branch (`VisitorHub.cs`'s
+    // `JoinCoreAsync`) rather than the delta-since-N branch.
     expect(currentHub().invocationAt("JoinWithTrafficSourceAsync", 0).args).toEqual([
-      12,
+      undefined,
       undefined,
       undefined,
       undefined,
       undefined,
     ]);
+
+    // And the point of asking that way: the visitor's own history actually comes back, into a DOM
+    // that started this page load with nothing in it at all.
+    expect(result.history.map((m) => m.id)).toEqual(["m1", "m2"]);
   });
 
   it("asks for everything when there is nothing stored yet", async () => {
@@ -211,6 +225,40 @@ describe("a page reloaded after a conversation was already open", () => {
       undefined,
       undefined,
     ]);
+  });
+
+  /**
+   * `23-53`'s exact bug report, reproduced against a fake that actually behaves like
+   * `VisitorHub.JoinCoreAsync` does: a present `lastKnownSequence` gets the delta since it (empty
+   * when nothing changed since), `undefined` gets the visitor's own history page. A plain
+   * `joinResult(...)` entry cannot tell those two calls apart, which is why the test above only
+   * checks the arguments sent - this one goes further and proves the *consequence*: fails before
+   * this item's own fix (the stored cursor was sent, the real server's own answer to that would have
+   * been empty, and `.history` came back empty into a page that had never rendered a single bubble),
+   * passes after it.
+   */
+  it("still shows the visitor their own history when they had already read all of it before leaving", async () => {
+    const first = newConnection();
+    first.onMessage(() => undefined);
+    joinQueue.push(joinResult([message("m1", 11), message("m2", 12)]));
+    await first.start();
+    // No live push in between - the visitor read both messages, then closed the tab. The stored
+    // cursor is now 12, the highest sequence there is; a delta since 12 is empty by construction.
+
+    const second = new VisitorConnection(config, tokenProvider, new WidgetStorage(SITE_KEY));
+    const fullHistory = [message("m1", 11), message("m2", 12)];
+    joinQueue.push((args: unknown[]) =>
+      // The real server's own branch (`VisitorHub.cs`'s `JoinCoreAsync`): a present
+      // lastKnownSequence answers with the delta after it (empty here, since 12 is the newest
+      // sequence there is); only `undefined` gets the history page.
+      args[0] === undefined
+        ? joinResult(fullHistory)
+        : joinResult(fullHistory.filter((m) => m.sequence > (args[0] as number))),
+    );
+    const result = await second.start();
+
+    expect(result.history).not.toEqual([]);
+    expect(result.history.map((m) => m.id)).toEqual(["m1", "m2"]);
   });
 });
 

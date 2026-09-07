@@ -38,7 +38,10 @@ const T0 = Date.UTC(2026, 7, 25, 9, 0, 0);
 
 let now = T0;
 let storage: WidgetStorage;
-let fetchImpl: ReturnType<typeof vi.fn>;
+// `vitest` 5 infers a bare `vi.fn()`'s implementation as returning `void`, so a Promise-returning
+// mock of `fetch` became a `no-misused-promises` error under `typescript-eslint` 8.69. Typing the mock
+// as what it actually stands in for fixes it at the source and retires the cast below.
+let fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>;
 
 /** A token minted at `mintedAt` under the server's current visitor lifetime. */
 function tokenMintedAt(mintedAt: number): string {
@@ -60,12 +63,19 @@ function sessionResponse(token: string, status: number, body: Partial<Record<str
 }
 
 function manager(): VisitorSessionManager {
-  return new VisitorSessionManager(config, storage, { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => now });
+  return new VisitorSessionManager(config, storage, { fetchImpl, now: () => now });
 }
+
+// `fetch` accepts `string | URL | Request`; production code here only ever passes a string, but the
+// mock now carries `fetch`'s real signature (see `fetchImpl` above), so `String(url)` would silently
+// read `[object Object]` for the other two. Narrowing here rather than suppressing the rule keeps the
+// assertion honest for whichever shape a future caller uses.
+const urlOf = (url: string | URL | Request): string =>
+  typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
 function requestsTo(path: string): RequestInit[] {
   return fetchImpl.mock.calls
-    .filter(([url]) => String(url).endsWith(path))
+    .filter(([url]) => urlOf(url).endsWith(path))
     .map(([, init]) => init as RequestInit);
 }
 
@@ -88,7 +98,7 @@ beforeEach(() => {
   localStorage.clear();
   now = T0;
   storage = new WidgetStorage(SITE_KEY);
-  fetchImpl = vi.fn();
+  fetchImpl = vi.fn<typeof fetch>();
 });
 
 describe("a visitor arriving for the first time", () => {
@@ -345,9 +355,9 @@ describe("a renewal that fails for a reason that might pass", () => {
 describe("a token the server will not renew", () => {
   it("at page load, starts a new conversation and says one was lost", async () => {
     storeSessionMintedAt(T0 - LIFETIME_MS - DAY_MS);
-    fetchImpl.mockImplementation((url: string) =>
+    fetchImpl.mockImplementation((url: string | URL | Request) =>
       Promise.resolve(
-        String(url).endsWith("/renew")
+        urlOf(url).endsWith("/renew")
           ? new Response("", { status: 401 })
           : sessionResponse(tokenMintedAt(now), 201, { visitorId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }),
       ),
@@ -364,9 +374,9 @@ describe("a token the server will not renew", () => {
     storeSessionMintedAt(T0 - LIFETIME_MS - DAY_MS);
     storage.setConversationId("dddddddd-dddd-dddd-dddd-dddddddddddd");
     storage.setLastKnownSequence("dddddddd-dddd-dddd-dddd-dddddddddddd", 4200);
-    fetchImpl.mockImplementation((url: string) =>
+    fetchImpl.mockImplementation((url: string | URL | Request) =>
       Promise.resolve(
-        String(url).endsWith("/renew") ? new Response("", { status: 401 }) : sessionResponse(tokenMintedAt(now), 201),
+        urlOf(url).endsWith("/renew") ? new Response("", { status: 401 }) : sessionResponse(tokenMintedAt(now), 201),
       ),
     );
 

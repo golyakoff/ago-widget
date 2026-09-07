@@ -25,6 +25,12 @@ export interface WidgetStrings {
   readonly typeAMessage: string;
   readonly send: string;
   readonly attachAFile: string;
+  /** `23-61`: the reserved emoji place in the composer's second row - not a picker (out of scope for
+   * that item), so this is a `title` on an inert, unfocusable placeholder, not a control's label. */
+  readonly emojiComingSoon: string;
+  /** `23-61`: the reserved place for «Сохранить диалог» (`23-62`, not built here) - same shape as
+   * {@link emojiComingSoon}, a `title` on an inert placeholder. */
+  readonly saveConversationComingSoon: string;
   readonly previousChatExpired: string;
   readonly chatUnavailable: string;
   readonly sessionExpired: string;

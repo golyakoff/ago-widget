@@ -18,6 +18,8 @@ export const en: WidgetStrings = {
   typeAMessage: "Type a message…",
   send: "Send",
   attachAFile: "Attach a file",
+  emojiComingSoon: "Emoji (coming soon)",
+  saveConversationComingSoon: "Save conversation (coming soon)",
   previousChatExpired:
     "Your previous chat has expired, so this is a new conversation. Anything you sent before is no longer shown here.",
   chatUnavailable: "Chat is unavailable right now. Please try again later.",

@@ -264,11 +264,24 @@ export const widgetStyles = /* css */ `
     color: #fff;
   }
 
+  /* 23-61: a column of two rows now, not one flex row - the field's own row, then the controls'.
+     flex-direction: column is the only structural change here; both rows below are still flex
+     rows exactly as .ago-composer used to be, just nested one level down. */
   .ago-composer {
     display: flex;
+    flex-direction: column;
     gap: 0.5rem;
     padding: 0.75rem;
     border-top: 0.0625rem solid #e5e7eb;
+  }
+
+  /* 23-61: the field's own row - align-items: flex-end keeps the round send button pinned to the
+     input's bottom edge as the textarea grows past one line (.ago-input's own max-height: 6rem),
+     rather than drifting to the vertical centre of a now-taller row. */
+  .ago-composer-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
   }
 
   .ago-input {
@@ -281,14 +294,27 @@ export const widgetStyles = /* css */ `
     max-height: 6rem;
   }
 
+  /* 23-61: small and round, icon-only - width/height fixed rather than padded-to-content,
+     because a round button's hit area is exactly its box and justify-content/align-items: center
+     is what keeps the glyph centred in it. 2.25rem (36px at the default root size) clears WCAG 2.5.8's
+     24px floor with margin, checked by ux-gate's own minSize.ts rather than only measured here -
+     the backlog item's own warning: "the one control that must never become hard to hit". */
   .ago-send {
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: none;
-    border-radius: 0.5rem;
+    border-radius: 50%;
     background: var(--ago-accent);
     color: #fff;
-    padding: 0 1rem;
+    padding: 0;
     cursor: pointer;
     font: inherit;
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .ago-send:disabled,
@@ -297,13 +323,58 @@ export const widgetStyles = /* css */ `
     cursor: not-allowed;
   }
 
+  /* 23-61: the second row - attach (moved down from the field's own row) plus the two reserved
+     places, align-items: center so the emoji-and-floppy-disk placeholders line up with attach's
+     own glyph rather than sitting off-baseline next to it. */
+  .ago-composer-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* 23-61: an explicit box, not padding-around-a-glyph - found by ux-gate's own minSize.ts, not by
+     reasoning about it by hand (the backlog item's own warning about exactly that failure mode). This
+     control used to sit in .ago-composer's single flex row, whose default align-items: stretch
+     silently gave it the row's full height (set by .ago-input, its tallest sibling there); moving it
+     into .ago-composer-controls - a row of same-sized icons, align-items: center - removed that
+     accidental stretch and let it collapse to its own content box: 20px tall (font-size 1.25rem,
+     line-height 1, no vertical padding), under WCAG 2.5.8's 24px floor. 2rem (32px) is a size chosen
+     on purpose now rather than inherited from a neighbour by accident. */
   .ago-attach {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
     border: none;
     background: transparent;
     font-size: 1.25rem;
     cursor: pointer;
-    padding: 0 0.25rem;
+    padding: 0;
     line-height: 1;
+  }
+
+  /* 23-61: a reserved place, styled to look reserved rather than broken or clickable - the
+     backlog item's own requirement. Grayscale plus reduced opacity mutes the glyph without needing a
+     second icon set; no :hover rule at all, deliberately (the same reasoning 23-31's own CSS
+     states for the console's reserved nav entries: "the one thing this row must not look like is
+     clickable"). Sized and positioned like .ago-attach so the row reads as one aligned icon strip,
+     not because it needs to clear a target-size floor - ux-gate's minSize.ts never scores this
+     element at all, because a bare span with no interactive role does not match its selector list
+     (that file's own remarks: this is not an interactive element under-sized, it is not an
+     interactive element). */
+  .ago-composer-reserved {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    opacity: 0.45;
+    filter: grayscale(1);
+    cursor: default;
+    user-select: none;
   }
 
   .ago-file-input {

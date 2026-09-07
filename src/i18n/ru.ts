@@ -18,6 +18,8 @@ export const ru: WidgetStrings = {
   typeAMessage: "Введите сообщение…",
   send: "Отправить",
   attachAFile: "Прикрепить файл",
+  emojiComingSoon: "Эмодзи (скоро)",
+  saveConversationComingSoon: "Сохранить диалог (скоро)",
   previousChatExpired:
     "Срок действия предыдущего чата истёк, поэтому это новый диалог. Всё, что вы отправляли раньше, здесь больше не отображается.",
   chatUnavailable: "Чат сейчас недоступен. Попробуйте позже.",

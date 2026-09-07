@@ -95,6 +95,15 @@ export class ChatWidget {
   private readonly input: HTMLTextAreaElement;
   private readonly sendButton: HTMLButtonElement;
   private readonly attachButton: HTMLButtonElement;
+  /** `23-61`: the composer's second row, reserved rather than built - an emoji picker and
+   * «Сохранить диалог» (`23-62`) are each their own item. Plain `<span>`s, never `<button>`: no
+   * `href`/`tabindex`/click handler, so neither is part of the tab order and neither is reachable by
+   * keyboard as though it were a control - the same shape `23-31` used for the console's own reserved
+   * nav entries (a `<span aria-disabled="true">`, `ago-console`'s `AppShell.tsx`), followed here
+   * rather than invented fresh. `aria-disabled="true"` names what is there (a place, not yet a
+   * control) without hiding it from assistive tech the way `aria-hidden` would. */
+  private readonly emojiPlaceholder: HTMLSpanElement;
+  private readonly savePlaceholder: HTMLSpanElement;
   private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
   /** `20-07`: null unless the embed carried `data-booking="true"`. Nullable is what makes "a shop
@@ -295,10 +304,15 @@ export class ChatWidget {
     });
     this.input.addEventListener("input", () => this.updateSendButtonEnabled());
 
+    // `23-61`: icon-only now (no visible label), so the accessible name has to come from
+    // `aria-label` alone - textContent carries only the glyph. `aria-label` wins the accessible-name
+    // computation over text content regardless, the same rule `attachButton` below already relies on
+    // for its own emoji-plus-label shape; this is that same pattern applied to `send`, not a new one.
     this.sendButton = document.createElement("button");
     this.sendButton.type = "submit";
     this.sendButton.className = "ago-send";
-    this.sendButton.textContent = this.strings.send;
+    this.sendButton.setAttribute("aria-label", this.strings.send);
+    this.sendButton.textContent = "➤";
     this.sendButton.disabled = true;
 
     // A native file picker, not a drag-and-drop zone or a custom widget - the skill's
@@ -324,7 +338,26 @@ export class ChatWidget {
     this.attachButton.disabled = true;
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
-    composer.append(this.attachButton, this.fileInput, this.input, this.sendButton);
+    this.emojiPlaceholder = this.buildReservedComposerPlace("🙂", this.strings.emojiComingSoon);
+    this.savePlaceholder = this.buildReservedComposerPlace("💾", this.strings.saveConversationComingSoon);
+
+    // `23-61`: the field's own full-width row, alone - the composer's whole reason for existing is
+    // this field, and `.ago-composer-row` styling (`ui/styles.ts`) is what actually widens it, this
+    // is only what stops the send button from sharing the row `attachButton` used to narrow it from.
+    // Send stays beside the field rather than moving to the row below with `attachButton`: it is "the
+    // one control that must never become hard to hit" (the backlog item's own words), so it stays
+    // where a visitor's eye already is the moment they finish typing, not one row further down.
+    const composerRow = document.createElement("div");
+    composerRow.className = "ago-composer-row";
+    composerRow.append(this.input, this.sendButton);
+
+    // `23-61`: the second row - attach (moved down from the row above) plus the two reserved places,
+    // in the backlog item's own order (attach, emoji, save).
+    const composerControls = document.createElement("div");
+    composerControls.className = "ago-composer-controls";
+    composerControls.append(this.attachButton, this.fileInput, this.emojiPlaceholder, this.savePlaceholder);
+
+    composer.append(composerRow, composerControls);
     this.panel.append(header);
     if (this.notice) {
       this.panel.append(this.notice);
@@ -502,8 +535,10 @@ export class ChatWidget {
     }
     this.input.setAttribute("aria-label", strings.messageAriaLabel);
     this.input.placeholder = strings.typeAMessage;
-    this.sendButton.textContent = strings.send;
+    this.sendButton.setAttribute("aria-label", strings.send);
     this.attachButton.setAttribute("aria-label", strings.attachAFile);
+    this.emojiPlaceholder.title = strings.emojiComingSoon;
+    this.savePlaceholder.title = strings.saveConversationComingSoon;
 
     // `ui/styles.ts`'s own remarks: a CSS `content:` pseudo-element string cannot be reached by
     // rewriting a DOM text node, so it is threaded through as a custom property instead, the same
@@ -727,6 +762,27 @@ export class ChatWidget {
    * button was otherwise permanently disabled since nothing re-ran this check after connect). */
   private updateSendButtonEnabled(): void {
     this.sendButton.disabled = !this.isConnected || this.input.value.trim().length === 0;
+  }
+
+  /** `23-61`: a reserved composer place - `<span>`, not `<button>`, so there is no `href`, `type`,
+   * click handler or `tabindex` to ever add: this element cannot become reachable by keyboard as a
+   * control by accident the way an unconditionally-`disabled` `<button>` still could (a `disabled`
+   * attribute removed by a future edit would silently turn it into a real one). `aria-disabled="true"`
+   * rather than `aria-hidden="true"` - it names "a place, not a control", not "nothing here" - and
+   * `title` gives a mouse-hovering visitor the same "coming soon" context a sighted keyboard user
+   * gets for free from `ux-gate`'s contrast/size checks never touching this element at all (it never
+   * matches `minSize.ts`'s `INTERACTIVE_SELECTOR`, which lists `button`/`a[href]`/`[role='button']`
+   * and the like - a bare `<span>` with no role is not on that list, deliberately: this is not an
+   * interactive element under-sized, it is not an interactive element). Mirrors `23-31`'s own shape
+   * for the console's reserved nav entries (`ago-console`'s `AppShell.tsx`) rather than inventing a
+   * new one for this widget. */
+  private buildReservedComposerPlace(icon: string, title: string): HTMLSpanElement {
+    const place = document.createElement("span");
+    place.className = "ago-composer-reserved";
+    place.setAttribute("aria-disabled", "true");
+    place.title = title;
+    place.textContent = icon;
+    return place;
   }
 
   private sendCurrentMessage(): void {

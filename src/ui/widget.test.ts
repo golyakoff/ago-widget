@@ -470,6 +470,44 @@ describe("the panel's composer", () => {
 
     expect(currentHub().invocationsOf("SendMessageAsync")).toHaveLength(0);
   });
+
+  /**
+   * `23-61`: the two reserved places (emoji, save-the-conversation) must not be reachable by
+   * keyboard as though they were controls. A `<span>` with no `tabindex` attribute answers `-1` from
+   * `.tabIndex` (not part of the tab order) and has no `href`/`type`/click handler to make it one -
+   * the same "inert, not merely disabled" shape `23-31` used for the console's own reserved nav
+   * entries. `aria-disabled="true"` names what is there without hiding it from assistive tech the way
+   * `aria-hidden` would.
+   */
+  it("renders the reserved emoji and save places as inert spans, not controls", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    const reserved = [...panel.root.querySelectorAll<HTMLSpanElement>(".ago-composer-reserved")];
+    expect(reserved).toHaveLength(2);
+
+    for (const place of reserved) {
+      expect(place.tagName).toBe("SPAN");
+      expect(place.getAttribute("aria-disabled")).toBe("true");
+      expect(place.hasAttribute("tabindex")).toBe(false);
+      expect(place.tabIndex).toBe(-1);
+      expect(place.hasAttribute("href")).toBe(false);
+    }
+
+    expect(reserved[0]!.title).toBe(en.emojiComingSoon);
+    expect(reserved[1]!.title).toBe(en.saveConversationComingSoon);
+  });
+
+  it("keeps the send button a small round icon-only control with an accessible name", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    expect(panel.send.getAttribute("aria-label")).toBe(en.send);
+    // Icon-only: nothing but the glyph, so the accessible name comes from `aria-label` alone rather
+    // than from text content the way an unlabelled icon button would otherwise fall back to.
+    expect(panel.send.textContent?.trim().length).toBeGreaterThan(0);
+    expect(panel.send.type).toBe("submit");
+  });
 });
 
 /**

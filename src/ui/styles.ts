@@ -487,4 +487,33 @@ export const widgetStyles = /* css */ `
     margin: 0.5rem 0 0;
     font-size: 0.875rem;
   }
+
+  /* 23-58: the online entry point - a modest, light-grey, link-like control under the visitor's own
+     first message. A flex sibling of the message bubbles inside .ago-messages (ChatWidget's own
+     appendVisitorIntroControl inserts it with insertAdjacentElement, never nested inside the visitor's
+     own accent-colored bubble) - so its grey text sits on the panel's white background, not on
+     --ago-accent, which is the whole reason it can use the same #6b7280 .ago-status/.ago-message--system
+     already use elsewhere in this file rather than needing a lighter, bubble-specific color of its own
+     (this file's own remarks a few rules up measure #6b7280 against --ago-accent's default blue at
+     roughly 1.06:1 - functionally invisible - which is exactly the pairing this placement avoids). */
+  .ago-contact-capture-intro {
+    align-self: flex-end;
+  }
+
+  /* A real button element, styled to read as a link - ui/widget.ts's own remarks on why: the
+     accessible name and keyboard reach a backlog item asked for come from the element being a button,
+     not from imitating one with a span. min-height keeps it clear of the ux-gate's 24px
+     undersized-interactive floor even though the label's own font-size is smaller than that. */
+  .ago-contact-capture-intro-link {
+    font: inherit;
+    font-size: 0.8125rem;
+    color: #6b7280;
+    background: none;
+    border: none;
+    padding: 0.375rem 0.25rem;
+    margin: 0;
+    min-height: 1.5rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
 `;

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageDto, VisitorJoinResult } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
 import { currentHub, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
+import { en } from "../i18n/en.js";
 
 /**
  * `11-08`: the visitor-facing half of reconnect and resume - what a person looking at the panel sees
@@ -292,6 +293,143 @@ describe("an automatic reply", () => {
     const bubbles = [...panel.root.querySelectorAll(".ago-message")];
     expect(bubbles[1]!.querySelector(".ago-contact-capture")).not.toBeNull();
     expect(bubbles[2]!.querySelector(".ago-contact-capture")).toBeNull();
+    // `23-58`: the online link this test's own first (Visitor) message would otherwise have earned
+    // is not left dangling beside the out-of-hours form that superseded it - one control, not two.
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
+  });
+});
+
+/**
+ * `23-58`: a visitor writing while an operator is online - no `System` auto-reply ever arrives, which
+ * before this item meant no contact control of any kind. The fixture in every test below is exactly
+ * that: one `Visitor` message, nothing else, forever - `SendOfflineAutoReplyHandler` simply never
+ * fires for an online site, and the widget has no way to be told that other than a `System` message's
+ * absence.
+ */
+describe("23-58: the online entry point", () => {
+  function introLink(root: ShadowRoot): HTMLButtonElement {
+    const link = root.querySelector<HTMLButtonElement>(".ago-contact-capture-intro-link");
+    if (link === null) {
+      throw new Error("no intro link");
+    }
+
+    return link;
+  }
+
+  function requiredFieldsOf(root: ParentNode): { name: HTMLInputElement; phone: HTMLInputElement; email: HTMLInputElement } {
+    const name = root.querySelector<HTMLInputElement>('input[type="text"]');
+    const phone = root.querySelector<HTMLInputElement>('input[type="tel"]');
+    const email = root.querySelector<HTMLInputElement>('input[type="email"]');
+    if (name === null || phone === null || email === null) {
+      throw new Error("the contact form is missing one of its three fields");
+    }
+
+    return { name, phone, email };
+  }
+
+  it("offers «Представиться…» under the visitor's own first message, and nothing else", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const panel = await openWidget();
+    await flush();
+
+    const link = introLink(panel.root);
+    expect(link.textContent).toBe(en.contactCaptureIntroLink);
+    expect(link.type).toBe("button");
+    // Not rendered yet - only the link is, until it is clicked (unlike the out-of-hours path, which
+    // renders the form itself directly).
+    expect(panel.root.querySelectorAll(".ago-contact-capture")).toHaveLength(0);
+  });
+
+  it("does not grow a second link under a later visitor message", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const panel = await openWidget();
+    await flush();
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(1);
+
+    currentHub().push(message("m2", 2, "Visitor"));
+    await flush();
+
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(1);
+  });
+
+  it("clicking the link opens the identical three-field, all-required form the out-of-hours path opens", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const panel = await openWidget();
+    await flush();
+
+    introLink(panel.root).click();
+    await flush();
+    await flush();
+
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
+    const forms = panel.root.querySelectorAll(".ago-contact-capture");
+    expect(forms).toHaveLength(1);
+    const { name, phone, email } = requiredFieldsOf(forms[0]!);
+    expect(name.required).toBe(true);
+    expect(phone.required).toBe(true);
+    expect(email.required).toBe(true);
+  });
+
+  it("the control disappears once a contact has been left, and does not come back in that conversation", async () => {
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const panel = await openWidget();
+    await flush();
+
+    introLink(panel.root).click();
+    await flush();
+    await flush();
+
+    const { name, phone, email } = requiredFieldsOf(panel.root.querySelector(".ago-contact-capture")!);
+    name.value = "Ivan";
+    phone.value = "+7 000 000-00-01";
+    email.value = "ivan@example.invalid";
+    panel.root.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    await flush();
+    await flush();
+
+    expect(panel.root.textContent).toContain(en.contactCaptureConfirmation);
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
+    expect(panel.root.querySelectorAll("form.ago-contact-capture-form")).toHaveLength(0);
+
+    // A further visitor message must not resurrect the link - `visitorIntroControlOffered` fires
+    // once, for the *first* message, and `contactCaptureShown` is now true besides.
+    currentHub().push(message("m2", 2, "Visitor"));
+    await flush();
+    expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
+  });
+
+  it("both entry points render the identical set of three required fields", async () => {
+    // Online: the link, clicked.
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const onlinePanel = await openWidget();
+    await flush();
+    introLink(onlinePanel.root).click();
+    await flush();
+    await flush();
+    const online = requiredFieldsOf(onlinePanel.root.querySelector(".ago-contact-capture")!);
+
+    // A second, independent mount - `openWidget` finds its host via the same
+    // `[data-ago-chat-widget]` selector every other test in this file uses, so the first widget's
+    // markup has to be gone before this one looks for it (`beforeEach`'s own `document.body.innerHTML
+    // = ""` does the identical thing between tests; this is the same reset, mid-test, on purpose).
+    document.body.innerHTML = "";
+
+    // Out of hours: the System auto-reply, unclicked - the form renders itself.
+    joinQueue.push(joinResult([message("m2", 2, "System"), message("m1", 1, "Visitor")]));
+    const offlinePanel = await openWidget();
+    await flush();
+    const offline = requiredFieldsOf(offlinePanel.root.querySelector(".ago-contact-capture")!);
+
+    for (const pair of [
+      [online.name, offline.name],
+      [online.phone, offline.phone],
+      [online.email, offline.email],
+    ] as const) {
+      expect(pair[0].type).toBe(pair[1].type);
+      expect(pair[0].required).toBe(true);
+      expect(pair[1].required).toBe(true);
+    }
   });
 });
 

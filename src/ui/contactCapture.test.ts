@@ -30,6 +30,15 @@ function nameInput(root: HTMLElement): HTMLInputElement {
   return input;
 }
 
+function emailInput(root: HTMLElement): HTMLInputElement {
+  const input = root.querySelector<HTMLInputElement>('input[type="email"]');
+  if (input === null) {
+    throw new Error("no email input");
+  }
+
+  return input;
+}
+
 function setValue(element: HTMLInputElement, value: string): void {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(element, value);
 }
@@ -40,24 +49,59 @@ describe("renderContactCaptureControl", () => {
     const control = renderContactCaptureControl(en, onSubmit);
     const form = control.querySelector("form")!;
 
+    setValue(nameInput(control), "Ivan");
+    setValue(emailInput(control), "ivan@example.invalid");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
     await Promise.resolve();
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("submits the trimmed phone and name, and shows a confirmation once it resolves", async () => {
+  // `23-58`: name, phone and e-mail are all required now (`docs/backlog/23-58`'s own Done-when) -
+  // before this item the name rode as optional, which is what this test used to cover instead.
+  it("does not call onSubmit if the name field is empty - it is required", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit);
+    const form = control.querySelector("form")!;
+
+    setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await Promise.resolve();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // `23-58`: the new required field, and the manual guard it needs for exactly the reason
+  // `phone`'s own guard already exists - a programmatically dispatched `submit` skips the browser's
+  // own constraint validation.
+  it("does not call onSubmit if the email field is empty - it is required", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit);
+    const form = control.querySelector("form")!;
+
+    setValue(nameInput(control), "Ivan");
+    setValue(phoneInput(control), "+7 000 000-00-01");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await Promise.resolve();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits the trimmed name, phone and email, and shows a confirmation once it resolves", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const control = renderContactCaptureControl(en, onSubmit);
     const form = control.querySelector("form")!;
 
     setValue(nameInput(control), "  Ivan  ");
     setValue(phoneInput(control), "  +7 000 000-00-01  ");
+    setValue(emailInput(control), "  ivan@example.invalid  ");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       name: "Ivan",
       phone: "+7 000 000-00-01",
+      email: "ivan@example.invalid",
       acceptContact: false,
       acceptMarketing: false,
     });
@@ -68,22 +112,6 @@ describe("renderContactCaptureControl", () => {
     // The form is gone entirely once confirmed, not merely disabled - `renderContactCaptureControl`'s
     // own `container.replaceChildren(confirmation)`.
     expect(control.querySelector("form")).toBeNull();
-  });
-
-  it("submits with an empty name when the visitor leaves it blank", () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const control = renderContactCaptureControl(en, onSubmit);
-    const form = control.querySelector("form")!;
-
-    setValue(phoneInput(control), "+7 000 000-00-01");
-    form.dispatchEvent(new Event("submit", { cancelable: true }));
-
-    expect(onSubmit).toHaveBeenCalledWith({
-      name: "",
-      phone: "+7 000 000-00-01",
-      acceptContact: false,
-      acceptMarketing: false,
-    });
   });
 
   it("disables the form while a submission is in flight", async () => {
@@ -97,7 +125,9 @@ describe("renderContactCaptureControl", () => {
     const control = renderContactCaptureControl(en, onSubmit);
     const form = control.querySelector("form")!;
 
+    setValue(nameInput(control), "Ivan");
     setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     expect(phoneInput(control).disabled).toBe(true);
@@ -115,7 +145,9 @@ describe("renderContactCaptureControl", () => {
     const control = renderContactCaptureControl(en, onSubmit);
     const form = control.querySelector("form")!;
 
+    setValue(nameInput(control), "Ivan");
     setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     await vi.waitFor(() => {
@@ -189,7 +221,9 @@ describe("renderContactCaptureControl - consent", () => {
     const control = renderContactCaptureControl(en, onSubmit, requiredConsent);
     const form = control.querySelector("form")!;
 
+    setValue(nameInput(control), "Ivan");
     setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
     consentCheckboxes(control)[0]!.checked = true;
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
@@ -223,7 +257,9 @@ describe("renderContactCaptureControl - consent", () => {
     expect(control.querySelector(".ago-contact-capture-consent")?.textContent).toBe("Also send me offers.");
 
     // Left unticked, deliberately - refusing marketing must never block the contact write.
+    setValue(nameInput(control), "Ivan");
     setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ acceptContact: false, acceptMarketing: false }));
@@ -242,7 +278,9 @@ describe("renderContactCaptureControl - consent", () => {
     expect(checkboxes).toHaveLength(2);
     checkboxes[0]!.checked = true; // contact - required
     checkboxes[1]!.checked = true; // marketing - optional, ticked anyway
+    setValue(nameInput(control), "Ivan");
     setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ acceptContact: true, acceptMarketing: true }));

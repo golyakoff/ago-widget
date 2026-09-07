@@ -72,6 +72,15 @@ export interface WidgetStrings {
   // (that file's own doc comment explains why), so its copy is not `adr/0065`'s vocabulary either.
   readonly contactCaptureNamePlaceholder: string;
   readonly contactCapturePhonePlaceholder: string;
+  /** `23-58`: the third required field. */
+  readonly contactCaptureEmailPlaceholder: string;
+  /** `23-58`: the online entry point's own label - a light, link-like control under the visitor's own
+   * first message, rendered by `ui/widget.ts`'s `appendVisitorIntroControl`. The trailing ellipsis is
+   * part of the copy in both locales, not this table's punctuation - it is what tells a visitor the
+   * control opens something rather than performing an action outright, the same convention
+   * `continueLabel`'s own neighbours in this table do not need because a button's verb already says
+   * enough. */
+  readonly contactCaptureIntroLink: string;
   readonly contactCaptureSubmitButton: string;
   readonly contactCaptureSubmittingButton: string;
   /** Shown once the phone row (and, if typed, the name row) is recorded - deliberately does not

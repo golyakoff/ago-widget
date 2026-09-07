@@ -16,12 +16,15 @@ import type { WidgetStrings } from "../i18n/strings.js";
  * here.</b> The verified mode's own caller (booking, `14-15`/`20-09`) is out of this item's scope; this
  * function's signature carries no verification-related parameter at all, matching that.
  *
- * <b>Name is optional, phone is not.</b> The control asks for both (the author's own suggestion, quoted
- * in `flows.md` 1.2: "показать ему форму ввода телефона и имени"), but only the phone number is what
- * the promise ("we will call you back") depends on - a visitor who skips the name field still gets
- * called back. Submitting records the phone as `Kind: "Phone"` and, only if a name was typed, a second
- * row as `Kind: "Other"` (`VisitorContactDetailKind.Other`'s own remarks name "a preferred name" as
- * exactly this case) - two rows rather than a wider domain schema for one item.
+ * <b>`23-58`: name, phone and e-mail are all required.</b> Before this item the name rode as optional
+ * and there was no e-mail field at all; the author's own decision (the backlog item's own "What this
+ * costs" section, recorded there rather than here) trades completion rate for completeness now that a
+ * second entry point (the online «Представиться…» link, `ui/widget.ts`'s `appendVisitorIntroControl`)
+ * means this form is offered far more often. Submitting records three rows: the phone as
+ * `Kind: "Phone"`, the name as `Kind: "Other"` (`VisitorContactDetailKind.Other`'s own remarks name "a
+ * preferred name" as exactly this case), and the e-mail as `Kind: "Email"` - not a new kind this item
+ * had to add: `VisitorContactDetailKind.Email` already existed in `ago-chat`'s domain (`14-14`) and was
+ * simply never a field this widget offered.
  *
  * `24-05`: two more, independently-refusable booleans - `acceptContact`/`acceptMarketing`. Both are
  * `false` unless a checkbox for that purpose was actually rendered *and* ticked; a caller
@@ -32,6 +35,7 @@ import type { WidgetStrings } from "../i18n/strings.js";
 export interface ContactCaptureResult {
   name: string;
   phone: string;
+  email: string;
   acceptContact: boolean;
   acceptMarketing: boolean;
 }
@@ -82,6 +86,7 @@ export function renderContactCaptureControl(
   nameInput.placeholder = strings.contactCaptureNamePlaceholder;
   nameInput.setAttribute("aria-label", strings.contactCaptureNamePlaceholder);
   nameInput.autocomplete = "name";
+  nameInput.required = true;
 
   const phoneInput = document.createElement("input");
   phoneInput.type = "tel";
@@ -90,6 +95,17 @@ export function renderContactCaptureControl(
   phoneInput.setAttribute("aria-label", strings.contactCapturePhonePlaceholder);
   phoneInput.autocomplete = "tel";
   phoneInput.required = true;
+
+  // `23-58`: the third required field - `VisitorContactDetailKind.Email` on the wire
+  // (`recordContactDetail(..., "Email", ...)`, `ui/widget.ts`'s `submitContactCapture`), a kind that
+  // already existed in `ago-chat`'s domain and needed no migration to accept.
+  const emailInput = document.createElement("input");
+  emailInput.type = "email";
+  emailInput.className = "ago-contact-capture-input";
+  emailInput.placeholder = strings.contactCaptureEmailPlaceholder;
+  emailInput.setAttribute("aria-label", strings.contactCaptureEmailPlaceholder);
+  emailInput.autocomplete = "email";
+  emailInput.required = true;
 
   // `24-05`: a contact-consent checkbox exists only when the site requires one and this visitor has
   // not already accepted it - `showContactCheckbox`/`showMarketingCheckbox` are each independently
@@ -123,7 +139,7 @@ export function renderContactCaptureControl(
   errorNote.hidden = true;
   errorNote.setAttribute("role", "alert");
 
-  form.append(nameInput, phoneInput);
+  form.append(nameInput, phoneInput, emailInput);
   if (contactCheckbox && consent?.contact) {
     form.appendChild(buildConsentLabel(contactCheckbox, consent.contact.title));
   }
@@ -135,22 +151,25 @@ export function renderContactCaptureControl(
   form.appendChild(submitButton);
   container.append(form, errorNote);
 
-  const allInputs = [nameInput, phoneInput, contactCheckbox, marketingCheckbox].filter(
+  const allInputs = [nameInput, phoneInput, emailInput, contactCheckbox, marketingCheckbox].filter(
     (el): el is HTMLInputElement => el !== null,
   );
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    const name = nameInput.value.trim();
     const phone = phoneInput.value.trim();
-    if (!phone) {
+    const email = emailInput.value.trim();
+
+    // `23-58`: all three are required (`nameInput.required`/`phoneInput.required`/
+    // `emailInput.required` above ask the browser itself), but the browser's own constraint
+    // validation only runs for a *user-driven* submit - a programmatically dispatched `submit` event
+    // skips it entirely, the same gap `24-05`'s own consent-checkbox guard below already exists to
+    // close - so every required field is re-checked here too, never left to the DOM alone.
+    if (!name || !phone || !email) {
       return;
     }
 
-    // `24-05`: the identical manual guard `phone` already gets, for the identical reason - the
-    // checkbox's own `required` attribute asks a real browser's constraint validation to refuse a
-    // *user-driven* submit (a click, an Enter key), but this handler is also reachable via a
-    // programmatically dispatched `submit` event that never runs that validation at all, so the gate
-    // this item's own crux depends on must not rest on the browser alone.
     if (contactCheckbox && !contactCheckbox.checked) {
       return;
     }
@@ -164,8 +183,9 @@ export function renderContactCaptureControl(
     submitButton.textContent = strings.contactCaptureSubmittingButton;
 
     onSubmit({
-      name: nameInput.value.trim(),
+      name,
       phone,
+      email,
       acceptContact: contactCheckbox?.checked ?? false,
       acceptMarketing: marketingCheckbox?.checked ?? false,
     })

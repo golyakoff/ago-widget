@@ -87,7 +87,7 @@ jobs:
         # On failure too: a picture of the screen a failing assertion describes is most useful exactly
         # when the gate is red.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ux-gate-screenshots
           path: ux-gate/screenshots/

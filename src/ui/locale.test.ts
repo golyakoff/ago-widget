@@ -51,6 +51,8 @@ interface Panel {
   input: HTMLTextAreaElement;
   send: HTMLButtonElement;
   attach: HTMLButtonElement;
+  emojiPlaceholder: HTMLSpanElement;
+  savePlaceholder: HTMLSpanElement;
   status: HTMLDivElement;
 }
 
@@ -64,6 +66,14 @@ function panelOf(root: ShadowRoot): Panel {
     return element;
   };
 
+  // `23-61`: the two reserved composer places share one class (`.ago-composer-reserved`) and differ
+  // only in `title` - selected by DOM order (emoji, then save), the same order `ui/widget.ts`'s own
+  // `composerControls.append(...)` puts them in.
+  const reservedPlaces = root.querySelectorAll<HTMLSpanElement>(".ago-composer-reserved");
+  if (reservedPlaces.length !== 2) {
+    throw new Error(`the widget has ${reservedPlaces.length} .ago-composer-reserved elements, expected 2`);
+  }
+
   return {
     root,
     toggle: query<HTMLButtonElement>(".ago-toggle"),
@@ -73,6 +83,8 @@ function panelOf(root: ShadowRoot): Panel {
     input: query<HTMLTextAreaElement>(".ago-input"),
     send: query<HTMLButtonElement>(".ago-send"),
     attach: query<HTMLButtonElement>(".ago-attach"),
+    emojiPlaceholder: reservedPlaces[0]!,
+    savePlaceholder: reservedPlaces[1]!,
     status: query<HTMLDivElement>(".ago-status"),
   };
 }
@@ -141,8 +153,10 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
     expect(panel.closeButton.getAttribute("aria-label")).toBe("Закрыть чат");
     expect(panel.input.getAttribute("aria-label")).toBe("Сообщение");
     expect(panel.input.placeholder).toBe("Введите сообщение…");
-    expect(panel.send.textContent).toBe("Отправить");
+    expect(panel.send.getAttribute("aria-label")).toBe("Отправить");
     expect(panel.attach.getAttribute("aria-label")).toBe("Прикрепить файл");
+    expect(panel.emojiPlaceholder.title).toBe("Эмодзи (скоро)");
+    expect(panel.savePlaceholder.title).toBe("Сохранить диалог (скоро)");
   });
 
   it("renders the closed-launcher aria-label in Russian before the panel is ever opened", async () => {
@@ -248,8 +262,10 @@ describe("a widget booted against a site with no WidgetLocale set", () => {
     expect(panel.closeButton.getAttribute("aria-label")).toBe("Close chat");
     expect(panel.input.getAttribute("aria-label")).toBe("Message");
     expect(panel.input.placeholder).toBe("Type a message…");
-    expect(panel.send.textContent).toBe("Send");
+    expect(panel.send.getAttribute("aria-label")).toBe("Send");
     expect(panel.attach.getAttribute("aria-label")).toBe("Attach a file");
+    expect(panel.emojiPlaceholder.title).toBe("Emoji (coming soon)");
+    expect(panel.savePlaceholder.title).toBe("Save conversation (coming soon)");
   });
 
   it("renders the connection status in English", async () => {

@@ -115,7 +115,7 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
   {
     key: "last-sequence:<conversationId>",
     holds: "The highest message sequence number this browser has seen for one conversation - a cursor, never message text.",
-    why: "Lets a reconnect or reload ask the server for only what it missed, instead of the whole transcript again.",
+    why: "Lets a dropped connection resume with only what it missed while it was gone, instead of the whole transcript again. `23-53`: a plain reload no longer uses this to ask for less - it always asks for the visitor's own history page, so reopening the widget never comes back empty.",
     lifetime:
       "One entry per conversation the browser has ever resumed. The entry for whichever conversation id was current is removed when the stored identity itself is replaced (`17-07`); an entry for an earlier, already-superseded conversation is not otherwise cleared.",
     survivesTabClose: true,

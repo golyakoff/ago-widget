@@ -225,13 +225,40 @@ describe("the panel while the connection is gone and after it returns", () => {
 });
 
 /**
+ * `23-53`: "the visitor sees an empty thread while the operator sees the whole conversation".
+ * `connection.test.ts` proves the connection layer asks for the right thing on a fresh page load;
+ * this proves the *panel* actually renders what comes back, in the order a person wrote it.
+ */
+describe("reopening the widget on a fresh page load", () => {
+  it("renders the visitor's own history in the order it was written, oldest first", async () => {
+    // `GetHistoryAsync`'s own "most recent page" shape is newest-first
+    // (`IConversationReadStore.GetHistoryAsync`'s own remarks) - the fixture lists it that way, the
+    // same order the real server sends. Fails before this item's own fix: `connect()` used to append
+    // `joinResult.history` in array order verbatim, which nothing had ever exercised with more than
+    // one message before (the conversation this call resolves was always brand new until `23-53`'s
+    // own fix to `connection.ts` made a returning visitor's real history reach this loop at all) - so
+    // reversing it here is what keeps that first-ever real exercise from rendering upside down.
+    joinQueue.push(
+      joinResult([message("m3", 3, "Operator"), message("m2", 2, "Visitor"), message("m1", 1, "Visitor")]),
+    );
+    const panel = await openWidget();
+
+    expect(panel.bubbleTexts()).toEqual(["message m1", "message m2", "message m3"]);
+  });
+});
+
+/**
  * `14-04`: the offline auto-reply, seen from the visitor's side. It arrives as an ordinary message
  * with `authorKind: "System"` - there is no separate transport, which is the point of authoring it as
  * a message at all - and the only thing this side has to get right is not passing it off as a person.
  */
 describe("an automatic reply", () => {
   it("renders on the incoming side, labelled, with the reply itself as the bubble's text", async () => {
-    joinQueue.push(joinResult([message("m1", 1, "Visitor"), message("m2", 2, "System")]));
+    // `23-53`: `joinResult.history` is `GetHistoryAsync`'s "most recent page" shape - newest first
+    // (`IConversationReadStore.GetHistoryAsync`'s own remarks) - so the fixture is listed newest to
+    // oldest, the same order the real server returns; `connect()`'s own reversal is what puts m1
+    // before m2 on screen.
+    joinQueue.push(joinResult([message("m2", 2, "System"), message("m1", 1, "Visitor")]));
     const panel = await openWidget();
 
     const bubbles = [...panel.root.querySelectorAll(".ago-message")];
@@ -249,7 +276,9 @@ describe("an automatic reply", () => {
   });
 
   it("23-09: offers the out-of-hours contact control under the auto-reply bubble, exactly once", async () => {
-    joinQueue.push(joinResult([message("m1", 1, "Visitor"), message("m2", 2, "System"), message("m3", 3, "System")]));
+    // `23-53`: newest first, matching the real server's own "most recent page" order - see the
+    // previous test's own comment.
+    joinQueue.push(joinResult([message("m3", 3, "System"), message("m2", 2, "System"), message("m1", 1, "Visitor")]));
     const panel = await openWidget();
     // `24-05`: the control is now appended after an async round trip (getConsentRequirement) rather
     // than synchronously - a second flush lets that promise chain (currentToken -> fetch -> .json())

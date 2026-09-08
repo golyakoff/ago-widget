@@ -35,8 +35,8 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
 
     // Every documented key with a value, at least once: the identity plus every cached config field
     // (`visitor-token`, `visitor-id`, `widget-color`, `widget-position`, `widget-locale`,
-    // `widget-notice-text`, `widget-notice-url`), the conversation cursor (`conversation-id`,
-    // `last-sequence:<conversationId>`).
+    // `widget-notice-text`, `widget-notice-url`, `widget-attract-attention`), the conversation cursor
+    // (`conversation-id`, `last-sequence:<conversationId>`).
     storage.setVisitorSession({
       token: "t",
       visitorId: "v",
@@ -45,6 +45,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetLocale: "Ru",
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      widgetAttractAttention: true,
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
@@ -68,6 +69,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetLocale: "Ru",
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      widgetAttractAttention: true,
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);

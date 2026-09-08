@@ -145,6 +145,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetLocale: null,
     widgetNoticeText: null,
     widgetNoticeUrl: null,
+    widgetAttractAttention: false,
   });
   return token;
 }

@@ -78,7 +78,14 @@ export interface HistoryPage {
  * `16-04`: `widgetNoticeText`/`widgetNoticeUrl` join on the identical terms - two more additive,
  * nullable fields, both `null` for every site that has not configured a processing notice. Normalised
  * by `ui/appearance.ts`'s `parseNoticeText`/`parseNoticeUrl`, the same courtesy-re-check split every
- * other field on this response already gets. */
+ * other field on this response already gets.
+ *
+ * `23-63`: `widgetAttractAttention` joins on the identical terms - one more additive field, `false`
+ * (or absent, for a session cached before this setting existed) for every site that has not turned
+ * «Привлекать внимание» on. Normalised by `ui/appearance.ts`'s `parseAttractAttention`, the same
+ * courtesy-re-check every other field here already gets. Optional rather than required: a response
+ * this widget's own `WidgetStorage` cached before the field existed replays it as `undefined`, not a
+ * decode failure - `parseAttractAttention` treats that identically to `false`. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
@@ -87,6 +94,7 @@ export interface VisitorSessionResponse {
   widgetLocale: string;
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
+  widgetAttractAttention?: boolean;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

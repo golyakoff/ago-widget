@@ -17,7 +17,8 @@ import { en } from "../i18n/en.js";
  */
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
-const { ChatWidget } = await import("./widget.js");
+const { ChatWidget, MAX_ATTRACT_ATTEMPTS, ATTRACT_INITIAL_DELAY_MS, ATTRACT_PULSE_INTERVAL_MS, ATTRACT_PULSE_DURATION_MS } =
+  await import("./widget.js");
 
 const CONVERSATION_ID = "77777777-7777-7777-7777-777777777777";
 
@@ -763,5 +764,167 @@ describe("the funnel beacon", () => {
     await flush();
 
     expect(beaconBodiesSent().filter((body) => body.kind === "open")).toHaveLength(1);
+  });
+});
+
+/**
+ * `23-63`: the launcher drawing attention to itself while the panel is closed. Every test here uses
+ * real (fake-clocked) timers rather than `flush`'s microtask draining alone - the animation is
+ * orchestrated by `setTimeout` deliberately (`scheduleAttractAttention`'s own doc comment explains
+ * why a CSS `animation-iteration-count` alone cannot give "stops the moment it's opened"), so proving
+ * it needs to advance a clock, not just drain promises.
+ */
+describe("the launcher's attract-attention animation", () => {
+  function stubHandshake(overrides: Record<string, unknown> = {}): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              token: "visitor-token",
+              visitorId: "99999999-9999-9999-9999-999999999999",
+              widgetPrimaryColorHex: null,
+              widgetPosition: "BottomRight",
+              widgetLocale: "En",
+              widgetNoticeText: null,
+              widgetNoticeUrl: null,
+              widgetAttractAttention: true,
+              ...overrides,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+  }
+
+  async function mountWidget(): Promise<{ toggle: HTMLButtonElement }> {
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    if (host?.shadowRoot == null) {
+      throw new Error("the widget did not mount");
+    }
+    const toggle = host.shadowRoot.querySelector<HTMLButtonElement>(".ago-toggle");
+    if (toggle === null) {
+      throw new Error("the widget has no .ago-toggle");
+    }
+    return { toggle };
+  }
+
+  const attracting = (toggle: HTMLButtonElement) => toggle.classList.contains("ago-toggle--attract");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is off unless the tenant turned the setting on", async () => {
+    stubHandshake({ widgetAttractAttention: false });
+    const { toggle } = await mountWidget();
+
+    await vi.advanceTimersByTimeAsync(ATTRACT_INITIAL_DELAY_MS + ATTRACT_PULSE_DURATION_MS);
+
+    expect(attracting(toggle)).toBe(false);
+  });
+
+  it("pulses the closed launcher and stops on its own after the bounded number of attempts", async () => {
+    stubHandshake();
+    const { toggle } = await mountWidget();
+
+    expect(attracting(toggle)).toBe(false); // nothing before the initial delay elapses
+
+    for (let attempt = 1; attempt <= MAX_ATTRACT_ATTEMPTS; attempt++) {
+      // `attempt === 1` waits out ATTRACT_INITIAL_DELAY_MS; every later attempt waits out the
+      // interval between pulses instead - see scheduleAttractAttention's own startPulse/endPulse.
+      await vi.advanceTimersByTimeAsync(attempt === 1 ? ATTRACT_INITIAL_DELAY_MS : ATTRACT_PULSE_INTERVAL_MS);
+      expect(attracting(toggle)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(ATTRACT_PULSE_DURATION_MS);
+      expect(attracting(toggle)).toBe(false);
+    }
+
+    // The bound was reached inside the loop above. A visitor who keeps reading the page for a long
+    // time afterwards must not see a fourth pulse - this is the assertion the item's own Done-when
+    // ("it stops on its own") actually rests on, not the loop count by itself.
+    await vi.advanceTimersByTimeAsync(ATTRACT_PULSE_INTERVAL_MS * 5);
+    expect(attracting(toggle)).toBe(false);
+  });
+
+  // `23-63`: the deterministic counterpart to the test above - that one samples the launcher's
+  // state at one later instant, which happens to land in an "off" phase of the pulse cycle
+  // (ATTRACT_PULSE_INTERVAL_MS + ATTRACT_PULSE_DURATION_MS is a fixed period) regardless of whether
+  // pulsing is actually bounded - found while proving this item's own fails-before table: removing
+  // the bound check entirely still left that test green, purely by timing coincidence. Counting every
+  // activation directly, over a long window, is what actually pins the bound regardless of phase.
+  it("never activates the attract class more than the bounded number of times, however long the page stays open", async () => {
+    stubHandshake();
+    const { toggle } = await mountWidget();
+    const addSpy = vi.spyOn(toggle.classList, "add");
+
+    await vi.advanceTimersByTimeAsync(
+      ATTRACT_INITIAL_DELAY_MS + (ATTRACT_PULSE_DURATION_MS + ATTRACT_PULSE_INTERVAL_MS) * 50,
+    );
+
+    const activations = addSpy.mock.calls.filter((call) => call[0] === "ago-toggle--attract").length;
+    expect(activations).toBe(MAX_ATTRACT_ATTEMPTS);
+  });
+
+  it("stops immediately when the panel is opened, mid-pulse", async () => {
+    stubHandshake();
+    const { toggle } = await mountWidget();
+
+    await vi.advanceTimersByTimeAsync(ATTRACT_INITIAL_DELAY_MS);
+    expect(attracting(toggle)).toBe(true);
+
+    toggle.click(); // the visitor opens the panel while the launcher is mid-pulse
+    await flush();
+
+    expect(attracting(toggle)).toBe(false);
+
+    // Nothing schedules a further pulse either, however long the panel stays open afterwards.
+    await vi.advanceTimersByTimeAsync(ATTRACT_PULSE_INTERVAL_MS * 5);
+    expect(attracting(toggle)).toBe(false);
+  });
+
+  it("does not resume after the visitor opens and closes the panel - somebody who closed it has answered", async () => {
+    stubHandshake();
+    const { toggle } = await mountWidget();
+
+    toggle.click(); // open, before the launcher ever got a chance to pulse
+    await flush();
+    toggle.click(); // close
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(ATTRACT_INITIAL_DELAY_MS + ATTRACT_PULSE_DURATION_MS * MAX_ATTRACT_ATTEMPTS + ATTRACT_PULSE_INTERVAL_MS * MAX_ATTRACT_ATTEMPTS);
+
+    expect(attracting(toggle)).toBe(false);
+  });
+
+  /**
+   * The interesting case, not the trivial one (the item's own instruction): the tenant has the
+   * setting on, so without this check the launcher would otherwise animate. `matchMedia` is mocked to
+   * report the visitor's own OS-level preference, exactly as a real browser would report it to this
+   * widget - nothing here is a CSS-only assertion, because jsdom does not run CSS animations at all,
+   * so a test that only inspected the stylesheet text could pass while the JS side still scheduled
+   * pulses a real reduced-motion browser would simply never render.
+   */
+  it("prefers-reduced-motion disables it even though the tenant turned the setting on", async () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal("matchMedia", matchMedia);
+
+    stubHandshake();
+    const { toggle } = await mountWidget();
+
+    await vi.advanceTimersByTimeAsync(ATTRACT_INITIAL_DELAY_MS + ATTRACT_PULSE_DURATION_MS * MAX_ATTRACT_ATTEMPTS + ATTRACT_PULSE_INTERVAL_MS * MAX_ATTRACT_ATTEMPTS);
+
+    expect(attracting(toggle)).toBe(false);
+    expect(matchMedia).toHaveBeenCalledWith("(prefers-reduced-motion: reduce)");
   });
 });

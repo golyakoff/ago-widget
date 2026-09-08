@@ -16,6 +16,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -25,6 +26,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
   });
 
@@ -37,6 +39,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -52,6 +55,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -61,6 +65,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
   });
 
@@ -75,6 +80,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -84,6 +90,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
   });
 
@@ -98,6 +105,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      widgetAttractAttention: false,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -107,7 +115,59 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      widgetAttractAttention: false,
     });
+  });
+
+  // `23-63`: the sixth cached field, round-tripped the same way - a plain boolean rather than
+  // `T | null`, so "on" is the only value that survives the round trip as anything but the default.
+  it("round-trips whether the tenant turned on attract-attention, 23-63", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      widgetAttractAttention: true,
+    });
+    expect(storage.getVisitorSession()).toEqual({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      widgetAttractAttention: true,
+    });
+  });
+
+  it("clears a previously-cached attract-attention flag once a later write turns it off", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      widgetAttractAttention: true,
+    });
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      widgetAttractAttention: false,
+    });
+    expect(storage.getVisitorSession()?.widgetAttractAttention).toBe(false);
   });
 
   it("clears a previously-cached color/position/locale/notice once a later write omits them", () => {
@@ -120,6 +180,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      widgetAttractAttention: false,
     });
     storage.setVisitorSession({
       token: "t",
@@ -129,6 +190,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -138,6 +200,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      widgetAttractAttention: false,
     });
   });
 

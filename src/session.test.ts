@@ -91,6 +91,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeText: null,
     widgetNoticeUrl: null,
     enabledModules: [],
+    widgetAttractAttention: false,
   });
   return token;
 }
@@ -437,6 +438,7 @@ describe("a stored token this widget cannot read", () => {
       widgetNoticeText: null,
       widgetNoticeUrl: null,
       enabledModules: [],
+      widgetAttractAttention: false,
     });
 
     const sessionManager = manager();

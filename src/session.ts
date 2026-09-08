@@ -425,6 +425,11 @@ export class VisitorSessionManager {
       widgetNoticeText: body.widgetNoticeText,
       widgetNoticeUrl: body.widgetNoticeUrl,
       enabledModules: body.enabledModules,
+      // `23-63`: cached as a plain `boolean`, not the wire's optional field - `undefined` (a response
+      // from before this setting existed) collapses to `false` right here, the same point every other
+      // field on this response is normalised to its stored shape, rather than threading "maybe absent"
+      // one layer further into `VisitorSession`/`WidgetStorage` for no caller that needs it.
+      widgetAttractAttention: body.widgetAttractAttention === true,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

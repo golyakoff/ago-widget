@@ -62,6 +62,42 @@ export const widgetStyles = /* css */ `
     .ago-panel {
       transition: opacity 120ms ease-out, transform 120ms ease-out;
     }
+
+    /* 23-63: the keyframe itself. Nested in this same media query as a second, independent line of
+       defence alongside ui/widget.ts's own matchMedia check (that file's scheduleAttractAttention
+       doc comment has the reasoning for checking twice) - a reduced-motion browser never even
+       downloads a reason to render this rule as anything but a no-op, whatever ago-toggle--attract
+       gets applied to. Never below scale(1): ux-gate's own minSize check measures the rendered box,
+       and a keyframe that only ever grows the launcher (never shrinks it) cannot fail that check no
+       matter which instant a screenshot lands on mid-pulse. transform only, both properties - never
+       a change to width/height/margin/position, which is what keeps this the widget's own animation
+       rather than something that could reflow the host page around it (Shadow DOM's own isolation
+       does not by itself stop a layout-affecting property from moving *this element*, only from
+       moving the host page's *other* elements - the constraint here is narrower and self-imposed). */
+    @keyframes ago-attract {
+      0%, 100% {
+        transform: scale(1) rotate(0deg);
+      }
+      20% {
+        transform: scale(1.12) rotate(-8deg);
+      }
+      40% {
+        transform: scale(1.05) rotate(6deg);
+      }
+      60% {
+        transform: scale(1.1) rotate(-5deg);
+      }
+      80% {
+        transform: scale(1.02) rotate(3deg);
+      }
+    }
+
+    /* Duration matches ui/widget.ts's own ATTRACT_PULSE_DURATION_MS - see that constant's doc
+       comment for why the two have to agree and where the single source of truth for the number is
+       (the JS side, since it is what decides when the class comes back off). */
+    .ago-toggle--attract {
+      animation: ago-attract 700ms ease-in-out;
+    }
   }
 
   .ago-panel {

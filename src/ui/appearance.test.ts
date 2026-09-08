@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import { parseAttractAttention, parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 
 describe("parseWidgetColor", () => {
   it("accepts a well-formed six-digit hex color", () => {
@@ -123,5 +123,23 @@ describe("parseNoticeUrl", () => {
 
   it("falls back to undefined for a value with no scheme at all", () => {
     expect(parseNoticeUrl("tenant.example/privacy")).toBeUndefined();
+  });
+});
+
+describe("parseAttractAttention", () => {
+  it("is true only for a literal true", () => {
+    expect(parseAttractAttention(true)).toBe(true);
+  });
+
+  it("is false for a literal false - the tenant has not turned it on", () => {
+    expect(parseAttractAttention(false)).toBe(false);
+  });
+
+  it("falls back to false for null", () => {
+    expect(parseAttractAttention(null)).toBe(false);
+  });
+
+  it("falls back to false for undefined - a session cached before this setting existed", () => {
+    expect(parseAttractAttention(undefined)).toBe(false);
   });
 });

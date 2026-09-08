@@ -11,7 +11,7 @@ import { getConsentRequirement, recordConsent, type ConsentRequirement } from ".
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
-import { parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import { parseAttractAttention, parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
 import { renderPrimitiveContent } from "./primitives/render.js";
 import { renderContactCaptureControl, type ContactCaptureResult } from "./contactCapture.js";
 import { loadModule } from "./moduleLoader.js";
@@ -23,6 +23,34 @@ import type { WidgetStrings } from "../i18n/strings.js";
 // to say "booking" is `loadBookingModuleChip` below, which names the lazy chunk's file name and
 // nothing else about it.
 import type { ModuleChipSpec } from "../modules/booking/chip.js";
+
+/**
+ * `23-63`: the bound the backlog item's own "Where this is likely to go wrong" section asked to be
+ * stated in code - "a small number of attempts, then silence, is the shape to beat." Three pulses,
+ * not "until the visitor opens it": a launcher that keeps moving for as long as somebody reads the
+ * page is not an invitation, it is the harassment pattern this feature exists to avoid without
+ * becoming. Three is enough that a visitor who glances away and back at least once still has a
+ * chance to notice it, and few enough that a visitor who is reading the page - not ignoring the
+ * widget - is not interrupted repeatedly by the same motion. `scheduleAttractAttention` is the only
+ * place this number is read; nothing elsewhere loops on the launcher's own account.
+ */
+export const MAX_ATTRACT_ATTEMPTS = 3;
+
+/** `23-63`: how long the widget waits, after the site's config resolves, before the first pulse -
+ * long enough that the launcher does not visibly move the instant a page paints (which would read
+ * as a layout glitch, not an invitation), short enough that a visitor who never scrolls or clicks
+ * still sees it within a few seconds of arriving. */
+export const ATTRACT_INITIAL_DELAY_MS = 2_000;
+
+/** `23-63`: the quiet gap between one pulse ending and the next one starting - long enough that two
+ * pulses read as two distinct attempts, not one continuous shake. */
+export const ATTRACT_PULSE_INTERVAL_MS = 4_000;
+
+/** `23-63`: how long one pulse's `ago-toggle--attract` class stays on the launcher - matches (and
+ * must keep matching) the `ago-attract` keyframe's own duration in `ui/styles.ts`, since this is what
+ * tells the JS side of the animation when the CSS side has finished rather than duplicating that
+ * number as a CSS `animation-iteration-count` a `setTimeout` could drift out of step with. */
+export const ATTRACT_PULSE_DURATION_MS = 700;
 
 /**
  * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1`/`demo-shop2` (public) or a
@@ -196,6 +224,24 @@ export class ChatWidget {
    * to the real form would be a second, dead entry point into the same control.
    */
   private visitorIntroControlEl: HTMLElement | null = null;
+
+  /**
+   * `23-63`: the in-flight `setTimeout` for the next scheduled pulse or the end of the current one,
+   * or `null` when nothing is scheduled. Cleared and re-`null`ed by `stopAttractAttention` - the one
+   * thing that makes "stops the moment it's opened" an immediate, synchronous fact rather than
+   * something that merely stops scheduling *future* pulses while a pulse already in flight finishes.
+   */
+  private attentionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * `23-63`: `true` once the launcher must never animate again for the rest of this page view - the
+   * bound in `MAX_ATTRACT_ATTEMPTS` reached, the panel opened at least once, or `prefers-reduced-motion`
+   * ruled it out at the moment scheduling was attempted. There is deliberately no path that clears
+   * this back to `false`: every one of those three is a one-way door for a single page view, matching
+   * "somebody who closed it has answered" from the backlog item's own scope - a visitor who reopens
+   * and re-closes the panel does not get a second round of pulses either.
+   */
+  private attentionExhausted = false;
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
@@ -450,6 +496,15 @@ export class ChatWidget {
 
     this.applyProcessingNotice(session.widgetNoticeText, session.widgetNoticeUrl);
 
+    // `23-63`: last, and gated on the resolved config rather than started unconditionally - a tenant
+    // who never turned «Привлекать внимание» on gets a launcher that has never once considered
+    // animating. `scheduleAttractAttention` itself re-checks `isOpen`/`attentionExhausted`, which
+    // matters here specifically because a visitor can click the (already-rendered) launcher before
+    // this handshake resolves - see that method's own doc comment.
+    if (parseAttractAttention(session.widgetAttractAttention)) {
+      this.scheduleAttractAttention();
+    }
+
     return session;
   }
 
@@ -563,6 +618,12 @@ export class ChatWidget {
    * `isOpen`'s own value.
    */
   private open(): void {
+    // `23-63`: first, synchronously, before anything else in this method - "nothing moves once the
+    // panel is open" and "stops the moment it's opened" both mean this cannot wait for a render pass
+    // or a later check. Also the one-way door: see `attentionExhausted`'s own doc comment for why a
+    // later close-and-reopen does not schedule a second round.
+    this.stopAttractAttention();
+
     this.isOpen = true;
     this.panel.hidden = false;
     this.toggle.setAttribute("aria-expanded", "true");
@@ -587,6 +648,83 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
+  }
+
+  /**
+   * `23-63`: pulses the closed launcher `MAX_ATTRACT_ATTEMPTS` times, `ATTRACT_PULSE_INTERVAL_MS`
+   * apart, then gives up for the rest of this page view - the bound the backlog item's own scope
+   * asked to be stated in code, stated once, here, and nowhere else. Orchestrated from `setTimeout`
+   * rather than a CSS `animation-iteration-count`: a fixed iteration count can only ever *run to
+   * completion*, it cannot be told to stop mid-course the instant the panel opens, which is exactly
+   * the guarantee this item's scope asks for ("nothing moves once the panel is open"). The motion
+   * itself is still pure CSS (`ui/styles.ts`'s `.ago-toggle--attract`/`@keyframes ago-attract`) - this
+   * method only ever adds and removes one class name, never touches a style property directly, so the
+   * bundle pays nothing beyond that toggle logic for what stays a CSS animation.
+   *
+   * <b>`prefers-reduced-motion` wins over the tenant's own setting, unconditionally.</b> Checked here,
+   * not only left to the CSS media query `ui/styles.ts` also gates the keyframe behind: a tenant
+   * cannot consent to repeated motion on a visitor's behalf (this item's own scope), so the widget
+   * must not even *attempt* to animate for a visitor who has told their browser they don't want that -
+   * asserted at the JS level is what makes that a fact a test can observe, rather than trusting that
+   * a keyframe with no visible effect is somehow equivalent to never having tried.
+   *
+   * <b>Re-entrant by construction, not by a guard flag alone.</b> Called exactly once, from
+   * `bootstrapSession`, but `isOpen`/`attentionExhausted` are re-checked both here and inside every
+   * scheduled step - a visitor can click the launcher (running `open()`, which sets
+   * `attentionExhausted`) at any point between this method being called and any later step running,
+   * since the handshake this method waits on is a real network round trip.
+   */
+  private scheduleAttractAttention(): void {
+    if (this.attentionExhausted || this.isOpen) {
+      return;
+    }
+
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      this.attentionExhausted = true;
+      return;
+    }
+
+    let attemptsRemaining = MAX_ATTRACT_ATTEMPTS;
+
+    const endPulse = (): void => {
+      this.toggle.classList.remove("ago-toggle--attract");
+      attemptsRemaining -= 1;
+
+      if (attemptsRemaining <= 0 || this.isOpen) {
+        this.attentionExhausted = true;
+        this.attentionTimer = null;
+        return;
+      }
+
+      this.attentionTimer = setTimeout(startPulse, ATTRACT_PULSE_INTERVAL_MS);
+    };
+
+    const startPulse = (): void => {
+      if (this.isOpen) {
+        // `open()` already called `stopAttractAttention` when this happened - nothing left to do.
+        return;
+      }
+
+      this.toggle.classList.add("ago-toggle--attract");
+      this.attentionTimer = setTimeout(endPulse, ATTRACT_PULSE_DURATION_MS);
+    };
+
+    this.attentionTimer = setTimeout(startPulse, ATTRACT_INITIAL_DELAY_MS);
+  }
+
+  /** `23-63`: the one-way stop - clears whatever `scheduleAttractAttention` has pending, removes the
+   * class immediately (so a pulse cannot be mid-flight when the panel opens), and marks the launcher
+   * exhausted so nothing later in this page view can schedule another round. Safe to call whether or
+   * not a schedule is actually in flight - `open()` calls it unconditionally rather than checking
+   * first. */
+  private stopAttractAttention(): void {
+    if (this.attentionTimer !== null) {
+      clearTimeout(this.attentionTimer);
+      this.attentionTimer = null;
+    }
+
+    this.attentionExhausted = true;
+    this.toggle.classList.remove("ago-toggle--attract");
   }
 
   /**

@@ -112,6 +112,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "widget-attract-attention",
+    holds: "Whether the tenant turned on «Привлекать внимание» - the launcher drawing attention to itself while closed (`23-63`).",
+    why: "Same purpose as the colour above - a cached rendering preference, refreshed with the session.",
+    lifetime: "Same as the colour above; absent entirely (not written as `\"false\"`) whenever the tenant has not turned the setting on.",
+    survivesTabClose: true,
+  },
+  {
     key: "conversation-id",
     holds: "The id of the conversation this browser last held with the tenant.",
     why: "Lets a reload resume the same conversation instead of starting a new one.",
@@ -177,6 +184,12 @@ export interface VisitorSession {
    * pre-`23-105` attribute this field replaces.
    */
   enabledModules: string[];
+  /** `23-63`: cached alongside the rest on the identical terms - whether the tenant turned
+   * «Привлекать внимание» on, refreshed on the identical schedule (`25-05`). Unlike the string fields
+   * above, this one is a plain `boolean` rather than `T | null`: `session.ts`'s `store` already
+   * collapses the wire's optional field to `false` before this type ever sees it, so there is no
+   * third "not set" state left to represent here - `false` already means both "off" and "unknown". */
+  widgetAttractAttention: boolean;
 }
 
 export class WidgetStorage {
@@ -225,6 +238,7 @@ export class WidgetStorage {
       widgetNoticeText: this.readSafe("widget-notice-text"),
       widgetNoticeUrl: this.readSafe("widget-notice-url"),
       enabledModules: this.readEnabledModulesSafe(),
+      widgetAttractAttention: this.readSafe("widget-attract-attention") === "true",
     };
   }
 
@@ -293,6 +307,14 @@ export class WidgetStorage {
       this.writeSafe("enabled-modules", JSON.stringify(session.enabledModules));
     } else {
       this.removeSafe("enabled-modules");
+    }
+
+    // `23-63`: only written when `true`, matching every other field above - a tenant who has never
+    // turned the setting on, or who turned it back off, leaves no stale key behind.
+    if (session.widgetAttractAttention) {
+      this.writeSafe("widget-attract-attention", "true");
+    } else {
+      this.removeSafe("widget-attract-attention");
     }
   }
 

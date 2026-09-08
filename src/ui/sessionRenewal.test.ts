@@ -151,6 +151,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeText: null,
     widgetNoticeUrl: null,
     enabledModules: [],
+    widgetAttractAttention: false,
   });
   return token;
 }

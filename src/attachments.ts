@@ -9,8 +9,13 @@ import type { WidgetStrings } from "./i18n/strings.js";
  * way to ask the server for its real, currently-configured limits (no site-settings endpoint
  * exposes them yet), so this is a starting point that can drift from the server's own config, not
  * an authoritative source - the server's own check is what actually protects it either way.
+ *
+ * `23-81`: 5 MiB, down from 10 - a judgement about what a photograph or an invoice needs, not a
+ * measurement (`AttachmentOptions.MaxSizeBytes`'s own doc comment says the same about the server
+ * side of this number). The point of this constant existing at all is that the widget refuses
+ * before the upload starts rather than after a progress bar has run.
  */
-const COURTESY_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const COURTESY_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const COURTESY_ALLOWED_CONTENT_TYPES = new Set([
   "image/png",
   "image/jpeg",

@@ -36,7 +36,6 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -103,7 +102,13 @@ function callsTo(path: string): unknown[] {
 }
 
 function sessionBody(token: string, visitorId: string): string {
-  return JSON.stringify({ token, visitorId, widgetPrimaryColorHex: null, widgetPosition: "BottomRight" });
+  return JSON.stringify({
+    token,
+    visitorId,
+    widgetPrimaryColorHex: null,
+    widgetPosition: "BottomRight",
+    enabledModules: [],
+  });
 }
 
 beforeEach(() => {
@@ -145,6 +150,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetLocale: null,
     widgetNoticeText: null,
     widgetNoticeUrl: null,
+    enabledModules: [],
   });
   return token;
 }

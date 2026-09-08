@@ -33,6 +33,21 @@
  * script tag on a public URL, so somebody may have copied our demo page's markup, and
  * `api-design.md`'s reasoning about a widget that "cannot be forced to upgrade" applies to a script
  * tag's attributes as much as to a route. Three lines to keep a promise nobody has to notice.
+ *
+ * `23-105`: `data-booking` used to be a fifth attribute here, and is deliberately not one any more -
+ * this file no longer reads it at all, on purpose, not merely no longer documents it.
+ * `docs/backlog/23-105-*.md` found what that attribute actually was: a shop's own page asserting an
+ * entitlement (`adr/0151`: only the platform grants one), which meant a shop that paid for booking
+ * and never edited its snippet got no chip, and a page that still carried `data-booking="true"` with
+ * no grant behind it made a claim nothing on the page could check. Booking availability now arrives
+ * the same way colour, position, locale and the notice text already do - on the handshake response,
+ * as `VisitorSessionResponse.enabledModules` (`protocol/types.ts`) - so a page pasted before this
+ * shipped and never touched again gets booking the moment the platform grants it, and a page that
+ * still sets `data-booking="true"` with no grant gets none: the attribute is read by nothing, so it
+ * can assert nothing. `ui/widget.ts`'s `moduleChip` is where the received list is turned into "show
+ * the booking chip" - the one place in this widget allowed to compare a module key against the
+ * literal `"calendar"`, because unlike `Ago.Chat.*` (`adr/0065` guard 9) this repository is already,
+ * deliberately, statically wired to exactly one module (that file's own remarks on `loadBookingModuleChip`).
  */
 /**
  * Which of the widget's own demo sentences to render inside the panel, if any.
@@ -51,16 +66,6 @@ export interface WidgetConfig {
   /** Which demo sentence, if any, the panel renders. Never `"public"` or `"private"` unless the
    * embed asks for it - a real customer's widget says nothing about demos. */
   demoNotice: DemoNotice;
-  /**
-   * `20-07`: down from `20-06`'s two required attributes (a calendar tenant key, a calendar API
-   * origin) to one boolean. Booking now rides the chat connection this widget already holds - the
-   * module's invocation chip and every step that follows arrive as ordinary chat messages
-   * (`ui/primitives/render.ts`), not a second HTTP client - so the only fact this bundle still needs
-   * from the embed is "does this site's booking module exist", not where to reach it. Absent is the
-   * default: a shop with chat and no booking renders no chip and never fetches the lazy module bundle
-   * at all (`ui/moduleLoader.ts`'s `loadModule` is never called).
-   */
-  bookingModuleEnabled: boolean;
   /**
    * `20-07`: the absolute URL this widget's own bundle was loaded from, read off the `<script>`
    * tag's `.src` IDL property (always absolute, unlike `getAttribute("src")`) rather than
@@ -98,7 +103,6 @@ export function readConfig(script: HTMLScriptElement): WidgetConfig {
     siteKey,
     apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
     demoNotice: readDemoNotice(script),
-    bookingModuleEnabled: script.dataset["booking"] === "true",
     scriptUrl: script.src,
   };
 }

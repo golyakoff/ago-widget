@@ -28,7 +28,6 @@ const config: WidgetConfig = {
   // `20-07`: the module chip's own locale is `ui/modules.test.ts`'s job (it loads asynchronously
   // from a lazy bundle this file has no reason to mock) - panel chrome and connection status are
   // this file's whole subject, unrelated to whether a booking module is enabled.
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -119,6 +118,7 @@ function stubVisitorSession(widgetLocale?: string): void {
             visitorId: "99999999-9999-9999-9999-999999999999",
             widgetPrimaryColorHex: null,
             widgetPosition: "BottomRight",
+            enabledModules: [],
             ...(widgetLocale === undefined ? {} : { widgetLocale }),
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
@@ -220,6 +220,7 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
             widgetPrimaryColorHex: null,
             widgetPosition: "BottomRight",
             widgetLocale: "Ru",
+            enabledModules: [],
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),

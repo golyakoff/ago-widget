@@ -25,7 +25,6 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -125,6 +124,7 @@ beforeEach(() => {
             visitorId: "99999999-9999-9999-9999-999999999999",
             widgetPrimaryColorHex: null,
             widgetPosition: "BottomRight",
+            enabledModules: [],
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),
@@ -584,6 +584,7 @@ describe("the panel's processing notice", () => {
               widgetLocale: "En",
               widgetNoticeText: null,
               widgetNoticeUrl: null,
+              enabledModules: [],
               ...overrides,
             }),
             { status: 201, headers: { "Content-Type": "application/json" } },

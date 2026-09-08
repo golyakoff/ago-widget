@@ -78,7 +78,16 @@ export interface HistoryPage {
  * `16-04`: `widgetNoticeText`/`widgetNoticeUrl` join on the identical terms - two more additive,
  * nullable fields, both `null` for every site that has not configured a processing notice. Normalised
  * by `ui/appearance.ts`'s `parseNoticeText`/`parseNoticeUrl`, the same courtesy-re-check split every
- * other field on this response already gets. */
+ * other field on this response already gets.
+ *
+ * `23-105`: `enabledModules` joins on the identical "additive field on the existing handshake shape"
+ * terms - raw module keys the platform has granted this site (e.g. `["calendar"]`), never a single
+ * product's boolean. Before this item nothing on this response said what a site was entitled to; a
+ * shop's own page asserted booking through `data-booking="true"` instead, which is exactly the fact
+ * `adr/0151` says a tenant may not assert - only the platform grants an entitlement. This is the one
+ * field on the wire allowed to say "calendar": `config.ts`'s own remarks explain why translating it
+ * into this widget's pre-existing, statically-wired booking chip is this repository's job and not
+ * `Ago.Chat.*`'s. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
@@ -87,6 +96,7 @@ export interface VisitorSessionResponse {
   widgetLocale: string;
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
+  enabledModules: string[];
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

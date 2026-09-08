@@ -149,6 +149,7 @@ beforeEach(() => {
             visitorId: "33333333-3333-3333-3333-333333333333",
             widgetPrimaryColorHex: "#00aa55",
             widgetPosition: "BottomLeft",
+            enabledModules: [],
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),

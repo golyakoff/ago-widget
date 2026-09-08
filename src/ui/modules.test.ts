@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WidgetConfig } from "../config.js";
+import { readConfig, type WidgetConfig } from "../config.js";
 import { currentHub, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 
 /**
@@ -9,9 +9,12 @@ import { currentHub, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.
  * gone (`BookingPanel`, `CalendarClient`, `BookingFlow`, `steps.ts` are all deleted, not moved), so
  * this file replaces it rather than extending it. What is left to prove:
  *
- * - The module chip is absent, and the lazy module bundle is never fetched, unless the embed asked
- *   for booking (`config.bookingModuleEnabled`) - mirrors `20-06`'s own "a shop that did not buy
- *   booking pays nothing", now one boolean instead of two required attributes.
+ * - The module chip is absent, and the lazy module bundle is never fetched, unless the site's own
+ *   handshake response says the calendar module is granted (`VisitorSessionResponse.enabledModules`,
+ *   `23-105`) - mirrors `20-06`'s own "a shop that did not buy booking pays nothing", now decided by
+ *   the platform's own entitlement instead of an attribute on the tenant's page. `23-105`'s own
+ *   proof - that the retired `data-booking` attribute can no longer turn the chip on - lives in
+ *   `config.test.ts`, since `readConfig` never reaches this file at all any more.
  * - Clicking the chip is **not a second code path** - it sends the trigger phrase through the exact
  *   function a typed-and-Entered message already uses (`18-03`'s own interaction shape).
  * - A step arriving as an ordinary chat message renders richly (`ui/primitives/render.ts`), and
@@ -40,15 +43,14 @@ vi.mock("./moduleLoader.js", () => ({
 
 const { ChatWidget } = await import("./widget.js");
 
-const chatOnly: WidgetConfig = {
+// `23-105`: a single fixture, not two - whether booking appears is decided by the handshake
+// response now (`stubFetch`'s `enabledModules` parameter below), not by anything on `WidgetConfig`.
+const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
-
-const withBooking: WidgetConfig = { ...chatOnly, bookingModuleEnabled: true };
 
 const CONVERSATION_ID = "88888888-8888-8888-8888-888888888888";
 
@@ -65,7 +67,10 @@ function urlOf(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-function stubFetch(widgetLocale?: string): ReturnType<typeof vi.fn> {
+// `23-105`: `enabledModules` is the one parameter that decides whether the module chip appears -
+// the site's own handshake response, not an attribute on `config` above. Defaults to `[]`, the
+// same "no grant, no booking" default `VisitorSession.enabledModules`'s own doc comment gives.
+function stubFetch(widgetLocale?: string, enabledModules: string[] = []): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(() =>
     Promise.resolve(
       new Response(
@@ -74,6 +79,7 @@ function stubFetch(widgetLocale?: string): ReturnType<typeof vi.fn> {
           visitorId: "99999999-9999-9999-9999-999999999999",
           widgetPrimaryColorHex: null,
           widgetPosition: "BottomRight",
+          enabledModules,
           ...(widgetLocale === undefined ? {} : { widgetLocale }),
         }),
         { status: 201, headers: { "Content-Type": "application/json" } },
@@ -121,18 +127,37 @@ afterEach(() => {
 });
 
 describe("the module invocation chip", () => {
-  it("is absent and never fetches the lazy module bundle when the embed did not ask for booking", async () => {
-    const root = await mountAndOpen(chatOnly);
+  it("is absent and never fetches the lazy module bundle when the site has no calendar grant", async () => {
+    const root = await mountAndOpen(config);
 
     expect(root.querySelector(".ago-module-chip")).toBeNull();
     expect(loadModuleMock).not.toHaveBeenCalled();
   });
 
-  it("loads and shows the chip only when the embed asked for booking", async () => {
-    const root = await mountAndOpen(withBooking);
+  // `23-105`: the exact regression the item exists to close - a page that still carries the old,
+  // retired `data-booking="true"` attribute must not get booking without a real grant. `readConfig`
+  // is exercised directly here (rather than via `config` above) because that is the one place the
+  // attribute could still matter if this fix regressed - `config.ts`'s own remarks explain why it
+  // no longer reads the attribute at all.
+  it("stays absent for a page that still asserts data-booking=\"true\" with no grant behind it", async () => {
+    const script = document.createElement("script");
+    script.dataset["site"] = config.siteKey;
+    script.dataset["api"] = config.apiBaseUrl;
+    script.dataset["booking"] = "true";
+    const untouchedPageConfig = readConfig(script);
+
+    const root = await mountAndOpen({ ...untouchedPageConfig, scriptUrl: config.scriptUrl });
+
+    expect(root.querySelector(".ago-module-chip")).toBeNull();
+    expect(loadModuleMock).not.toHaveBeenCalled();
+  });
+
+  it("loads and shows the chip once the site's handshake response grants the calendar module", async () => {
+    stubFetch(undefined, ["calendar"]);
+    const root = await mountAndOpen(config);
     await flush();
 
-    expect(loadModuleMock).toHaveBeenCalledWith(withBooking.scriptUrl, "widget-module-booking.js");
+    expect(loadModuleMock).toHaveBeenCalledWith(config.scriptUrl, "widget-module-booking.js");
 
     const chip = root.querySelector<HTMLButtonElement>(".ago-module-chip")!;
     expect(chip.hidden).toBe(false);
@@ -140,9 +165,21 @@ describe("the module invocation chip", () => {
     expect(chip.getAttribute("aria-label")).toBe("Book an appointment");
   });
 
+  // `23-105`: a granted site may hold other module keys too (`adr/0065`'s vocabulary is not
+  // closed to one entry) - only the presence of `"calendar"` among them decides this chip, never
+  // whether the list is merely non-empty.
+  it("stays absent when the site's granted modules do not include calendar", async () => {
+    stubFetch(undefined, ["some-future-module"]);
+    const root = await mountAndOpen(config);
+    await flush();
+
+    expect(root.querySelector(".ago-module-chip")).toBeNull();
+    expect(loadModuleMock).not.toHaveBeenCalled();
+  });
+
   it("loads the chip's copy in the site's own resolved locale, not always English", async () => {
-    stubFetch("Ru");
-    const root = await mountAndOpen(withBooking);
+    stubFetch("Ru", ["calendar"]);
+    const root = await mountAndOpen(config);
     await flush();
 
     const chip = root.querySelector<HTMLButtonElement>(".ago-module-chip")!;
@@ -151,14 +188,16 @@ describe("the module invocation chip", () => {
   });
 
   it("adds no second launcher and no second panel", async () => {
-    const root = await mountAndOpen(withBooking);
+    stubFetch(undefined, ["calendar"]);
+    const root = await mountAndOpen(config);
     expect(root.querySelectorAll(".ago-toggle")).toHaveLength(1);
     expect(root.querySelectorAll(".ago-panel")).toHaveLength(1);
     expect(document.querySelectorAll("[data-ago-chat-widget]")).toHaveLength(1);
   });
 
   it("clicking it sends the trigger phrase through the same path a typed-and-Entered message uses - not a second code path", async () => {
-    const root = await mountAndOpen(withBooking);
+    stubFetch(undefined, ["calendar"]);
+    const root = await mountAndOpen(config);
     await flush();
 
     root.querySelector<HTMLButtonElement>(".ago-module-chip")!.click();
@@ -177,8 +216,9 @@ describe("the module invocation chip", () => {
   });
 
   it("never makes a direct HTTP request to AGO Calendar - there is no client left in this bundle that could", async () => {
+    stubFetch(undefined, ["calendar"]);
     const fetchMock = vi.mocked(globalThis.fetch);
-    const root = await mountAndOpen(withBooking);
+    const root = await mountAndOpen(config);
     await flush();
 
     root.querySelector<HTMLButtonElement>(".ago-module-chip")!.click();
@@ -190,7 +230,7 @@ describe("the module invocation chip", () => {
 
 describe("rendering a step-shaped message from a module", () => {
   it("renders choice_list actions as buttons on an operator-authored message, and replies with contentKind/content/no-actions matching the wire contract exactly", async () => {
-    const root = await mountAndOpen(chatOnly);
+    const root = await mountAndOpen(config);
 
     currentHub().push({
       id: "22222222-2222-2222-2222-222222222222",
@@ -225,7 +265,7 @@ describe("rendering a step-shaped message from a module", () => {
   });
 
   it("degrades an unrecognised contentKind to the plain body, without throwing", async () => {
-    const root = await mountAndOpen(chatOnly);
+    const root = await mountAndOpen(config);
 
     expect(() =>
       currentHub().push({
@@ -248,7 +288,7 @@ describe("rendering a step-shaped message from a module", () => {
   });
 
   it("a numeric-looking form field still submits as free text, not as an action click", async () => {
-    const root = await mountAndOpen(chatOnly);
+    const root = await mountAndOpen(config);
 
     currentHub().push({
       id: "44444444-4444-4444-4444-444444444444",
@@ -277,7 +317,7 @@ describe("rendering a step-shaped message from a module", () => {
   });
 
   it("does not render primitive content for the visitor's own echoed reply", async () => {
-    const root = await mountAndOpen(chatOnly);
+    const root = await mountAndOpen(config);
 
     // The echo of a reply this same widget just sent - contentKind carries the kind it replied to,
     // content is `{ value }` only, no actions. Rendering it as a fresh prompt would draw a second

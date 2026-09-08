@@ -29,7 +29,6 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -56,6 +55,7 @@ function sessionResponse(token: string, status: number, body: Partial<Record<str
       widgetPrimaryColorHex: null,
       widgetPosition: "BottomRight",
       widgetLocale: "En",
+      enabledModules: [],
       ...body,
     }),
     { status, headers: { "Content-Type": "application/json" } },
@@ -90,6 +90,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetLocale: null,
     widgetNoticeText: null,
     widgetNoticeUrl: null,
+    enabledModules: [],
   });
   return token;
 }
@@ -435,6 +436,7 @@ describe("a stored token this widget cannot read", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
 
     const sessionManager = manager();

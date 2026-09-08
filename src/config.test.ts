@@ -124,27 +124,26 @@ describe("readConfig apiBaseUrl resolution (#337)", () => {
   });
 });
 
-// `20-07`. Down from `20-06`'s two required attributes to one boolean - the default is still what
-// matters most: a shop that bought chat and not booking must not get a module chip, and must not
-// have the bundle fetch a lazy module bundle it has no use for.
-describe("readConfig booking module", () => {
-  it("offers no booking module unless the embed asks for it", () => {
-    expect(readConfig(scriptWith({ "data-site": "shop_1" })).bookingModuleEnabled).toBe(false);
-  });
-
-  it("needs the exact value \"true\", not merely the attribute's presence", () => {
-    // Mirrors `data-public-demo`'s own convention (`readDemoNotice`): a typo or a stray
-    // `data-booking="false"` must not silently enable a module.
-    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "false" })).bookingModuleEnabled).toBe(
-      false,
+// `23-105`: `data-booking` used to decide `bookingModuleEnabled` here, synchronously, off the
+// script tag - a shop's own page asserting an entitlement `adr/0151` says only the platform may
+// grant. It is not merely undocumented now, it is unread: `readConfig` never looks at this
+// attribute at all, on a page that carries it or one that does not, so it has nothing left to
+// assert. What replaced it - the site's own `enabledModules` on the handshake response deciding
+// whether `ui/widget.ts`'s module chip appears - is proved end to end in `ui/modules.test.ts`,
+// which is where the *behaviour* actually lives now; this file's job is only "the attribute is
+// never read", which the absence of `bookingModuleEnabled` from `WidgetConfig` already proves at
+// the type level, restated here as a runtime check against the exact attribute name.
+describe("readConfig ignores the retired data-booking attribute", () => {
+  it("produces an identical config whether or not the tag carries data-booking, and for any value", () => {
+    const withoutIt = readConfig(scriptWith({ "data-site": "shop_1" }));
+    const withTrue = readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "true" }));
+    const withSomeStalePublicKey = readConfig(
+      scriptWith({ "data-site": "shop_1", "data-booking": "a-real-looking-calendar-public-key" }),
     );
-    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "" })).bookingModuleEnabled).toBe(false);
-  });
 
-  it("enables the booking module on data-booking=\"true\"", () => {
-    expect(readConfig(scriptWith({ "data-site": "shop_1", "data-booking": "true" })).bookingModuleEnabled).toBe(
-      true,
-    );
+    expect(withTrue).toEqual(withoutIt);
+    expect(withSomeStalePublicKey).toEqual(withoutIt);
+    expect(Object.keys(withoutIt)).not.toContain("bookingModuleEnabled");
   });
 });
 

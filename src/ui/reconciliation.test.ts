@@ -28,7 +28,6 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
-  bookingModuleEnabled: false,
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -142,6 +141,7 @@ beforeEach(() => {
             visitorId: VISITOR_ID,
             widgetPrimaryColorHex: null,
             widgetPosition: "BottomRight",
+            enabledModules: [],
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),

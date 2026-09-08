@@ -106,14 +106,22 @@ export class ChatWidget {
   private readonly savePlaceholder: HTMLSpanElement;
   private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
-  /** `20-07`: null unless the embed carried `data-booking="true"`. Nullable is what makes "a shop
-   * without booking pays nothing" a property of the object graph rather than a promise - and even
-   * when non-null, its label stays empty and it stays `hidden` until `loadBookingModuleChip` below
-   * resolves, so no calendar-flavored copy exists anywhere before the lazy module bundle is actually
-   * fetched. Clicking it does not open a second view - it inserts and sends a trigger phrase exactly
-   * as if the visitor had typed it (`invokeModule`), so nothing else in this class's own state
-   * changes because of it. */
-  private readonly moduleChip: HTMLButtonElement | null;
+  /** `20-07`: `null` unless the site's own handshake response grants booking. Nullable is what
+   * makes "a shop without booking pays nothing" a property of the object graph rather than a
+   * promise - and even once non-null, its label stays empty and it stays `hidden` until
+   * `loadBookingModuleChip` below has the lazy module's own copy, so no calendar-flavored copy
+   * exists anywhere before that bundle is actually fetched. Clicking it does not open a second view
+   * - it inserts and sends a trigger phrase exactly as if the visitor had typed it (`invokeModule`),
+   * so nothing else in this class's own state changes because of it.
+   *
+   * `23-105`: used to be decided synchronously in the constructor, off `config.bookingModuleEnabled`
+   * - itself read from the tenant's own `data-booking` attribute, the fact `config.ts`'s own remarks
+   * explain is no longer the tenant's page to assert. The decision moved to `loadBookingModuleChip`,
+   * which awaits the handshake response and only then creates and inserts this element - so
+   * `moduleChip` is still `null` for the entire synchronous part of construction, and this field
+   * stays `readonly` in spirit (`loadBookingModuleChip` is the one place that ever assigns it, at
+   * most once, mirroring how the constructor used to be the one place that did). */
+  private moduleChip: HTMLButtonElement | null = null;
   private readonly composer: HTMLFormElement;
   /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
    * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
@@ -239,18 +247,10 @@ export class ChatWidget {
     // the visitor had typed it themselves (`invokeModule`), and everything that follows renders
     // inline in `.ago-messages` like any other message.
     //
-    // Absent entirely unless the embed asked for booking, and even then empty/hidden until the lazy
-    // module bundle resolves - see this field's own doc comment.
-    this.moduleChip = config.bookingModuleEnabled ? document.createElement("button") : null;
-    if (this.moduleChip) {
-      this.moduleChip.type = "button";
-      this.moduleChip.className = "ago-module-chip";
-      this.moduleChip.hidden = true;
-      this.moduleChip.disabled = true;
-      header.append(this.title, this.moduleChip, this.closeButton);
-    } else {
-      header.append(this.title, this.closeButton);
-    }
+    // `23-105`: nothing built here any more - `moduleChip` stays `null` until
+    // `loadBookingModuleChip` learns the site actually has a grant, so a shop with no booking still
+    // pays for exactly nothing here, the same "absent entirely" property this element always had.
+    header.append(this.title, this.closeButton);
 
     // `8-06`: directly under the header and outside `.ago-messages`, so it is the first thing read
     // when the panel opens and cannot be scrolled away by the conversation underneath it. Not
@@ -383,13 +383,13 @@ export class ChatWidget {
     });
 
     // `20-07`: kicked off here, not on first open and not on chip click - "when the widget's config
-    // says a module chip should render" (the item's own words), which is knowable the moment
-    // `bookingModuleEnabled` is read off the script tag. Never touches `src/modules/` statically -
-    // `loadBookingModuleChip`'s own doc comment explains why the base bundle stays unaffected either
-    // way, whether or not this ever runs.
-    if (this.moduleChip) {
-      guardAsync(() => this.loadBookingModuleChip());
-    }
+    // says a module chip should render" (the item's own words). `23-105`: that fact moved from the
+    // script tag to the handshake response, so it is no longer knowable at this point in the
+    // constructor - called unconditionally now, and `loadBookingModuleChip` itself awaits
+    // `sessionPromise` before deciding whether to build the chip at all. Never touches
+    // `src/modules/` statically - that method's own doc comment explains why the base bundle stays
+    // unaffected either way, whether or not the lazy chunk is ever actually fetched.
+    guardAsync(() => this.loadBookingModuleChip());
   }
 
   /**
@@ -596,28 +596,53 @@ export class ChatWidget {
    * `import()` is a runtime-computed URL rather than a literal - that, not this method, is what keeps
    * `src/modules/booking/` out of the base bundle's inputs.
    *
-   * Awaits `sessionPromise` first so `this.locale` is already resolved - the chip is built once,
-   * after locale is known, and never rebuilt, so `applyStrings` has no line of its own revisiting it.
+   * Awaits `sessionPromise` first, for two reasons now instead of one: `this.locale` needs to be
+   * resolved (unchanged since `20-07`), and `23-105` adds the actual gate - whether the resolved
+   * session's `enabledModules` contains this widget's one statically-wired module key. This is the
+   * single place in `ago-widget` allowed to compare a module key against the literal `"calendar"`:
+   * `adr/0065` guard 9 forbids that literal inside `Ago.Chat.*`, because that assembly must stay
+   * ignorant of what any module *is* - a constraint this repository was never under, and could not
+   * meet anyway, since `ui/moduleLoader.ts` already names `widget-module-booking.js` and this whole
+   * class is already built around exactly one module (`decisions.md`'s own "no module runtime": one
+   * candidate, wired statically, until a second one exists to design the seam against). A site with
+   * no grant for this key returns here without revealing a chip, building one, or calling
+   * `loadModule` at all - unchanged from `20-07`'s own "a shop without booking pays nothing"
+   * property, just decided from the handshake response now instead of from the script tag.
+   *
+   * `23-105`: the element itself moved here too, out of the constructor - `moduleChip` is `null`
+   * until this method finds the grant, then built and spliced into the header exactly where the
+   * constructor used to place it (`insertBefore(closeButton)`), before the label is known. It stays
+   * `hidden`/`disabled` at that point, revealed only once the lazy bundle's own copy has arrived, so
+   * "no calendar-flavored copy exists before the fetch resolves" holds exactly as it did before.
+   *
    * A failure here (the lazy bundle 404s, a host page blocks the request) is caught by this method's
    * own `guardAsync` caller and simply leaves the chip absent, never a throw onto the host page.
    */
   private async loadBookingModuleChip(): Promise<void> {
-    if (this.moduleChip === null) {
+    const session = await this.sessionPromise;
+    if (!session.enabledModules.includes("calendar")) {
       return;
     }
 
-    await this.sessionPromise;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "ago-module-chip";
+    chip.hidden = true;
+    chip.disabled = true;
+    this.closeButton.parentElement?.insertBefore(chip, this.closeButton);
+    this.moduleChip = chip;
+
     const bookingModule = await loadModule<{ bookingChipSpec: (locale: SupportedLocale) => ModuleChipSpec }>(
       this.config.scriptUrl,
       "widget-module-booking.js",
     );
     const spec = bookingModule.bookingChipSpec(this.locale);
 
-    this.moduleChip.textContent = spec.label;
-    this.moduleChip.setAttribute("aria-label", spec.ariaLabel);
-    this.moduleChip.hidden = false;
-    this.moduleChip.disabled = !this.isConnected;
-    this.moduleChip.addEventListener("click", () => this.invokeModule(spec.triggerText));
+    chip.textContent = spec.label;
+    chip.setAttribute("aria-label", spec.ariaLabel);
+    chip.hidden = false;
+    chip.disabled = !this.isConnected;
+    chip.addEventListener("click", () => this.invokeModule(spec.triggerText));
   }
 
   /**

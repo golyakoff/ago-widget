@@ -16,6 +16,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -25,6 +26,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
   });
 
@@ -37,6 +39,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -52,6 +55,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -61,6 +65,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
   });
 
@@ -75,6 +80,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -84,6 +90,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
   });
 
@@ -98,6 +105,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      enabledModules: [],
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -107,10 +115,37 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      enabledModules: [],
     });
   });
 
-  it("clears a previously-cached color/position/locale/notice once a later write omits them", () => {
+  // `23-105`: the sixth cached field, round-tripped the same way - the site's granted module keys,
+  // the fact that used to be `data-booking` on the tenant's own page (`config.ts`'s own remarks).
+  it("round-trips the site's enabled module keys alongside the identity, 23-105", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      enabledModules: ["calendar"],
+    });
+    expect(storage.getVisitorSession()).toEqual({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      enabledModules: ["calendar"],
+    });
+  });
+
+  it("clears a previously-cached color/position/locale/notice/modules once a later write omits them", () => {
     const storage = new WidgetStorage("site_a");
     storage.setVisitorSession({
       token: "t",
@@ -120,6 +155,7 @@ describe("WidgetStorage", () => {
       widgetLocale: "Ru",
       widgetNoticeText: "We read what you send us.",
       widgetNoticeUrl: "https://tenant.example/privacy",
+      enabledModules: ["calendar"],
     });
     storage.setVisitorSession({
       token: "t",
@@ -129,6 +165,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -138,6 +175,7 @@ describe("WidgetStorage", () => {
       widgetLocale: null,
       widgetNoticeText: null,
       widgetNoticeUrl: null,
+      enabledModules: [],
     });
   });
 

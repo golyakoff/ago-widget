@@ -424,6 +424,7 @@ export class VisitorSessionManager {
       widgetLocale: body.widgetLocale,
       widgetNoticeText: body.widgetNoticeText,
       widgetNoticeUrl: body.widgetNoticeUrl,
+      enabledModules: body.enabledModules,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

@@ -105,6 +105,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "enabled-modules",
+    holds: "Which of the tenant's paid add-ons (for example, online booking) are switched on for this site.",
+    why: "Lets the widget show or hide an add-on's entry point without asking the server again on every reload.",
+    lifetime: "Refreshed at least once a day for a returning visitor, and sooner if the identity token above is itself due for renewal (`25-05`); removed entirely once the tenant has no add-on switched on.",
+    survivesTabClose: true,
+  },
+  {
     key: "conversation-id",
     holds: "The id of the conversation this browser last held with the tenant.",
     why: "Lets a reload resume the same conversation instead of starting a new one.",
@@ -161,6 +168,15 @@ export interface VisitorSession {
    * `parseNoticeText`/`parseNoticeUrl` treat that identically to "not set" and render nothing. */
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
+  /**
+   * `23-105`: cached alongside the rest on the identical terms - the raw module keys
+   * `AuthEndpoints.VisitorSessionResponse.EnabledModules` (`ago-chat`) carried on the response that
+   * minted or last renewed this session, refreshed on the identical schedule (`25-05`). `[]`, never
+   * `null`, for a session written before this field existed or for a site with no grant at all - the
+   * same "no booking is the honest default, not a guess" property `config.ts`'s own remarks give the
+   * pre-`23-105` attribute this field replaces.
+   */
+  enabledModules: string[];
 }
 
 export class WidgetStorage {
@@ -208,7 +224,31 @@ export class WidgetStorage {
       widgetLocale: this.readSafe("widget-locale"),
       widgetNoticeText: this.readSafe("widget-notice-text"),
       widgetNoticeUrl: this.readSafe("widget-notice-url"),
+      enabledModules: this.readEnabledModulesSafe(),
     };
+  }
+
+  /**
+   * `23-105`: the one cached field here shaped as a list rather than a scalar, so it is stored as a
+   * JSON array under its own key rather than joined into a delimited string - `ModuleKey`'s own
+   * charset (`ago-chat`'s `Domain/ModuleKey.cs`) excludes a comma, but this class has no reason to
+   * depend on a server-side constraint it does not otherwise read. `[]` for anything unreadable or
+   * unparsable - a corrupted value degrades to "no booking", never a thrown exception on the host
+   * page, the same posture `getLastKnownSequence`'s own `Number.isFinite` fallback already takes for
+   * its own stored field.
+   */
+  private readEnabledModulesSafe(): string[] {
+    const raw = this.readSafe("enabled-modules");
+    if (raw === null) {
+      return [];
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string") ? parsed : [];
+    } catch {
+      return [];
+    }
   }
 
   setVisitorSession(session: VisitorSession): void {
@@ -245,6 +285,14 @@ export class WidgetStorage {
       this.writeSafe("widget-notice-url", session.widgetNoticeUrl);
     } else {
       this.removeSafe("widget-notice-url");
+    }
+
+    // `23-105`: written only when non-empty, matching every optional field above - a site with no
+    // grant leaves no trace of this key rather than storing an empty array under it.
+    if (session.enabledModules.length > 0) {
+      this.writeSafe("enabled-modules", JSON.stringify(session.enabledModules));
+    } else {
+      this.removeSafe("enabled-modules");
     }
   }
 

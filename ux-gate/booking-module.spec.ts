@@ -11,7 +11,10 @@ import { test, expect } from "@playwright/test";
  * resolves under the new name.
  *
  * `demo/booking.html` is the fixture, unmodified from what a real booking-enabled tenant embeds -
- * `data-booking="true"` on a plain `<script src="../dist/widget.js">` tag, no bespoke harness markup.
+ * which, since `23-105`, is a plain `<script src="../dist/widget.js">` tag with **nothing about
+ * booking on it at all**, and no bespoke harness markup. So this gate now proves two promises at
+ * once: `#342`'s, that the sibling chunk still resolves under the renamed entry, and `23-105`'s,
+ * that a page nobody edited gains booking purely from the grant the handshake reports.
  * Only the visitor-session REST call is stubbed (`gate.spec.ts`'s own `openWidget` does the same); the
  * hub is aborted rather than faked, since the chip does not need it - `loadBookingModuleChip` awaits
  * `sessionPromise`, not a hub connection.
@@ -26,6 +29,10 @@ const SESSION_RESPONSE = {
   widgetLocale: "En",
   widgetNoticeText: null,
   widgetNoticeUrl: null,
+  // `23-105`: this is the whole point of the item, expressed as one stubbed field. The fixture page
+  // asserts nothing about booking - the chip below appears only because the *server* says this site
+  // has the module, which is what an entitlement means (`adr/0151`).
+  enabledModules: ["calendar"],
 };
 
 test.describe("the booking module is fetched as a sibling of the renamed entry", () => {

@@ -58,16 +58,16 @@
     <pre><code>&lt;script src="https://…/widget.js"
         data-site="demo_site"
         data-api="http://localhost:5009"
-        data-booking="true"
         async&gt;&lt;/script&gt;</code></pre>
 
     <p>
-      One boolean, down from <code>20-06</code>'s two required attributes (a calendar tenant key
-      and a calendar API origin). Which tenant's calendar answers is a fact the site's own row on
-      AGO Chat's side carries now — <code>adr/0065</code>'s registry, "site X has module K
-      enabled" — not something this script tag has to repeat. Leave the attribute out, or set it to
-      anything other than the exact string <code>"true"</code>, and there is no chip and no lazy
-      module bundle fetched at all.
+      <strong>Nothing in that tag mentions booking.</strong> It went from <code>20-06</code>'s two
+      required attributes (a calendar tenant key and a calendar API origin), to <code>22-22</code>'s
+      one boolean, to none: <code>23-105</code> removed <code>data-booking</code> entirely. Booking is
+      an entitlement the platform grants (<code>adr/0151</code>), not a claim a shop's own HTML is in
+      any position to make — so it arrives on the visitor-session handshake next to the colour, the
+      position and the locale, and this page gains the chip the moment the grant lands, untouched.
+      A page still carrying the old attribute gets nothing from it.
     </p>
 
     <h2>Running it against the local stack</h2>
@@ -83,7 +83,6 @@
       src="../dist/widget.js"
       data-site="demo_site"
       data-api="http://localhost:5009"
-      data-booking="true"
       async
     ></script>
   </body>

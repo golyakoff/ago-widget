@@ -17,11 +17,11 @@ describe("courtesyValidate", () => {
   });
 
   it("rejects a file over the courtesy size ceiling", () => {
-    expect(courtesyValidate(fakeFile("image/png", 11 * 1024 * 1024), en)).not.toBeNull();
+    expect(courtesyValidate(fakeFile("image/png", 6 * 1024 * 1024), en)).not.toBeNull();
   });
 
   it("accepts a file exactly at the size ceiling", () => {
-    expect(courtesyValidate(fakeFile("application/pdf", 10 * 1024 * 1024), en)).toBeNull();
+    expect(courtesyValidate(fakeFile("application/pdf", 5 * 1024 * 1024), en)).toBeNull();
   });
 
   // `11-10`: the frame text around a rejection is translated - the type/size themselves are data
@@ -33,8 +33,8 @@ describe("courtesyValidate", () => {
   });
 
   it("rejects an oversized file in Russian when given the Russian string table, keeping the MB number", () => {
-    const message = courtesyValidate(fakeFile("image/png", 11 * 1024 * 1024), ru);
+    const message = courtesyValidate(fakeFile("image/png", 6 * 1024 * 1024), ru);
     expect(message).toContain("слишком большой");
-    expect(message).toContain("10");
+    expect(message).toContain("5");
   });
 });

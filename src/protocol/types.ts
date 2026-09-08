@@ -87,7 +87,14 @@ export interface HistoryPage {
  * `adr/0151` says a tenant may not assert - only the platform grants an entitlement. This is the one
  * field on the wire allowed to say "calendar": `config.ts`'s own remarks explain why translating it
  * into this widget's pre-existing, statically-wired booking chip is this repository's job and not
- * `Ago.Chat.*`'s. */
+ * `Ago.Chat.*`'s.
+ *
+ * `23-63`: `widgetAttractAttention` joins on the identical terms - one more additive field, `false`
+ * (or absent, for a session cached before this setting existed) for every site that has not turned
+ * «Привлекать внимание» on. Normalised by `ui/appearance.ts`'s `parseAttractAttention`, the same
+ * courtesy-re-check every other field here already gets. Optional rather than required: a response
+ * this widget's own `WidgetStorage` cached before the field existed replays it as `undefined`, not a
+ * decode failure - `parseAttractAttention` treats that identically to `false`. */
 export interface VisitorSessionResponse {
   token: string;
   visitorId: string;
@@ -97,6 +104,7 @@ export interface VisitorSessionResponse {
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
   enabledModules: string[];
+  widgetAttractAttention?: boolean;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

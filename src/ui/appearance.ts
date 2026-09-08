@@ -81,3 +81,16 @@ export function parseNoticeUrl(value: string | null | undefined): string | undef
     return undefined;
   }
 }
+
+/**
+ * `23-63`: whether the tenant turned on «Привлекать внимание» - the launcher drawing attention to
+ * itself while the panel is closed (`ui/widget.ts`'s `scheduleAttractAttention`). Off is the safe
+ * fallback for every value this widget cannot positively confirm is `true`: a missing field (a
+ * session cached before this setting existed, or a server response this widget's typings expect but
+ * a future server bug omits), `false` itself, or anything malformed - the same "courtesy validation,
+ * default to the least-surprising behaviour" posture every other parser in this file already takes.
+ * A tenant who never opted in gets a silent, motionless launcher, never an accidentally-animated one.
+ */
+export function parseAttractAttention(value: boolean | null | undefined): boolean {
+  return value === true;
+}

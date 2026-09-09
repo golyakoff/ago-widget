@@ -100,4 +100,9 @@ export interface WidgetStrings {
    * never happen: a promise nobody keeps." */
   readonly contactCaptureConfirmation: string;
   readonly contactCaptureFailedNote: string;
+  /** `25-28`: shown in the same `errorNote` element as `contactCaptureFailedNote`, when the typed
+   * email fails `emailValidation.ts`'s own regex check - the one field-level failure this control
+   * surfaces to the visitor rather than just refusing to submit, because unlike a merely-empty
+   * required field a visitor who typed *something* has no other way to notice it was rejected. */
+  readonly contactCaptureEmailInvalidNote: string;
 }

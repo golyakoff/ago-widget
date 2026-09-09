@@ -55,4 +55,5 @@ export const ru: WidgetStrings = {
   contactCaptureSubmittingButton: "Отправка…",
   contactCaptureConfirmation: "Спасибо - мы свяжемся с вами.",
   contactCaptureFailedNote: "Не удалось отправить. Попробуйте ещё раз.",
+  contactCaptureEmailInvalidNote: "Похоже, это не настоящий адрес электронной почты.",
 };

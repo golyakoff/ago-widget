@@ -446,6 +446,13 @@ export class ChatWidget {
     this.attachButton.setAttribute("aria-label", this.strings.attachAFile);
     this.attachButton.textContent = "📎";
     this.attachButton.disabled = true;
+    // `23-78`: hidden until `connect()` learns this conversation actually carries a grant - the
+    // `moduleChip` precedent right below this file's own remarks on it ("`hidden` guards this too...
+    // `disabled` only matters once revealed"), applied here from construction time rather than a
+    // later reveal, since there is no lazy bundle to await first. "The widget shows no upload control
+    // until then" (the backlog item's own Done-when) means hidden, not merely disabled - a disabled-
+    // but-visible control still advertises that uploads exist as a feature of this site's widget.
+    this.attachButton.hidden = true;
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
     this.emojiPlaceholder = this.buildReservedComposerPlace("🙂", this.strings.emojiComingSoon);
@@ -1012,6 +1019,14 @@ export class ChatWidget {
       const connection = new VisitorConnection(this.config, () => this.currentToken(), this.storage);
       connection.onMessage((message) => this.handleIncoming(message));
       connection.onStateChange((state) => this.renderConnectionState(state));
+      // `23-78`: registered before `start()` so the initial join's own emission is never missed -
+      // fires again on every later automatic reconnect too (`VisitorConnection`'s own remarks), which
+      // is why this lives here rather than as a one-off read of `joinResult` right below.
+      // `renderConnectionState` never touches `.hidden`, only `.disabled` - the same split
+      // `moduleChip` already draws between "revealed at all" and "usable right now".
+      connection.onAttachmentUploadGrantChange((hasGrant) => {
+        this.attachButton.hidden = !hasGrant;
+      });
       this.connection = connection;
 
       const joinResult = await connection.start();

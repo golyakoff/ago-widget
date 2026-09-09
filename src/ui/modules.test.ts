@@ -260,7 +260,13 @@ describe("rendering a step-shaped message from a module", () => {
     const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
     expect(invocation.args[1]).toBe("Haircut (45 min)"); // the human-readable body of the reply
     expect(invocation.args[4]).toBe("choice_list");
-    expect(invocation.args[5]).toEqual({ value: "svc-1" });
+    // `25-31`: a JSON *string*, not a raw object - `ago-chat`'s own `MessagePayload` is a `string`
+    // it parses as JSON (`JsonDocument.Parse`), and SignalR's JSON hub protocol serializes each
+    // argument by its own JS shape - an object here reaches the server as a JSON object where the
+    // hub method declares `string?`, a binding mismatch SignalR rejects before the method is ever
+    // invoked. This fake hub never exercised real wire serialization, which is exactly how this
+    // assertion stayed wrong (asserting the bug) until a live click-through found it.
+    expect(invocation.args[5]).toBe(JSON.stringify({ value: "svc-1" }));
     expect(invocation.args[6]).toBeNull(); // actions - the widget never populates this
   });
 
@@ -313,7 +319,7 @@ describe("rendering a step-shaped message from a module", () => {
     const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
     expect(invocation.args[1]).toBe("12345");
     expect(invocation.args[4]).toBe("form"); // still a "form" reply, never reinterpreted as a choice
-    expect(invocation.args[5]).toEqual({ value: "12345" });
+    expect(invocation.args[5]).toBe(JSON.stringify({ value: "12345" })); // `25-31`: a JSON string, not a raw object
   });
 
   it("does not render primitive content for the visitor's own echoed reply", async () => {

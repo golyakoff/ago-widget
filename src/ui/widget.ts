@@ -1016,7 +1016,7 @@ export class ChatWidget {
    * clicking a primitive's action or the module chip is never a second call, only a different pair of
    * arguments to the one function every visitor-authored message already goes through.
    */
-  private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: unknown): void {
+  private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: string): void {
     if (this.connection === null || this.conversationId === null) {
       return;
     }
@@ -1343,7 +1343,16 @@ export class ChatWidget {
    * raw `value`, which for many kinds is an id or a slot token nobody typed or read.
    */
   private sendStructuredReply(contentKind: string, value: string, displayText: string): void {
-    this.dispatchSend(displayText, undefined, contentKind, { value });
+    // `25-31`: `content` rides the wire as `ago-chat`'s own `MessagePayload` - a string the server
+    // parses as JSON (`MessagePayload`'s own constructor: `JsonDocument.Parse(value)` against a
+    // `string`). A raw object here is not that: SignalR's JSON hub protocol serializes each argument
+    // by its own JS shape, so a bare `{ value }` reaches the server as a JSON *object* token where
+    // the hub method's parameter is typed `string?` - a binding mismatch SignalR rejects before the
+    // hub method is ever invoked (no application code runs, nothing is logged, the client sees only
+    // the generic "Failed to invoke ... due to an error on the server"). Found live: every structured
+    // reply a visitor ever sent through this control - a booking choice, a form submission - silently
+    // failed to send, with the visitor's own bubble left reading "Не удалось отправить."
+    this.dispatchSend(displayText, undefined, contentKind, JSON.stringify({ value }));
   }
 
   private renderBubble(authorKind: MessageDto["authorKind"], body: string, state?: "sending"): HTMLDivElement {

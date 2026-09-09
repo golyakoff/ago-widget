@@ -235,6 +235,16 @@ export class VisitorConnection {
    * live against the real demo, not in a test, because `20-07`'s own Done-when never got a live
    * click-through. This method now picks the target by whether `contentKind` is set, the same
    * branch `5-19`'s own server-side split already makes structural.
+   *
+   * `25-31`: `content` is typed `string`, not `unknown` - it rides the wire as `ago-chat`'s
+   * `MessagePayload`, which is itself a `string` the server parses as JSON. A caller must
+   * `JSON.stringify` its own payload before this point; this method never does it on a caller's
+   * behalf, the same "no second, hand-rolled serialization to keep in sync" reasoning
+   * `StructuredContentBinder`'s own remarks give for staying shape-only on the server side. Typing
+   * this `unknown` let a raw object reach here undetected - SignalR's JSON hub protocol serializes
+   * each argument by its own JS shape, so an object landed on the wire as a JSON object where the
+   * hub method's parameter is `string?`, a mismatch SignalR rejects before the method is ever
+   * invoked (no server log, a generic client-side error) - found live, this exact way.
    */
   async sendMessage(
     conversationId: string,
@@ -242,7 +252,7 @@ export class VisitorConnection {
     clientMessageId: string,
     attachmentId?: string,
     contentKind?: string,
-    content?: unknown,
+    content?: string,
   ): Promise<number> {
     if (this.connection.state !== signalR.HubConnectionState.Connected) {
       throw new NotConnectedError();

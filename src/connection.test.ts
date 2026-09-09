@@ -49,8 +49,15 @@ function message(id: string, sequence: number, authorKind: "Visitor" | "Operator
   };
 }
 
-function joinResult(history: MessageDto[]): VisitorJoinResult {
-  return { conversationId: CONVERSATION_ID, isNew: false, history };
+function joinResult(history: MessageDto[], hasAttachmentUploadGrant?: boolean): VisitorJoinResult {
+  return {
+    conversationId: CONVERSATION_ID,
+    isNew: false,
+    history,
+    // `exactOptionalPropertyTypes`: leaves the key out entirely when no grant answer was given,
+    // rather than setting it to `undefined` - see `ui/widget.test.ts`'s own identical helper.
+    ...(hasAttachmentUploadGrant !== undefined ? { hasAttachmentUploadGrant } : {}),
+  };
 }
 
 let storage: WidgetStorage;
@@ -169,6 +176,43 @@ describe("a connection that drops and comes back", () => {
     await Promise.resolve();
 
     expect(states).toEqual(["connecting", "connected", "reconnecting", "connected"]);
+  });
+
+  /**
+   * `23-78`: `onAttachmentUploadGrantChange` fires with the fresh `VisitorJoinResult.hasAttachmentUploadGrant`
+   * on the initial join, and fires again on every later automatic reconnect too - a resume
+   * (`resumeAfterReconnect`) already calls plain `JoinAsync` for its own message-history reason, and
+   * this connection now reads the same field off that same response rather than discarding it.
+   */
+  it("reports the join result's attachment-upload grant, and reports it again on every reconnect", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push(joinResult([], true));
+    await connection.start();
+    expect(grants).toEqual([true]);
+
+    joinQueue.push(joinResult([], false));
+    currentHub().dropToReconnecting();
+    currentHub().completeReconnect();
+    await Promise.resolve();
+
+    expect(grants).toEqual([true, false]);
+  });
+
+  // A server predating this field never sends it at all - `undefined`, not `false` - and this
+  // connection must still report `false` to whatever is listening, the same closed-by-default
+  // direction `VisitorJoinResult.hasAttachmentUploadGrant`'s own remarks commit to.
+  it("reports false when the join result omits the attachment-upload grant field entirely", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push({ conversationId: CONVERSATION_ID, isNew: false, history: [] });
+    await connection.start();
+
+    expect(grants).toEqual([false]);
   });
 });
 

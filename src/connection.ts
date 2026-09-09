@@ -50,6 +50,7 @@ export class VisitorConnection {
   private readonly seenMessageIds = new SeenMessageIds();
   private messageListener: ((message: MessageDto) => void) | null = null;
   private stateListener: ((state: ConnectionState) => void) | null = null;
+  private grantListener: ((hasAttachmentUploadGrant: boolean) => void) | null = null;
   private conversationId: string | null = null;
   private sequenceTracker = new SequenceTracker();
 
@@ -142,6 +143,31 @@ export class VisitorConnection {
   }
 
   /**
+   * `23-78`: fired with the fresh `VisitorJoinResult.hasAttachmentUploadGrant` every time this
+   * connection actually rejoins the conversation - the initial `start()` and, just as importantly,
+   * every automatic `resumeAfterReconnect()` below, which already calls plain `JoinAsync` for its own
+   * message-history reason and was simply discarding this field until now. A missing field (an older
+   * server) folds to `false` at the one place both call sites read it, `emitGrantChange` below - the
+   * closed-by-default direction `VisitorJoinResult.hasAttachmentUploadGrant`'s own remarks commit to.
+   *
+   * This is *not* a live push from the server the moment an operator toggles the grant mid-session -
+   * there still is none, the same gap this widget already accepts for a block/unblock. It is a
+   * free-of-extra-cost refresh riding a network event (an automatic reconnect) this connection was
+   * already going to make for an unrelated reason, which is a strictly cheaper thing to wire than a
+   * new push channel would have been - a visitor whose connection drops and recovers, or whose laptop
+   * sleeps and wakes, sees the icon catch up to the operator's latest decision without a full page
+   * reload; one who stays connected the whole time still does not, until this method's own
+   * `onreconnected` fires or the page is reloaded.
+   */
+  onAttachmentUploadGrantChange(listener: (hasAttachmentUploadGrant: boolean) => void): void {
+    this.grantListener = listener;
+  }
+
+  private emitGrantChange(result: VisitorJoinResult): void {
+    this.grantListener?.(result.hasAttachmentUploadGrant ?? false);
+  }
+
+  /**
    * `18-12`: this is the "conversation actually starts" moment the backlog item means, not widget
    * mount/page load - `ui/widget.ts`'s own `connect()` (the only caller) already runs this lazily, on
    * first open, not eagerly at mount (that method's own doc comment: "a widget can sit open on a page
@@ -210,6 +236,7 @@ export class VisitorConnection {
       this.seenMessageIds.markSeen(message.id);
     }
 
+    this.emitGrantChange(result);
     this.stateListener?.("connected");
     return result;
   }
@@ -336,6 +363,7 @@ export class VisitorConnection {
       this.handleIncoming(message);
     }
 
+    this.emitGrantChange(result);
     this.stateListener?.("connected");
   }
 

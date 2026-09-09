@@ -41,8 +41,17 @@ function message(id: string, sequence: number, authorKind: MessageDto["authorKin
   };
 }
 
-function joinResult(history: MessageDto[]): VisitorJoinResult {
-  return { conversationId: CONVERSATION_ID, isNew: false, history };
+function joinResult(history: MessageDto[], hasAttachmentUploadGrant?: boolean): VisitorJoinResult {
+  return {
+    conversationId: CONVERSATION_ID,
+    isNew: false,
+    history,
+    // `exactOptionalPropertyTypes`: an omitted optional property and one explicitly set to
+    // `undefined` are distinct types here, and only the former is legal - the spread below leaves
+    // the key out entirely when no grant answer was given, matching a real server response that
+    // predates this field (VisitorJoinResult.hasAttachmentUploadGrant's own remarks).
+    ...(hasAttachmentUploadGrant !== undefined ? { hasAttachmentUploadGrant } : {}),
+  };
 }
 
 /** Drains the microtask queue the fakes' own resolved promises sit on. No timers are involved in
@@ -59,6 +68,7 @@ interface Panel {
   input: HTMLTextAreaElement;
   send: HTMLButtonElement;
   status: HTMLDivElement;
+  attach: HTMLButtonElement;
   bubbleTexts: () => string[];
 }
 
@@ -78,6 +88,7 @@ function panelOf(root: ShadowRoot): Panel {
     input: query<HTMLTextAreaElement>(".ago-input"),
     send: query<HTMLButtonElement>(".ago-send"),
     status: query<HTMLDivElement>(".ago-status"),
+    attach: query<HTMLButtonElement>(".ago-attach"),
     bubbleTexts: () => [...root.querySelectorAll(".ago-message")].map((bubble) => bubble.textContent ?? ""),
   };
 }
@@ -533,6 +544,76 @@ describe("the panel's composer", () => {
     // than from text content the way an unlabelled icon button would otherwise fall back to.
     expect(panel.send.textContent?.trim().length).toBeGreaterThan(0);
     expect(panel.send.type).toBe("submit");
+  });
+});
+
+/**
+ * `23-78`: "the widget shows no upload control until then" - hidden, not merely disabled, per that
+ * item's own Done-when and the distinction `attachButton`'s own construction comment draws (a
+ * disabled-but-visible control still advertises that uploads exist as a feature of this site's
+ * widget). The server-side gate (`CreateAttachmentHandler.HandleAsVisitorAsync`) is the real control;
+ * these tests are only about the widget's own consequence of it.
+ */
+describe("the attach control's visibility", () => {
+  it("is hidden when the join result carries no attachment-upload grant", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    expect(panel.attach.hidden).toBe(true);
+  });
+
+  // A server predating this field never sends it at all - `hasAttachmentUploadGrant` is `undefined`,
+  // not `false`, and the widget must still fold that to "hidden" rather than throwing or defaulting
+  // the other, unsafe way.
+  it("is hidden when the join result omits the field entirely (an older server)", async () => {
+    joinQueue.push({ conversationId: CONVERSATION_ID, isNew: false, history: [] });
+    const panel = await openWidget();
+
+    expect(panel.attach.hidden).toBe(true);
+  });
+
+  it("is revealed when the join result carries a grant", async () => {
+    joinQueue.push(joinResult([], true));
+    const panel = await openWidget();
+
+    expect(panel.attach.hidden).toBe(false);
+  });
+
+  // `renderConnectionState` tracks `.disabled` off `isConnected`, never `.hidden` - a dropped
+  // connection must not make a granted conversation's icon disappear, only grey out, the same
+  // "hidden guards revealed-at-all, disabled guards usable-right-now" split `moduleChip` draws for
+  // the booking chip.
+  it("stays revealed (but disables) across a reconnect that keeps the same grant answer", async () => {
+    joinQueue.push(joinResult([], true));
+    const panel = await openWidget();
+    expect(panel.attach.hidden).toBe(false);
+
+    currentHub().dropToReconnecting();
+    await flush();
+    expect(panel.attach.hidden).toBe(false);
+    expect(panel.attach.disabled).toBe(true);
+
+    joinQueue.push(joinResult([], true));
+    currentHub().completeReconnect();
+    await flush();
+    expect(panel.attach.hidden).toBe(false);
+    expect(panel.attach.disabled).toBe(false);
+  });
+
+  // `connection.ts`'s `onAttachmentUploadGrantChange` re-reads the field on every automatic
+  // reconnect, not only the initial join - an operator who granted uploads while this visitor's
+  // connection happened to be mid-reconnect sees the icon appear without a full page reload.
+  it("is revealed by an automatic reconnect that now carries a grant the initial join did not", async () => {
+    joinQueue.push(joinResult([], false));
+    const panel = await openWidget();
+    expect(panel.attach.hidden).toBe(true);
+
+    joinQueue.push(joinResult([], true));
+    currentHub().dropToReconnecting();
+    currentHub().completeReconnect();
+    await flush();
+
+    expect(panel.attach.hidden).toBe(false);
   });
 });
 

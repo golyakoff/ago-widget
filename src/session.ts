@@ -210,6 +210,10 @@ export class VisitorSessionManager {
       }
 
       this.storage.clearConversation();
+      // `23-64`: the identical event, for the identical reason - the new `VisitorId` has not been
+      // shown the auto-open greeting yet, so "opening is once" must reset alongside the conversation
+      // cursor, not survive onto an identity that never earned it.
+      this.storage.clearAutoOpenGreetingShown();
       this.expired = false;
       return { session: await this.mint(), restarted: true };
     }
@@ -430,6 +434,15 @@ export class VisitorSessionManager {
       // field on this response is normalised to its stored shape, rather than threading "maybe absent"
       // one layer further into `VisitorSession`/`WidgetStorage` for no caller that needs it.
       widgetAttractAttention: body.widgetAttractAttention === true,
+      // `23-64`: the identical "collapse the wire's optional shape to this type's own stored shape,
+      // right here" posture `widgetAttractAttention` already takes. The delay falls back to
+      // `Ago.Chat.Domain.AutoOpenDelay.Seconds30`'s own value, not `0` or `undefined` - a session
+      // cached before this setting existed (or a malformed response) must never schedule a timer for
+      // "immediately" or "never" by accident; `ui/appearance.ts`'s `parseAutoOpenDelaySeconds` is the
+      // second, courtesy re-check on top of this one.
+      widgetAutoOpenEnabled: body.widgetAutoOpenEnabled === true,
+      widgetAutoOpenDelaySeconds: body.widgetAutoOpenDelaySeconds ?? 30,
+      widgetAutoOpenGreetingText: body.widgetAutoOpenGreetingText ?? null,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

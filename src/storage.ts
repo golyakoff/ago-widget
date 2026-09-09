@@ -119,6 +119,34 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "widget-auto-open-enabled",
+    holds: "Whether the tenant turned on «Раскрывать виджет автоматически» (`23-64`).",
+    why: "Same purpose as the colour above - a cached rendering preference, refreshed with the session.",
+    lifetime: "Same as the colour above; absent entirely whenever the tenant has not turned the setting on.",
+    survivesTabClose: true,
+  },
+  {
+    key: "widget-auto-open-delay-seconds",
+    holds: "How long the widget waits before opening itself, in seconds - one of 15, 30, 45, 60, 90 or 120.",
+    why: "Same purpose as the colour above.",
+    lifetime: "Same as the colour above; absent whenever auto-open itself is off.",
+    survivesTabClose: true,
+  },
+  {
+    key: "widget-auto-open-greeting-text",
+    holds: "The tenant's own auto-open greeting line - words the tenant wrote, not the widget's own.",
+    why: "Same purpose as the notice text above - lets the widget draw the greeting without a second round trip once the session is cached.",
+    lifetime: "Same as the colour above; absent whenever auto-open itself is off.",
+    survivesTabClose: true,
+  },
+  {
+    key: "auto-open-greeting-shown",
+    holds: "Whether this browser has already been shown the tenant's auto-open greeting (`23-64`) - a yes/no flag, never the greeting text itself.",
+    why: "«Opening is once» - a returning visitor within the same identity is not shown the greeting a second time.",
+    lifetime: "Cleared only when the stored visitor identity itself is replaced (`17-07`), the same event that clears the conversation cursor below - a new identity has not been shown anything yet. Otherwise nothing clears it.",
+    survivesTabClose: true,
+  },
+  {
     key: "conversation-id",
     holds: "The id of the conversation this browser last held with the tenant.",
     why: "Lets a reload resume the same conversation instead of starting a new one.",
@@ -190,6 +218,19 @@ export interface VisitorSession {
    * collapses the wire's optional field to `false` before this type ever sees it, so there is no
    * third "not set" state left to represent here - `false` already means both "off" and "unknown". */
   widgetAttractAttention: boolean;
+  /** `23-64`: cached alongside the rest on the identical terms - whether the tenant turned
+   * «Раскрывать виджет автоматически» on, the delay, and the greeting text, refreshed on the
+   * identical schedule (`25-05`). `widgetAutoOpenEnabled` is a plain `boolean` for the same reason
+   * `widgetAttractAttention` already is - `session.ts`'s `store` collapses the wire's optional field
+   * before this type ever sees it. `widgetAutoOpenDelaySeconds` falls back to `30`
+   * (`Ago.Chat.Domain.AutoOpenDelay.Seconds30`), never `0` - a missing value must never schedule the
+   * timer for "immediately". `widgetAutoOpenGreetingText` stays `T | null`, the same shape
+   * `widgetNoticeText` already has: `null` for a session written before this field existed, or for a
+   * site that has never configured one - `ui/appearance.ts`'s `parseAutoOpenGreetingText` treats both
+   * identically to "no greeting". */
+  widgetAutoOpenEnabled: boolean;
+  widgetAutoOpenDelaySeconds: number;
+  widgetAutoOpenGreetingText: string | null;
 }
 
 export class WidgetStorage {
@@ -239,7 +280,23 @@ export class WidgetStorage {
       widgetNoticeUrl: this.readSafe("widget-notice-url"),
       enabledModules: this.readEnabledModulesSafe(),
       widgetAttractAttention: this.readSafe("widget-attract-attention") === "true",
+      widgetAutoOpenEnabled: this.readSafe("widget-auto-open-enabled") === "true",
+      widgetAutoOpenDelaySeconds: this.readAutoOpenDelaySecondsSafe(),
+      widgetAutoOpenGreetingText: this.readSafe("widget-auto-open-greeting-text"),
     };
+  }
+
+  /** `23-64`: mirrors `getLastKnownSequence`'s own `Number.isFinite` fallback - a corrupted or absent
+   * stored value degrades to the server-side default (`Ago.Chat.Domain.AutoOpenDelay.Seconds30`),
+   * never `0`/`NaN`, which `scheduleAutoOpen` would otherwise read as "open immediately". */
+  private readAutoOpenDelaySecondsSafe(): number {
+    const raw = this.readSafe("widget-auto-open-delay-seconds");
+    if (raw === null) {
+      return 30;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : 30;
   }
 
   /**
@@ -316,6 +373,23 @@ export class WidgetStorage {
     } else {
       this.removeSafe("widget-attract-attention");
     }
+
+    // `23-64`: the same "only written when it means something" shape as `widgetAttractAttention`
+    // just above - all three fields absent together whenever the tenant has not turned auto-open on,
+    // never a lone delay or greeting surviving a tenant switching it back off.
+    if (session.widgetAutoOpenEnabled) {
+      this.writeSafe("widget-auto-open-enabled", "true");
+      this.writeSafe("widget-auto-open-delay-seconds", String(session.widgetAutoOpenDelaySeconds));
+      if (session.widgetAutoOpenGreetingText) {
+        this.writeSafe("widget-auto-open-greeting-text", session.widgetAutoOpenGreetingText);
+      } else {
+        this.removeSafe("widget-auto-open-greeting-text");
+      }
+    } else {
+      this.removeSafe("widget-auto-open-enabled");
+      this.removeSafe("widget-auto-open-delay-seconds");
+      this.removeSafe("widget-auto-open-greeting-text");
+    }
   }
 
   getLastKnownSequence(conversationId: string): number | null {
@@ -330,6 +404,31 @@ export class WidgetStorage {
 
   setLastKnownSequence(conversationId: string, sequence: number): void {
     this.writeSafe(`last-sequence:${conversationId}`, String(sequence));
+  }
+
+  /**
+   * `23-64`/`adr/0148`: «Opening is once» - the backlog item's own scope, and the visitor's stored
+   * identity is "the visitor's own session" this item asks to reuse rather than inventing a second
+   * lifetime (its own words: "the visitor's own session already has a lifetime and reusing it is the
+   * obvious answer"). A plain boolean, not a timestamp - there is no decaying window to compute, only
+   * "has this identity already seen it".
+   */
+  getAutoOpenGreetingShown(): boolean {
+    return this.readSafe("auto-open-greeting-shown") === "true";
+  }
+
+  setAutoOpenGreetingShown(): void {
+    this.writeSafe("auto-open-greeting-shown", "true");
+  }
+
+  /** `17-07`: the identical event `clearConversation` already exists for - a stored identity the
+   * server would no longer renew being replaced by a freshly minted one. A new `VisitorId` has not
+   * been shown anything yet, so this flag must not survive onto it the way it would if left alone
+   * (every other cached config field is fine to survive, since it is overwritten by the next `store`
+   * call regardless - this one is never overwritten by a normal session refresh, only ever set once
+   * by `ui/widget.ts` when the greeting is actually drawn, so it needs its own explicit clear). */
+  clearAutoOpenGreetingShown(): void {
+    this.removeSafe("auto-open-greeting-shown");
   }
 
   getConversationId(): string | null {

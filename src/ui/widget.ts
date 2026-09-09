@@ -11,7 +11,16 @@ import { getConsentRequirement, recordConsent, type ConsentRequirement } from ".
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
 import { logWidgetError, guardAsync } from "../errors.js";
-import { parseAttractAttention, parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import {
+  parseAttractAttention,
+  parseAutoOpenDelaySeconds,
+  parseAutoOpenEnabled,
+  parseAutoOpenGreetingText,
+  parseNoticeText,
+  parseNoticeUrl,
+  parseWidgetColor,
+  parseWidgetPosition,
+} from "./appearance.js";
 import { renderPrimitiveContent } from "./primitives/render.js";
 import { renderContactCaptureControl, type ContactCaptureResult } from "./contactCapture.js";
 import { loadModule } from "./moduleLoader.js";
@@ -269,6 +278,34 @@ export class ChatWidget {
    * and re-closes the panel does not get a second round of pulses either.
    */
   private attentionExhausted = false;
+
+  /**
+   * `23-64`/`adr/0148`: the in-flight `setTimeout` for the scheduled auto-open, or `null` when
+   * nothing is scheduled - the identical shape `attentionTimer` already has, for the identical
+   * reason (`open()` needs to cancel it synchronously the moment a visitor opens the panel
+   * themselves, before the timer would otherwise fire).
+   */
+  private autoOpenTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * `23-64`: the drawn greeting's own bubble, or `null` once nothing is showing that has not yet
+   * been materialised - tracked so `handleIncoming`'s own `AutoGreeting` branch can remove it the
+   * moment the real message arrives, in place, rather than leaving a duplicate or letting the real
+   * copy land at the bottom of the transcript out of order (this field's own remarks on
+   * `handleIncoming` have the full reasoning).
+   */
+  private drawnGreetingBubble: HTMLDivElement | null = null;
+
+  /**
+   * `23-64`/`adr/0148`: `true` from the moment `openForAutoGreeting` reveals the panel until the
+   * visitor's first send resolves (or the panel is closed and reopened through the ordinary
+   * `open()`, which connects immediately and makes this moot) - the signal that lets the composer
+   * accept input, and a send succeed, on a panel this widget deliberately never connected the hub
+   * for (`adr/0148`'s "nothing reaches the server until the visitor writes"). `isConnected` alone
+   * cannot mean this: it only ever becomes `true` once a real hub connection exists, which is
+   * exactly what auto-open must not create before the visitor writes.
+   */
+  private autoOpenedWithoutConnecting = false;
 
   constructor(private readonly config: WidgetConfig) {
     this.storage = new WidgetStorage(config.siteKey);
@@ -545,6 +582,16 @@ export class ChatWidget {
       this.scheduleAttractAttention();
     }
 
+    // `23-64`/`adr/0148`: also last, and gated the identical way - a tenant who never turned
+    // «Раскрывать виджет автоматически» on gets a panel that has never once considered opening
+    // itself. `parseAutoOpenEnabled` requires *both* the flag and a usable greeting
+    // (`parseAutoOpenGreetingText`) before this schedules anything - an enabled flag with nothing to
+    // say has nothing this method could draw.
+    const autoOpenGreetingText = parseAutoOpenGreetingText(session.widgetAutoOpenGreetingText);
+    if (parseAutoOpenEnabled(session.widgetAutoOpenEnabled, autoOpenGreetingText)) {
+      this.scheduleAutoOpen(autoOpenGreetingText!, parseAutoOpenDelaySeconds(session.widgetAutoOpenDelaySeconds));
+    }
+
     return session;
   }
 
@@ -664,6 +711,11 @@ export class ChatWidget {
     // or a later check. Also the one-way door: see `attentionExhausted`'s own doc comment for why a
     // later close-and-reopen does not schedule a second round.
     this.stopAttractAttention();
+    // `23-64`: the identical cancellation, for the auto-open timer - a visitor who opens the panel
+    // themselves needs no self-opening a moment later. `stopAutoOpen`'s own remarks explain why this
+    // does not also mark the greeting "shown": it was never drawn, so a future page view within the
+    // same identity remains eligible.
+    this.stopAutoOpen();
 
     this.isOpen = true;
     this.panel.hidden = false;
@@ -766,6 +818,117 @@ export class ChatWidget {
 
     this.attentionExhausted = true;
     this.toggle.classList.remove("ago-toggle--attract");
+  }
+
+  /**
+   * `23-64`/`adr/0148`: schedules the one-shot timer that draws the tenant's greeting and reveals
+   * the panel - and nothing else. No hub connection, no `JoinAsync`, no HTTP call beyond the
+   * handshake this widget already made at mount (`bootstrapSession`'s own `POST
+   * /api/v1/visitor-sessions`, which happens regardless of auto-open and mints no conversation) -
+   * `adr/0148`'s own words, "nothing reaches the server until the visitor writes." A visitor who
+   * ignores the panel or closes it before writing leaves exactly the trace they would have left
+   * without this feature: none. `ui/widget.test.ts`'s own fails-before test asserts this directly by
+   * spying on `VisitorConnection` and `fetch`.
+   *
+   * <b>Three one-way gates, checked once, at the moment scheduling is attempted:</b>
+   * <ul>
+   * <li><b>Already shown this visitor identity.</b> «Opening is once» (the backlog item's own
+   * words) - `WidgetStorage.getAutoOpenGreetingShown()` is keyed to the same visitor session this
+   * item's own Scope asks to reuse ("the visitor's own session already has a lifetime and reusing it
+   * is the obvious answer"), not a fresh in-memory flag that would reset on every reload the way
+   * `scheduleAttractAttention`'s own `attentionExhausted` deliberately does for its own, different
+   * feature.</li>
+   * <li><b>A coarse-pointer (touch-primary) device.</b> This item's own required, stated mobile
+   * decision - the backlog item's "Where this is likely to go wrong" section asks for one rather
+   * than an accident discovered in production. A panel that opens itself over somebody's phone is a
+   * far larger interruption than one that opens in the corner of a desktop tab a visitor can glance
+   * past without losing their place on the page, so auto-open simply never fires here - the identical
+   * `window.matchMedia?.(...)` feature-detection shape `scheduleAttractAttention`'s own
+   * `prefers-reduced-motion` gate already uses, applied to a different media feature.</li>
+   * <li><b>The panel is already open.</b> A visitor who opened it themselves before the timer fired
+   * needs no invitation.</li>
+   * </ul>
+   */
+  private scheduleAutoOpen(greetingText: string, delaySeconds: number): void {
+    if (this.isOpen || this.storage.getAutoOpenGreetingShown()) {
+      return;
+    }
+
+    if (window.matchMedia?.("(pointer: coarse)").matches) {
+      return;
+    }
+
+    this.autoOpenTimer = setTimeout(() => this.openForAutoGreeting(greetingText), delaySeconds * 1000);
+  }
+
+  /**
+   * `23-64`/`adr/0148`: the auto-open panel reveal - deliberately not a call to `open()`.
+   * `open()` connects the hub (`connect()`, which mints a real conversation the instant it joins),
+   * steals focus into the panel (`focusTrap.activate()`, `closeButton.focus()` - this item's own
+   * "focus is not stolen" scope), and counts as a deliberate open for `23-07`'s own beacon - every
+   * one of those is exactly what a visitor did not do by having a timer fire on their own page. This
+   * method does only what a self-opened panel needs: reveal it, keep the toggle's own accessible
+   * state honest about what the DOM now shows, mark this identity as shown, and draw the greeting.
+   *
+   * <b>Re-checks `isOpen` at the moment it actually runs</b>, not only when it was scheduled - the
+   * timer can fire after the visitor has already opened the panel themselves in the interim, and
+   * `open()`'s own `stopAttractAttention`-style cancellation does not reach this timer (see
+   * `stopAutoOpen`, called from `open()` for exactly this reason).
+   *
+   * <b>Enables the composer without a live connection.</b> `autoOpenedWithoutConnecting` is what
+   * lets the visitor type and send from a panel this widget has not connected the hub for -
+   * `dispatchSend`'s own remarks explain the lazy-connect-on-first-send this makes possible.
+   */
+  private openForAutoGreeting(greetingText: string): void {
+    this.autoOpenTimer = null;
+    if (this.isOpen) {
+      return;
+    }
+
+    this.isOpen = true;
+    this.panel.hidden = false;
+    this.toggle.setAttribute("aria-expanded", "true");
+    this.toggle.setAttribute("aria-label", this.strings.closeChat);
+
+    this.storage.setAutoOpenGreetingShown();
+    this.autoOpenedWithoutConnecting = true;
+    this.input.disabled = false;
+    this.updateSendButtonEnabled();
+
+    this.drawAutoGreeting(greetingText);
+  }
+
+  /** `23-64`: the one-way stop - clears whatever `scheduleAutoOpen` has pending, the identical shape
+   * `stopAttractAttention` already has for its own timer. Safe to call whether or not a schedule is
+   * actually in flight - `open()` calls it unconditionally. Does not touch `isOpen`/storage: unlike
+   * attract-attention's own one-shot-per-page-view exhaustion, "already shown" here is a fact about
+   * the visitor's identity (`WidgetStorage`), not this page view, and a cancelled *schedule* (the
+   * visitor opened the panel themselves before the timer fired) is not the same fact as "already
+   * shown" - the greeting was never drawn, so it remains eligible for a future page view within the
+   * same identity if the tenant's timer would otherwise have shown it. */
+  private stopAutoOpen(): void {
+    if (this.autoOpenTimer !== null) {
+      clearTimeout(this.autoOpenTimer);
+      this.autoOpenTimer = null;
+    }
+  }
+
+  /**
+   * `23-64`/`adr/0148`: renders the tenant's greeting locally - not a message, no author, no id,
+   * never sent to the server. Deliberately not routed through `appendMessageBubble`:
+   * `this.renderedMessages` (that method's own remarks) stays untouched, which is what keeps this
+   * bubble out of `saveConversation`'s own archive and out of anything a reload would rebuild from -
+   * `23-53` is the reason this is stated rather than assumed (this item's own "Where this is likely
+   * to go wrong": "a client-only message sitting in that list is exactly the kind of thing that
+   * produces an empty or duplicated view later").
+   *
+   * Visually identical to a real `"AutoGreeting"`-authored message (`renderBubble`'s own remarks on
+   * that author kind) - a visitor who later writes and watches the drawn greeting quietly become
+   * "real" (`handleIncoming`'s own `AutoGreeting` branch, below) never sees anything change, only
+   * that the panel now remembers it happened.
+   */
+  private drawAutoGreeting(text: string): void {
+    this.drawnGreetingBubble = this.renderBubble("AutoGreeting", text);
   }
 
   /**
@@ -964,9 +1127,16 @@ export class ChatWidget {
 
   /** Re-evaluated on every keystroke, not just once at connect time - a textarea starts empty
    * and the button must react to the visitor actually typing something (found live, 5-09: the
-   * button was otherwise permanently disabled since nothing re-ran this check after connect). */
+   * button was otherwise permanently disabled since nothing re-ran this check after connect).
+   *
+   * `23-64`: `autoOpenedWithoutConnecting` joins `isConnected` on the same terms a real connection
+   * would - the one exception to "connected" gating this widget has, and it exists for exactly one
+   * panel state: auto-opened, composer visible, hub deliberately not yet connected
+   * (`openForAutoGreeting`'s own remarks). `completeSend` is what turns a click here into a real
+   * connection the moment it is actually needed. */
   private updateSendButtonEnabled(): void {
-    this.sendButton.disabled = !this.isConnected || this.input.value.trim().length === 0;
+    this.sendButton.disabled =
+      !(this.isConnected || this.autoOpenedWithoutConnecting) || this.input.value.trim().length === 0;
   }
 
   /** `23-62`: mirrors `updateSendButtonEnabled` above - re-evaluated both on every connection-state
@@ -1017,13 +1187,10 @@ export class ChatWidget {
    * arguments to the one function every visitor-authored message already goes through.
    */
   private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: string): void {
-    if (this.connection === null || this.conversationId === null) {
-      return;
-    }
-
-    const connection = this.connection;
-    const conversationId = this.conversationId;
-
+    // `23-64`/`adr/0148`: the optimistic bubble still renders synchronously, before any connection
+    // exists or not - a visitor typing into an auto-opened panel gets the identical instant feedback
+    // an already-connected one already gives, and `completeSend` below is where the one thing that
+    // now might not exist yet (a live hub connection) actually gets awaited.
     const bubble = this.renderBubble("Visitor", body, "sending");
     if (attachmentId) {
       this.renderAttachmentInto(bubble, attachmentId);
@@ -1032,8 +1199,54 @@ export class ChatWidget {
     const clientMessageId = newClientMessageId();
     this.pendingSends.set(clientMessageId, bubble);
 
+    guardAsync(() => this.completeSend(bubble, clientMessageId, body, attachmentId, contentKind, content));
+  }
+
+  /**
+   * `23-64`/`adr/0148`: the network half of `dispatchSend`, split out so the optimistic bubble above
+   * can render before any of this runs. `materializeAutoGreeting` is decided *before* anything else
+   * here - `this.connectPromise === null` is true only ever for the first send on a panel this
+   * widget auto-opened without connecting (`openForAutoGreeting` never starts `connectPromise`; every
+   * other way the panel opens does, in `open()`, before a visitor could ever reach the composer at
+   * all). Once decided, this method starts the connection lazily if it has not already started -
+   * `open()`'s own `if (this.connectPromise === null)` check, reused rather than duplicated, since a
+   * lazy connect-on-first-interaction is exactly what `open()` already does for the ordinary path,
+   * just deferred one step further for this one.
+   *
+   * `VisitorHub.SendMessageWithAutoGreetingAsync` (`ago-chat`) is what actually receives the flag -
+   * a hint the server re-verifies inside the same transaction as this very message, never trusted
+   * blindly (`PendingMessage`'s own remarks in `ago-chat`).
+   */
+  private async completeSend(
+    bubble: HTMLDivElement,
+    clientMessageId: string,
+    body: string,
+    attachmentId?: string,
+    contentKind?: string,
+    content?: string,
+  ): Promise<void> {
+    const materializeAutoGreeting = this.connectPromise === null;
+    if (this.connectPromise === null) {
+      this.connectPromise = this.connect();
+    }
+
+    await this.connectPromise;
+
+    if (this.connection === null || this.conversationId === null) {
+      // `connect()` itself already reported this via `this.status` - nothing new to say, only this
+      // one bubble to resolve, the same "no delivery can ever carry this id" cleanup the ordinary
+      // NotConnectedError branch below already does.
+      this.pendingSends.delete(clientMessageId);
+      this.markBubbleFailed(bubble, this.strings.notConnectedRetryNote);
+      this.updateSendButtonEnabled();
+      return;
+    }
+
+    const connection = this.connection;
+    const conversationId = this.conversationId;
+
     connection
-      .sendMessage(conversationId, body, clientMessageId, attachmentId, contentKind, content)
+      .sendMessage(conversationId, body, clientMessageId, attachmentId, contentKind, content, materializeAutoGreeting)
       .then(() => {
         bubble.classList.remove("ago-message--pending");
       })
@@ -1179,6 +1392,27 @@ export class ChatWidget {
     const bubble = this.renderBubble(message.authorKind, message.body);
     if (message.attachmentId) {
       this.renderAttachmentInto(bubble, message.attachmentId);
+    }
+
+    // `23-64`/`adr/0148`: the real, materialised greeting arriving - over the live connection
+    // (`ConnectionFanoutConsumer`'s own fan-out, the ordinary delivery path every message uses,
+    // `MessageBatchWriter`'s own remarks in `ago-chat`) or replayed in `connect()`'s own history
+    // loop on a later page load. Two things this branch guarantees that arrival order alone would
+    // not: **no duplicate** - `drawnGreetingBubble` (the client-only placeholder `drawAutoGreeting`
+    // left showing) is removed the moment its real counterpart shows up, and **correct position** -
+    // inserted as the transcript's own first child rather than appended at whatever position happens
+    // to be last when this arrives. That second guarantee matters because this message's own
+    // delivery is not guaranteed to *win the race* against the visitor's own local echo
+    // (`completeSend`'s optimistic bubble, rendered synchronously before either the connect or the
+    // send that materialises this one even starts) - the greeting is always sequence 1 by
+    // construction (`Conversation.AddAutoGreetingMessage`, `ago-chat`), so it always belongs first,
+    // whichever of the two bubbles this panel happens to receive first.
+    if (message.authorKind === "AutoGreeting") {
+      this.drawnGreetingBubble?.remove();
+      this.drawnGreetingBubble = null;
+      if (this.messages.firstChild !== bubble) {
+        this.messages.insertBefore(bubble, this.messages.firstChild);
+      }
     }
 
     // `20-07`: only a message from the *other* side of the conversation is a step to render richly.
@@ -1361,7 +1595,15 @@ export class ChatWidget {
     // with a label - deliberately not `.ago-message--system`, which is this widget's *local* status
     // note ("You are offline") and is centred, grey and unlabelled. Conflating the two would make a
     // real message from the shop look like a client-side notice, and vice versa.
-    const modifier = authorKind === "System" ? "auto" : authorKind.toLowerCase();
+    //
+    // `23-64`: `"AutoGreeting"` renders exactly like `"Operator"` - not a class of its own, and
+    // deliberately not `"auto"` either. This is the author's own decision (`MessageAuthorKind.AutoGreeting`'s
+    // own remarks, `ago-chat`): the greeting reads as if from the shop's own side, the opposite of
+    // `"System"`'s machine-reply styling, so it gets the identical bubble a real operator message
+    // already has - both for the client-drawn placeholder (`drawAutoGreeting`) and the real,
+    // materialised message that eventually replaces it, so a visitor never sees a visual change
+    // between the two.
+    const modifier = authorKind === "System" ? "auto" : authorKind === "AutoGreeting" ? "operator" : authorKind.toLowerCase();
     bubble.className = `ago-message ago-message--${modifier}`;
     if (state === "sending") {
       bubble.classList.add("ago-message--pending");

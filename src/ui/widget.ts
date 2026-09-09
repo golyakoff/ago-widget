@@ -23,6 +23,12 @@ import type { WidgetStrings } from "../i18n/strings.js";
 // to say "booking" is `loadBookingModuleChip` below, which names the lazy chunk's file name and
 // nothing else about it.
 import type { ModuleChipSpec } from "../modules/booking/chip.js";
+// `23-62`: the same type-only import shape as `ModuleChipSpec` above, for the same reason - this
+// never adds a runtime input to the base bundle (`bundleInputs.test.ts` covers this module directory
+// exactly as it already covers `modules/booking/`), and the one place in this file allowed to know
+// the save archive builder's own shape is `saveConversation` below, which names the lazy chunk's file
+// name and nothing else about how it is built.
+import type { AttachmentLocation, BuildConversationArchiveInput } from "../modules/saveConversation/archive.js";
 
 /**
  * `23-63`: the bound the backlog item's own "Where this is likely to go wrong" section asked to be
@@ -123,15 +129,20 @@ export class ChatWidget {
   private readonly input: HTMLTextAreaElement;
   private readonly sendButton: HTMLButtonElement;
   private readonly attachButton: HTMLButtonElement;
-  /** `23-61`: the composer's second row, reserved rather than built - an emoji picker and
-   * «Сохранить диалог» (`23-62`) are each their own item. Plain `<span>`s, never `<button>`: no
-   * `href`/`tabindex`/click handler, so neither is part of the tab order and neither is reachable by
-   * keyboard as though it were a control - the same shape `23-31` used for the console's own reserved
-   * nav entries (a `<span aria-disabled="true">`, `ago-console`'s `AppShell.tsx`), followed here
-   * rather than invented fresh. `aria-disabled="true"` names what is there (a place, not yet a
-   * control) without hiding it from assistive tech the way `aria-hidden` would. */
+  /** `23-61`: the composer's second row's still-reserved place - an emoji picker is its own,
+   * not-yet-built item. A plain `<span>`, never a `<button>`: no `href`/`tabindex`/click handler, so
+   * it is neither part of the tab order nor reachable by keyboard as though it were a control - the
+   * same shape `23-31` used for the console's own reserved nav entries (a `<span
+   * aria-disabled="true">`, `ago-console`'s `AppShell.tsx`), followed here rather than invented
+   * fresh. `aria-disabled="true"` names what is there (a place, not yet a control) without hiding it
+   * from assistive tech the way `aria-hidden` would. */
   private readonly emojiPlaceholder: HTMLSpanElement;
-  private readonly savePlaceholder: HTMLSpanElement;
+  /** `23-62`: the real button that fills the second reserved place `23-61` left - a down-arrow icon
+   * (the author's own decision, recorded in the backlog item), disabled/enabled on the identical
+   * `isConnected` signal `attachButton` already uses, since building the archive needs the same live
+   * connection an attach does (`saveConversation`'s own `fetchOlderPage`/`fetchAttachmentLocation`
+   * calls). */
+  private readonly saveButton: HTMLButtonElement;
   private readonly fileInput: HTMLInputElement;
   private readonly focusTrap: FocusTrap;
   /** `20-07`: `null` unless the site's own handshake response grants booking. Nullable is what
@@ -196,6 +207,22 @@ export class ChatWidget {
    * is deliberately neither - see `dispatchSend`'s `SendOutcomeUnknownError` branch.
    */
   private readonly pendingSends = new Map<string, HTMLDivElement>();
+
+  /**
+   * `23-62`: every `MessageDto` this panel has ever rendered, keyed by id - populated in the one
+   * place every message this widget shows already passes through (`appendMessageBubble`), so it
+   * needs no separate wiring for the initial history page, a live arrival or a reconnect's own delta
+   * replay. This is the seed set `saveConversation` walks *backward* from (`VisitorConnection.
+   * loadOlderHistory`) to reach whatever the visitor never scrolled to - "the conversation" means
+   * everything the visitor could see, not only whatever page happened to be loaded when they clicked
+   * save (the backlog item's own words). A `Map`, not an array, for the same reason `pendingSends`
+   * above is one: a message can arrive more than once on the wire (a resumed connection's delta can
+   * overlap history already rendered) and this must not double-count it.
+   */
+  private readonly renderedMessages = new Map<string, MessageDto>();
+  /** Guards against a second click starting a second archive build while the first is still walking
+   * history and fetching attachments - `saveConversation`'s own `finally` is what clears it. */
+  private isSavingConversation = false;
 
   /**
    * `23-09`/`23-58`: `true` once the contact form has actually been rendered by *either* of its two
@@ -385,7 +412,20 @@ export class ChatWidget {
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
     this.emojiPlaceholder = this.buildReservedComposerPlace("🙂", this.strings.emojiComingSoon);
-    this.savePlaceholder = this.buildReservedComposerPlace("💾", this.strings.saveConversationComingSoon);
+
+    // `23-62`: a real button now, in the place `23-61` reserved for it - a down-arrow icon, the
+    // author's own decision (backlog item's own "Decision" line). Sized and laid out identically to
+    // `attachButton` (`.ago-save` mirrors `.ago-attach` in `ui/styles.ts`) so the row keeps reading as
+    // one aligned icon strip; `aria-label` carries the whole accessible name, the same icon-only shape
+    // `sendButton` above already uses, since the glyph itself says nothing a screen reader can use.
+    this.saveButton = document.createElement("button");
+    this.saveButton.type = "button";
+    this.saveButton.className = "ago-save";
+    this.saveButton.setAttribute("aria-label", this.strings.saveConversation);
+    this.saveButton.title = this.strings.saveConversation;
+    this.saveButton.textContent = "⬇";
+    this.saveButton.disabled = true;
+    this.saveButton.addEventListener("click", () => guardAsync(() => this.saveConversation()));
 
     // `23-61`: the field's own full-width row, alone - the composer's whole reason for existing is
     // this field, and `.ago-composer-row` styling (`ui/styles.ts`) is what actually widens it, this
@@ -397,11 +437,11 @@ export class ChatWidget {
     composerRow.className = "ago-composer-row";
     composerRow.append(this.input, this.sendButton);
 
-    // `23-61`: the second row - attach (moved down from the row above) plus the two reserved places,
-    // in the backlog item's own order (attach, emoji, save).
+    // `23-61`/`23-62`: the second row - attach, the still-reserved emoji place, then save, in the
+    // backlog item's own order.
     const composerControls = document.createElement("div");
     composerControls.className = "ago-composer-controls";
-    composerControls.append(this.attachButton, this.fileInput, this.emojiPlaceholder, this.savePlaceholder);
+    composerControls.append(this.attachButton, this.fileInput, this.emojiPlaceholder, this.saveButton);
 
     composer.append(composerRow, composerControls);
     this.panel.append(header);
@@ -593,7 +633,8 @@ export class ChatWidget {
     this.sendButton.setAttribute("aria-label", strings.send);
     this.attachButton.setAttribute("aria-label", strings.attachAFile);
     this.emojiPlaceholder.title = strings.emojiComingSoon;
-    this.savePlaceholder.title = strings.saveConversationComingSoon;
+    this.saveButton.setAttribute("aria-label", strings.saveConversation);
+    this.saveButton.title = strings.saveConversation;
 
     // `ui/styles.ts`'s own remarks: a CSS `content:` pseudo-element string cannot be reached by
     // rewriting a DOM text node, so it is threaded through as a custom property instead, the same
@@ -910,6 +951,7 @@ export class ChatWidget {
       this.moduleChip.disabled = !this.isConnected;
     }
     this.updateSendButtonEnabled();
+    this.updateSaveButtonEnabled();
     this.status.textContent =
       state === "connecting"
         ? this.strings.connecting
@@ -925,6 +967,14 @@ export class ChatWidget {
    * button was otherwise permanently disabled since nothing re-ran this check after connect). */
   private updateSendButtonEnabled(): void {
     this.sendButton.disabled = !this.isConnected || this.input.value.trim().length === 0;
+  }
+
+  /** `23-62`: mirrors `updateSendButtonEnabled` above - re-evaluated both on every connection-state
+   * change (`renderConnectionState`) and around the archive build itself (`saveConversation`'s own
+   * `finally`), so a visitor cannot start a second save while the first is still walking history and
+   * fetching attachments. */
+  private updateSaveButtonEnabled(): void {
+    this.saveButton.disabled = !this.isConnected || this.isSavingConversation;
   }
 
   /** `23-61`: a reserved composer place - `<span>`, not `<button>`, so there is no `href`, `type`,
@@ -1121,6 +1171,11 @@ export class ChatWidget {
   }
 
   private appendMessageBubble(message: MessageDto): void {
+    // `23-62`: recorded before anything else in this method - every path below can return early
+    // (a courtesy-rejected file never reaches here at all) or throw from a later step, and this is
+    // the one fact `saveConversation` needs regardless: "this message was shown to the visitor".
+    this.renderedMessages.set(message.id, message);
+
     const bubble = this.renderBubble(message.authorKind, message.body);
     if (message.attachmentId) {
       this.renderAttachmentInto(bubble, message.attachmentId);
@@ -1366,4 +1421,95 @@ export class ChatWidget {
         bubble.appendChild(note);
       });
   }
+
+  /**
+   * `23-62`: the click handler behind «Сохранить диалог» - loads the archive-building module on
+   * first use (never before: this `loadModule` call is the only reference anywhere in this file to
+   * `modules/saveConversation/archive.ts`, which is what keeps it out of the base bundle exactly as
+   * `bundleInputs.test.ts` already checks for the booking module), then hands it everything it needs
+   * as plain callbacks bound to this widget's own connection and attachment lookup - the module
+   * itself never imports `connection.ts`/`attachments.ts` (`archive.ts`'s own doc comment explains
+   * why that separation is what keeps it independently testable).
+   *
+   * A failure at any point - the lazy chunk 404s, every attachment turns out unreachable, the
+   * archive builder itself throws - is caught here and shown as a system note
+   * (`saveConversationFailedNote`), never a thrown exception the host page could see
+   * (embeddable-widget skill: "never break the host page"). The button simply does not produce a
+   * file this time.
+   */
+  private async saveConversation(): Promise<void> {
+    if (this.isSavingConversation || this.connection === null || this.conversationId === null) {
+      return;
+    }
+
+    this.isSavingConversation = true;
+    this.updateSaveButtonEnabled();
+
+    const connection = this.connection;
+    const conversationId = this.conversationId;
+
+    try {
+      const archiveModule = await loadModule<{
+        buildConversationArchive: (input: BuildConversationArchiveInput) => Promise<{ blob: Blob; filename: string }>;
+      }>(this.config.scriptUrl, "widget-module-save.js");
+
+      const archive = await archiveModule.buildConversationArchive({
+        knownMessages: [...this.renderedMessages.values()],
+        fetchOlderPage: (beforeSequence, pageSize) => connection.loadOlderHistory(conversationId, beforeSequence, pageSize),
+        fetchAttachmentLocation: (attachmentId) => this.fetchAttachmentLocationForExport(attachmentId),
+        locale: this.locale,
+        siteKey: this.config.siteKey,
+        now: new Date(),
+      });
+
+      triggerBrowserDownload(archive.blob, archive.filename);
+    } catch (error) {
+      logWidgetError(error);
+      this.renderSystemNote(this.strings.saveConversationFailedNote);
+    } finally {
+      this.isSavingConversation = false;
+      this.updateSaveButtonEnabled();
+    }
+  }
+
+  /** `23-62`: the same `getAttachmentDownload` call `renderAttachmentInto` above already makes for an
+   * inline bubble - reused, not duplicated, so there is exactly one place in this widget that turns
+   * an attachment id into a presigned download location. `null` on any failure (an expired session,
+   * the API unreachable), which `archive.ts` treats as "leave this attachment out of the file",
+   * never a thrown exception that would abort the whole save over one unreachable attachment. */
+  private async fetchAttachmentLocationForExport(attachmentId: string): Promise<AttachmentLocation | null> {
+    try {
+      const token = await this.currentToken();
+      const info = await getAttachmentDownload(this.config, token, attachmentId);
+      return { url: info.url, contentType: info.contentType };
+    } catch (error) {
+      logWidgetError(error);
+      return null;
+    }
+  }
+}
+
+/**
+ * `23-62`: the one place a file actually leaves this widget - `URL.createObjectURL` plus a momentary
+ * `<a download>` click, the standard way a page triggers a save without navigating anywhere.
+ *
+ * Deliberately never appended to `document.body`: every other DOM node this widget ever creates lives
+ * inside its own Shadow DOM (`ui/shadow-root.ts`), and the isolation rule that keeps it there
+ * (embeddable-widget skill: "nothing here may leak into or inherit from the host page") applies to a
+ * transient, invisible node exactly as it does to a visible one - a click on a detached element
+ * already downloads the file in every browser this widget targets, so there is no reason to touch the
+ * host page's own body at all, not even for a moment.
+ *
+ * The object URL is revoked on a delay rather than immediately after `click()`: revoking it before
+ * the browser has actually started reading it (Safari in particular) can cancel the download outright
+ * - a real failure mode of the synchronous version of this pattern, not a hypothetical one.
+ */
+function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

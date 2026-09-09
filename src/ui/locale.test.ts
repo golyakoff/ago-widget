@@ -51,7 +51,7 @@ interface Panel {
   send: HTMLButtonElement;
   attach: HTMLButtonElement;
   emojiPlaceholder: HTMLSpanElement;
-  savePlaceholder: HTMLSpanElement;
+  save: HTMLButtonElement;
   status: HTMLDivElement;
 }
 
@@ -65,12 +65,12 @@ function panelOf(root: ShadowRoot): Panel {
     return element;
   };
 
-  // `23-61`: the two reserved composer places share one class (`.ago-composer-reserved`) and differ
-  // only in `title` - selected by DOM order (emoji, then save), the same order `ui/widget.ts`'s own
-  // `composerControls.append(...)` puts them in.
+  // `23-61`: the still-reserved emoji place is a `<span class="ago-composer-reserved">`.
+  // `23-62` fills the other place `23-61` reserved with a real `<button class="ago-save">` -
+  // queried by its own class below, not by DOM order among reserved spans any more.
   const reservedPlaces = root.querySelectorAll<HTMLSpanElement>(".ago-composer-reserved");
-  if (reservedPlaces.length !== 2) {
-    throw new Error(`the widget has ${reservedPlaces.length} .ago-composer-reserved elements, expected 2`);
+  if (reservedPlaces.length !== 1) {
+    throw new Error(`the widget has ${reservedPlaces.length} .ago-composer-reserved elements, expected 1`);
   }
 
   return {
@@ -83,7 +83,7 @@ function panelOf(root: ShadowRoot): Panel {
     send: query<HTMLButtonElement>(".ago-send"),
     attach: query<HTMLButtonElement>(".ago-attach"),
     emojiPlaceholder: reservedPlaces[0]!,
-    savePlaceholder: reservedPlaces[1]!,
+    save: query<HTMLButtonElement>(".ago-save"),
     status: query<HTMLDivElement>(".ago-status"),
   };
 }
@@ -156,7 +156,7 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
     expect(panel.send.getAttribute("aria-label")).toBe("Отправить");
     expect(panel.attach.getAttribute("aria-label")).toBe("Прикрепить файл");
     expect(panel.emojiPlaceholder.title).toBe("Эмодзи (скоро)");
-    expect(panel.savePlaceholder.title).toBe("Сохранить диалог (скоро)");
+    expect(panel.save.getAttribute("aria-label")).toBe("Сохранить диалог");
   });
 
   it("renders the closed-launcher aria-label in Russian before the panel is ever opened", async () => {
@@ -266,7 +266,7 @@ describe("a widget booted against a site with no WidgetLocale set", () => {
     expect(panel.send.getAttribute("aria-label")).toBe("Send");
     expect(panel.attach.getAttribute("aria-label")).toBe("Attach a file");
     expect(panel.emojiPlaceholder.title).toBe("Emoji (coming soon)");
-    expect(panel.savePlaceholder.title).toBe("Save conversation (coming soon)");
+    expect(panel.save.getAttribute("aria-label")).toBe("Save conversation");
   });
 
   it("renders the connection status in English", async () => {

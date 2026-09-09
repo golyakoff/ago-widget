@@ -28,9 +28,15 @@ export interface WidgetStrings {
   /** `23-61`: the reserved emoji place in the composer's second row - not a picker (out of scope for
    * that item), so this is a `title` on an inert, unfocusable placeholder, not a control's label. */
   readonly emojiComingSoon: string;
-  /** `23-61`: the reserved place for «Сохранить диалог» (`23-62`, not built here) - same shape as
-   * {@link emojiComingSoon}, a `title` on an inert placeholder. */
-  readonly saveConversationComingSoon: string;
+  /** `23-62`: the accessible name (and `title`) on the real «Сохранить диалог» button that fills the
+   * place `23-61` reserved - a down-arrow icon carries no text of its own, so this is the whole of its
+   * accessible name, the same "icon-only, name from `aria-label` alone" shape `send` already uses. */
+  readonly saveConversation: string;
+  /** `23-62`: shown as a system note (`renderSystemNote`, the same element a rejected file already
+   * uses) when building or downloading the archive fails - a lazy module 404s, `CompressionStream`
+   * throws, every attachment fetch fails. Never a thrown exception either way (embeddable-widget
+   * skill: "never break the host page") - this is what the visitor sees instead of silence. */
+  readonly saveConversationFailedNote: string;
   readonly previousChatExpired: string;
   readonly chatUnavailable: string;
   readonly sessionExpired: string;

@@ -26,14 +26,23 @@ async function problemMessage(response: Response): Promise<string> {
 }
 
 export interface ConsentDocumentSummary {
+  /**
+   * `25-27`: kept, where before this item the trimmed read dropped it - it is what
+   * `ui/contactCapture.ts`'s `buildConsentLabel` now needs to link the tenant's own document title
+   * to its real public page (`ago-console`'s `/policies/:documentKey`, `23-37`), the same key that
+   * route already takes. `version`/`publishedAt` stay dropped: nothing client-side ever names a
+   * specific version, only the current one this response already resolved.
+   */
+  documentKey: string;
   title: string;
   body: string;
 }
 
 /**
  * The widget's own trimmed read of `Ago.Chat.Api.Consent.ConsentEndpoints.ConsentRequirementResponse`
- * - `documentKey`/`version`/`publishedAt` are dropped, since nothing client-side ever needs to name a
- * version; only what a person reads and whether this particular visitor already accepted it.
+ * - `version`/`publishedAt` are dropped, since nothing client-side ever needs to name a version;
+ * only what a person reads, which document that is, and whether this particular visitor already
+ * accepted it.
  */
 export interface ConsentRequirement {
   contactRequired: boolean;
@@ -70,7 +79,7 @@ function toSummary(body: ConsentDocumentResponseBody | null | undefined): Consen
     return null;
   }
 
-  return { title: body.title, body: body.body };
+  return { documentKey: body.documentKey, title: body.title, body: body.body };
 }
 
 export async function getConsentRequirement(

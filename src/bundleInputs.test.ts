@@ -32,6 +32,10 @@ describe("the base bundle's own inputs", () => {
       env: {
         ...process.env,
         AGO_API_BASE_URL: "https://bundle-input-guard.invalid",
+        // `25-27`: build.mjs now refuses to build without this too - the same refusal
+        // AGO_API_BASE_URL above already gets, for the identical reason (config.ts's own remarks
+        // on `WidgetConfig.policyBaseUrl`).
+        AGO_POLICY_BASE_URL: "https://office.bundle-input-guard.invalid",
         AGO_WRITE_METAFILE: "1",
       },
       stdio: "pipe",

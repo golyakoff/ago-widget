@@ -74,10 +74,28 @@ export interface WidgetConfig {
    * bundle's sibling file next to this one.
    */
   scriptUrl: string;
+  /**
+   * `25-27`: the absolute origin the console's public policy pages are served from
+   * (`ago-console`'s `/policies/:documentKey`, `23-37`) - `ui/contactCapture.ts` is the one caller,
+   * linking a tenant's consent-document title to the page a visitor can actually read it on.
+   *
+   * Baked at build time only, unlike `apiBaseUrl` above - `apiBaseUrl` can infer itself from
+   * `script.src` because `adr/0092` deliberately made the widget bundle's own origin *equal to* the
+   * API's. There is no equivalent fact for this URL: the console is `office.reserve-me.ru`
+   * (`docs/backlog/22-10`, ago-root), a genuinely different host from wherever the widget script or
+   * the API is served, related to neither by a naming rule this code could apply. Guessing one from
+   * the other would be exactly the invented-endpoint mistake CLAUDE.md's "do not invent ...
+   * endpoints" rule exists to prevent, so this value has one source - the build - the same way
+   * `apiBaseUrl`'s own baked fallback does, and `build.mjs` refuses to build without it for the
+   * identical reason it already refuses to guess `apiBaseUrl`.
+   */
+  policyBaseUrl: string;
 }
 
 /** Replaced at build time by `build.mjs` - see that file for why a `define` beats a runtime fetch. */
 declare const __AGO_DEFAULT_API_BASE_URL__: string;
+/** `25-27`: the build-time counterpart of `__AGO_DEFAULT_API_BASE_URL__` above, for `policyBaseUrl`. */
+declare const __AGO_DEFAULT_POLICY_BASE_URL__: string;
 
 export class MissingSiteKeyError extends Error {
   constructor() {
@@ -104,6 +122,9 @@ export function readConfig(script: HTMLScriptElement): WidgetConfig {
     apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
     demoNotice: readDemoNotice(script),
     scriptUrl: script.src,
+    // `25-27`: no `data-*` attribute and no inference step, unlike `apiBaseUrl` above - see
+    // `WidgetConfig.policyBaseUrl`'s own doc comment for why no such step exists to have.
+    policyBaseUrl: __AGO_DEFAULT_POLICY_BASE_URL__.replace(/\/+$/, ""),
   };
 }
 

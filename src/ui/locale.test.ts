@@ -28,6 +28,7 @@ const config: WidgetConfig = {
   // `20-07`: the module chip's own locale is `ui/modules.test.ts`'s job (it loads asynchronously
   // from a lazy bundle this file has no reason to mock) - panel chrome and connection status are
   // this file's whole subject, unrelated to whether a booking module is enabled.
+  policyBaseUrl: "https://office.test.invalid",
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 

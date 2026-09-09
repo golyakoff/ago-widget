@@ -36,11 +36,16 @@ COPY . .
 # meaning. Merging this ahead of that is safe: nothing is deployed by merging, and `ago-deploy` pins
 # images by SHA rather than following a tag.
 ARG AGO_API_BASE_URL=https://chat-api.reserve-me.ru
+# `25-27`: the console's own real origin (`docs/backlog/22-10`, ago-root) - the widget's second
+# baked-in origin, for the consent checkbox's document link. A committed default for the identical
+# reason `AGO_API_BASE_URL` above is one: this image is a function of the commit alone, and
+# `build.mjs` refuses to guess this value any more than it refuses to guess the API's.
+ARG AGO_POLICY_BASE_URL=https://office.reserve-me.ru
 # The commit this image is built from (15-07). Defaults to "unknown" rather than failing: a local
 # `docker build` to try something is legitimate, and it should say "unknown" out loud instead of
 # lying or refusing. build.mjs bakes it into the bundle as window.AgoChat.commit.
 ARG GIT_COMMIT=unknown
-RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" AGO_COMMIT="${GIT_COMMIT}" npm run build
+RUN AGO_API_BASE_URL="${AGO_API_BASE_URL}" AGO_POLICY_BASE_URL="${AGO_POLICY_BASE_URL}" AGO_COMMIT="${GIT_COMMIT}" npm run build
 
 # nginx's own "-alpine-slim" variant - the closest analogue to 8-00's Chiseled-image preference
 # that actually exists for nginx (Chiseled itself is a .NET/Microsoft base-image family with no

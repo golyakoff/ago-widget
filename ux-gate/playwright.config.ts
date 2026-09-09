@@ -47,7 +47,12 @@ export default defineConfig({
     // placeholder `demo/index.html` already carries in its own `data-api`, so the built widget and
     // the page that loads it agree; every call to it is intercepted in `fixtures/openWidget.ts` and
     // nothing ever leaves the machine.
-    env: { AGO_API_BASE_URL: "http://localhost:5009" },
+    //
+    // `25-27`: `AGO_POLICY_BASE_URL` gets the identical treatment - `build.mjs` refuses to run
+    // without it too, now, for the identical reason. Nothing in this gate's own specs opens a
+    // consent checkbox (no site under test has `RequireContactConsent` on), so the value only has to
+    // let the build succeed, not resolve to anything real.
+    env: { AGO_API_BASE_URL: "http://localhost:5009", AGO_POLICY_BASE_URL: "http://localhost:5173" },
   },
   projects: [
     { name: "mobile-375x812", use: { viewport: { width: 375, height: 812 } } },

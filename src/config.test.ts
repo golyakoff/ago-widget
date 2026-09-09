@@ -6,6 +6,10 @@ import { MissingSiteKeyError, readConfig } from "./config.js";
 // `globalThis` is the smallest faithful stand-in: the bundled code reads a bare identifier, and a
 // global of that name is exactly what a bare identifier resolves to.
 (globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_API_BASE_URL__"] = "https://built-in.example";
+// `25-27`: the same stand-in for `__AGO_DEFAULT_POLICY_BASE_URL__` - unlike the API origin above,
+// this one has no `data-*` override and no inference step to short-circuit it (`config.ts`'s own
+// remarks on `WidgetConfig.policyBaseUrl` say why), so every `readConfig` call below evaluates it.
+(globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_POLICY_BASE_URL__"] = "https://office.built-in.example";
 
 function scriptWith(attributes: Record<string, string>): HTMLScriptElement {
   const script = document.createElement("script");
@@ -154,5 +158,25 @@ describe("readConfig scriptUrl", () => {
       scriptWith({ "data-site": "shop_1", src: "https://cdn.example/dist/widget.js" }),
     );
     expect(config.scriptUrl).toBe("https://cdn.example/dist/widget.js");
+  });
+});
+
+// `25-27`: `policyBaseUrl` has exactly one source - the baked-in default - unlike `apiBaseUrl`
+// above, which has three. There is no per-embed override to test because none exists, deliberately
+// (`config.ts`'s own remarks on `WidgetConfig.policyBaseUrl`).
+describe("readConfig policyBaseUrl", () => {
+  it("always resolves to the baked-in console origin, with trailing slashes stripped", () => {
+    expect(readConfig(scriptWith({ "data-site": "shop_1" })).policyBaseUrl).toBe("https://office.built-in.example");
+  });
+
+  it("does not vary with data-api or the script's own src - it names a different host entirely", () => {
+    const config = readConfig(
+      scriptWith({
+        "data-site": "shop_1",
+        "data-api": "https://chat-api.reserve-me.ru",
+        src: "https://chat-api.reserve-me.ru/widget/widget.js",
+      }),
+    );
+    expect(config.policyBaseUrl).toBe("https://office.built-in.example");
   });
 });

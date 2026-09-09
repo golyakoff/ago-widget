@@ -1530,7 +1530,16 @@ export class ChatWidget {
       return;
     }
 
-    into.appendChild(renderContactCaptureControl(this.strings, (result) => this.submitContactCapture(result), consent));
+    into.appendChild(
+      // `25-27`: `this.config.policyBaseUrl` - the one caller in the whole widget that ever needs
+      // it, since this is the only place a consent checkbox is ever rendered.
+      renderContactCaptureControl(
+        this.strings,
+        (result) => this.submitContactCapture(result),
+        consent,
+        this.config.policyBaseUrl,
+      ),
+    );
   }
 
   /**

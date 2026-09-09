@@ -68,7 +68,7 @@ Dockerfile           builds this bundle + public-demo/index.html into one minima
 ```bash
 cd ago-widget
 npm ci
-AGO_API_BASE_URL=http://localhost:5009 npm run build
+AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm run build
 ```
 
 `AGO_API_BASE_URL` is required, on purpose: there is no real hosted deployment for this portfolio
@@ -86,6 +86,16 @@ already cached in a visitor's browser to be rebuilt); otherwise this build's bak
 `public-demo-2/`, which each serve their own copy of the bundle from their own origin -
 `src/demo/boot.ts`'s `bootWidget` sets `data-api` on the injected tag explicitly so those two pages
 never fall through to inferring themselves as the API.
+
+`AGO_POLICY_BASE_URL` (`25-27`) gets the identical refusal, for a second origin: the console's own
+public policy pages (`ago-console`'s `/policies/:documentKey`, `23-37`), which `ui/contactCapture.ts`
+links a tenant's consent-document title to. It has none of `AGO_API_BASE_URL`'s three-step
+resolution - just the baked-in value, always - because there is no fact this build could infer it
+from: the console is a genuinely different host from the API (`office.reserve-me.ru` vs.
+`chat-api.reserve-me.ru`, `../ago-root/docs/backlog/22-10`), related by no naming rule, unlike
+`adr/0092`'s deliberate "the widget bundle's own origin is the API's origin" for `AGO_API_BASE_URL`.
+`http://localhost:5173` is the console's own local dev origin
+(`../ago-root/docs/runbooks/local-dev.md`).
 
 `AGO_COMMIT` is optional and defaults to `unknown`. It is the commit the bundle was built from, and
 it ends up on `window.AgoChat.commit` in the browser - `15-07`/`adr/0051`. The .NET hosts answer the
@@ -110,10 +120,10 @@ CI publishes two images to GHCR on every push to `main` -
 secret beyond the workflow's own `GITHUB_TOKEN` (`adr/0047`).
 
 The `Dockerfile` deliberately takes **no environment input from its build command**: it carries the
-demo deployment's own API origin as a committed default, so `ago-demo-shop1:<sha>` is a function of
-the commit and nothing else, and the tag keeps meaning one thing (`adr/0051`). `build.mjs`'s refusal
-to guess an API origin is untouched - that guards the *product* build, which has no deployment; the
-`Dockerfile` is the *demo packaging*, which has exactly one.
+demo deployment's own API and console origins as committed defaults, so `ago-demo-shop1:<sha>` is a
+function of the commit and nothing else, and the tag keeps meaning one thing (`adr/0051`).
+`build.mjs`'s refusal to guess either origin is untouched - that guards the *product* build, which
+has no deployment; the `Dockerfile` is the *demo packaging*, which has exactly one.
 
 Each image also serves `/version.json` (`{"app":"ago-widget","page":…,"commit":…}`), so
 `curl https://demo-shop1.reserve-me.ru/version.json` names the deployed commit without a browser -
@@ -121,6 +131,18 @@ and the bundle itself carries the same commit on `window.AgoChat.commit`, which 
 survives being embedded on somebody else's origin.
 
 ## Bundle size
+
+**33.6 KB gzipped** (126.3 KB raw, minified), `25-27` measured 2026-09-09 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
+run build`) - **+0.3 KB gzipped** over the 33.3 KB baseline immediately below, checked directly the
+same way (stash this item's own changes, build, unstash, build again) rather than trusted. The
+33.3 KB baseline is itself higher than the 32.7 KB this section's own `25-28` entry recorded two
+paragraphs down - `25-30`/`25-31` landed on `main` between that measurement and this one, the same
+drift this section has already documented once before (see the note further down). Not chased
+further than confirming it, for the same reason that note gives. The `+0.3 KB` is the whole of this
+item: one new `<a>` per rendered consent checkbox (replacing a `<span>` that already existed),
+`documentKey` riding through `ConsentDocumentSummary`, and the `requirePolicyBaseUrl` guard -
+no dependency was added. Leaves 11.4 KB of the 45 KB budget unused.
 
 **32.7 KB gzipped** (122.2 KB raw, minified), `25-28` measured 2026-09-09 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - **+0.4 KB gzipped** over the
@@ -250,7 +272,7 @@ The demo site (`ago-deploy/seed/create-demo-tenant.sh`) only allows the origin
 
 ```bash
 cd ago-widget
-AGO_API_BASE_URL=http://localhost:5009 npm run build
+AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm run build
 npx serve -l 8080 .
 ```
 

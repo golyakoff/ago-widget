@@ -29,6 +29,12 @@ import { currentHub, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.
  * environment serves, so it is mocked here - the one seam between "genuinely lazy in a real browser"
  * (proved by `bundleInputs.test.ts` against the real build) and "testable under vitest/jsdom".
  */
+// `25-27`: the one `readConfig` call in this file (below, "stays absent for a page that still
+// asserts data-booking") evaluates `WidgetConfig.policyBaseUrl` unconditionally - `config.test.ts`'s
+// own comment on this same stand-in explains why a bare global is the faithful way to fake an
+// esbuild `define` outside a real build.
+(globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_POLICY_BASE_URL__"] = "https://office.test.invalid";
+
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
 const loadModuleMock = vi.fn((_scriptUrl: string, _fileName: string) => ({
@@ -49,6 +55,7 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  policyBaseUrl: "https://office.test.invalid",
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 

@@ -69,6 +69,10 @@ jobs:
         run: npm run build
         env:
           AGO_API_BASE_URL: "http://localhost:5009"
+          # `25-27`: the console's local origin (docs/runbooks/local-dev.md, ago-root) - build.mjs
+          # refuses to build without it, for the identical "do not invent endpoints" reason
+          # AGO_API_BASE_URL above already exists for.
+          AGO_POLICY_BASE_URL: "http://localhost:5173"
           AGO_COMMIT: ${{ github.sha }}
 
       - name: Install the UX gate's browser

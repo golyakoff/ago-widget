@@ -114,6 +114,50 @@ describe("renderContactCaptureControl", () => {
     expect(control.querySelector("form")).toBeNull();
   });
 
+  // `25-28`: the +7 mask, wired via a live `input` listener - `phoneFormat.ts`'s own tests cover the
+  // formatting logic in isolation; this is the wiring proof that it actually runs as the visitor
+  // types, not just that the pure function is correct.
+  it("masks a bare digit into a +7 Russian shape as the visitor types", () => {
+    const control = renderContactCaptureControl(en, vi.fn());
+    const input = phoneInput(control);
+
+    setValue(input, "9");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(input.value).toBe("+7 (9");
+  });
+
+  // `25-28`: the stated escape hatch - an explicit "+" followed by a country code other than 7 is
+  // left as digits only, never forced into the +7 (9XX) shape.
+  it("lets an explicit non-Russian country code through the mask unformatted", () => {
+    const control = renderContactCaptureControl(en, vi.fn());
+    const input = phoneInput(control);
+
+    setValue(input, "+1555");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(input.value).toBe("+1555");
+  });
+
+  // `25-28`: a real, named regex check runs before submit - not just `type="email"`'s own loose
+  // native behaviour, which `jsdom`'s constraint validation would not catch here anyway since this
+  // is a programmatically dispatched submit (the same gap the pre-existing required-field guards
+  // above already exist to close).
+  it("blocks submit and shows the invalid-email note when email fails the regex check", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit);
+    const form = control.querySelector("form")!;
+
+    setValue(nameInput(control), "Ivan");
+    setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "not-an-email");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await Promise.resolve();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(control.textContent).toContain(en.contactCaptureEmailInvalidNote);
+  });
+
   it("disables the form while a submission is in flight", async () => {
     let resolveSubmit: () => void = () => undefined;
     const onSubmit = vi.fn(

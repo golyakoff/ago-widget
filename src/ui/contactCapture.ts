@@ -1,5 +1,7 @@
 import type { ConsentRequirement } from "../consent.js";
 import type { WidgetStrings } from "../i18n/strings.js";
+import { isValidEmail } from "./emailValidation.js";
+import { formatPhoneInput } from "./phoneFormat.js";
 
 /**
  * `23-09`/`docs/design/decisions.md` §4: the visitor's own name-and-phone control - a widget-native
@@ -96,6 +98,14 @@ export function renderContactCaptureControl(
   phoneInput.autocomplete = "tel";
   phoneInput.required = true;
 
+  // `25-28`: the +7 mask, live on every keystroke - `phoneFormat.ts`'s own doc comment carries the
+  // full reasoning (hand-rolled vs. library, and the "+<code>" escape hatch for a non-Russian
+  // visitor). Reformatting always moves the caret to the end; a hand-rolled mask this small does not
+  // attempt to preserve a mid-string cursor position (see that file's own remarks on the trade-off).
+  phoneInput.addEventListener("input", () => {
+    phoneInput.value = formatPhoneInput(phoneInput.value);
+  });
+
   // `23-58`: the third required field - `VisitorContactDetailKind.Email` on the wire
   // (`recordContactDetail(..., "Email", ...)`, `ui/widget.ts`'s `submitContactCapture`), a kind that
   // already existed in `ago-chat`'s domain and needed no migration to accept.
@@ -167,6 +177,16 @@ export function renderContactCaptureControl(
     // skips it entirely, the same gap `24-05`'s own consent-checkbox guard below already exists to
     // close - so every required field is re-checked here too, never left to the DOM alone.
     if (!name || !phone || !email) {
+      return;
+    }
+
+    // `25-28`: a real, named regex check (`emailValidation.ts`'s own doc comment names the pattern
+    // and why), not `type="email"`'s own loose native checking alone - and, unlike the empty-field
+    // guard above, this is the one failure a visitor gets no other signal about, so it is the one
+    // that surfaces in `errorNote` rather than silently refusing to submit.
+    if (!isValidEmail(email)) {
+      errorNote.textContent = strings.contactCaptureEmailInvalidNote;
+      errorNote.hidden = false;
       return;
     }
 

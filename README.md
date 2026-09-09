@@ -122,6 +122,15 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**32.7 KB gzipped** (122.2 KB raw, minified), `25-28` measured 2026-09-09 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - **+0.4 KB gzipped** over the
+32.3 KB `23-62` baseline immediately below, checked directly the same way (stash this item's own
+changes, build, unstash, build again) rather than trusted. The `+0.4 KB` is the whole of this item:
+`phoneFormat.ts`'s hand-rolled +7 mask (~50 lines), `emailValidation.ts`'s one WHATWG regex, their
+wiring into `contactCapture.ts`, and one new i18n string in each locale - no dependency was added
+(`package.json`'s `dependencies` are unchanged; see this item's own reasoning below on why
+`libphonenumber-js` was not reached for). Leaves 12.3 KB of the 45 KB budget unused.
+
 **32.3 KB gzipped** (121.1 KB raw, minified), `23-62` measured 2026-09-09 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - **+0.5 KB gzipped** over the
 31.8 KB this item's own base commit (`5964509`, checked directly rather than trusted against the

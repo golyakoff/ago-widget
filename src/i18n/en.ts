@@ -64,4 +64,5 @@ export const en: WidgetStrings = {
   contactCaptureSubmittingButton: "Sending…",
   contactCaptureConfirmation: "Thanks - we'll get back to you.",
   contactCaptureFailedNote: "Couldn't send that. Please try again.",
+  contactCaptureEmailInvalidNote: "That doesn't look like a valid email address.",
 };

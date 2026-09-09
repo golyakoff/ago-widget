@@ -36,6 +36,7 @@ const config: WidgetConfig = {
   siteKey: SITE_KEY,
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  policyBaseUrl: "https://office.test.invalid",
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 

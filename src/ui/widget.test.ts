@@ -26,6 +26,7 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  policyBaseUrl: "https://office.test.invalid",
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 

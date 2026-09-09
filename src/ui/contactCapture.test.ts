@@ -207,9 +207,15 @@ describe("renderContactCaptureControl", () => {
 // `24-05`: the visitor's own consent checkbox(es) - a required one gating the contact write, and an
 // optional one for anything beyond it.
 describe("renderContactCaptureControl - consent", () => {
+  const POLICY_BASE_URL = "https://office.test.invalid";
+
   const requiredConsent: ConsentRequirement = {
     contactRequired: true,
-    contact: { title: "I agree to be contacted about my order.", body: "Full text." },
+    contact: {
+      documentKey: "site-consent-contact-abc",
+      title: "I agree to be contacted about my order.",
+      body: "Full text.",
+    },
     contactAlreadyAccepted: false,
     marketing: null,
     marketingAlreadyAccepted: false,
@@ -217,6 +223,10 @@ describe("renderContactCaptureControl - consent", () => {
 
   function consentCheckboxes(root: HTMLElement): HTMLInputElement[] {
     return [...root.querySelectorAll<HTMLInputElement>(".ago-contact-capture-consent-input")];
+  }
+
+  function consentLinks(root: HTMLElement): HTMLAnchorElement[] {
+    return [...root.querySelectorAll<HTMLAnchorElement>(".ago-contact-capture-consent-link")];
   }
 
   it("renders no checkbox at all when consent is not passed (the pre-24-05 shape)", () => {
@@ -239,7 +249,7 @@ describe("renderContactCaptureControl - consent", () => {
   });
 
   it("renders the tenant's own title as the required checkbox's own label text, escaped", () => {
-    const control = renderContactCaptureControl(en, vi.fn(), requiredConsent);
+    const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
 
     const label = control.querySelector(".ago-contact-capture-consent");
     expect(label?.textContent).toBe("I agree to be contacted about my order.");
@@ -250,7 +260,7 @@ describe("renderContactCaptureControl - consent", () => {
 
   it("does not call onSubmit when required and the checkbox is left unticked", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const control = renderContactCaptureControl(en, onSubmit, requiredConsent);
+    const control = renderContactCaptureControl(en, onSubmit, requiredConsent, POLICY_BASE_URL);
     const form = control.querySelector("form")!;
 
     setValue(phoneInput(control), "+7 000 000-00-01");
@@ -262,7 +272,7 @@ describe("renderContactCaptureControl - consent", () => {
 
   it("calls onSubmit with acceptContact true once the required checkbox is ticked", () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const control = renderContactCaptureControl(en, onSubmit, requiredConsent);
+    const control = renderContactCaptureControl(en, onSubmit, requiredConsent, POLICY_BASE_URL);
     const form = control.querySelector("form")!;
 
     setValue(nameInput(control), "Ivan");
@@ -278,7 +288,7 @@ describe("renderContactCaptureControl - consent", () => {
 
   it("renders no checkbox at all once this visitor has already accepted", () => {
     const alreadyAccepted: ConsentRequirement = { ...requiredConsent, contactAlreadyAccepted: true };
-    const control = renderContactCaptureControl(en, vi.fn(), alreadyAccepted);
+    const control = renderContactCaptureControl(en, vi.fn(), alreadyAccepted, POLICY_BASE_URL);
 
     expect(consentCheckboxes(control)).toHaveLength(0);
   });
@@ -288,11 +298,11 @@ describe("renderContactCaptureControl - consent", () => {
       contactRequired: false,
       contact: null,
       contactAlreadyAccepted: false,
-      marketing: { title: "Also send me offers.", body: "Full text." },
+      marketing: { documentKey: "site-consent-marketing-abc", title: "Also send me offers.", body: "Full text." },
       marketingAlreadyAccepted: false,
     };
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const control = renderContactCaptureControl(en, onSubmit, withMarketing);
+    const control = renderContactCaptureControl(en, onSubmit, withMarketing, POLICY_BASE_URL);
     const form = control.querySelector("form")!;
 
     const checkboxes = consentCheckboxes(control);
@@ -312,10 +322,10 @@ describe("renderContactCaptureControl - consent", () => {
   it("both checkboxes can be shown together, contact required and marketing optional, independently", () => {
     const both: ConsentRequirement = {
       ...requiredConsent,
-      marketing: { title: "Also send me offers.", body: "Full text." },
+      marketing: { documentKey: "site-consent-marketing-abc", title: "Also send me offers.", body: "Full text." },
     };
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const control = renderContactCaptureControl(en, onSubmit, both);
+    const control = renderContactCaptureControl(en, onSubmit, both, POLICY_BASE_URL);
     const form = control.querySelector("form")!;
 
     const checkboxes = consentCheckboxes(control);
@@ -328,5 +338,97 @@ describe("renderContactCaptureControl - consent", () => {
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ acceptContact: true, acceptMarketing: true }));
+  });
+
+  // `25-27`: the item's own crux - before this item the document title rendered as plain text with
+  // no way to open it at all. These prove the link itself: where it points, how it opens, and that
+  // it does not disturb the checkbox it sits next to.
+  describe("the document title is a real, absolute link to its public policy page", () => {
+    it("points the contact document's link at policyBaseUrl + /policies/<documentKey>, URL-encoded", () => {
+      const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
+
+      const link = consentLinks(control)[0]!;
+      expect(link.getAttribute("href")).toBe("https://office.test.invalid/policies/site-consent-contact-abc");
+      expect(link.textContent).toBe("I agree to be contacted about my order.");
+    });
+
+    it("does the identical thing for the marketing document - both purposes, not just the first", () => {
+      const withMarketing: ConsentRequirement = {
+        ...requiredConsent,
+        marketing: { documentKey: "site-consent-marketing-xyz", title: "Also send me offers.", body: "Full text." },
+      };
+      const control = renderContactCaptureControl(en, vi.fn(), withMarketing, POLICY_BASE_URL);
+
+      const links = consentLinks(control);
+      expect(links).toHaveLength(2);
+      expect(links[1]!.getAttribute("href")).toBe("https://office.test.invalid/policies/site-consent-marketing-xyz");
+      expect(links[1]!.textContent).toBe("Also send me offers.");
+    });
+
+    it("encodes a document key that needs it, rather than concatenating it raw into the URL", () => {
+      const withOddKey: ConsentRequirement = {
+        ...requiredConsent,
+        contact: { ...requiredConsent.contact!, documentKey: "weird key/needs encoding" },
+      };
+      const control = renderContactCaptureControl(en, vi.fn(), withOddKey, POLICY_BASE_URL);
+
+      const link = consentLinks(control)[0]!;
+      expect(link.getAttribute("href")).toBe("https://office.test.invalid/policies/weird%20key%2Fneeds%20encoding");
+    });
+
+    it("opens in a new tab and does not hand the new tab a reference back to this page", () => {
+      const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
+
+      const link = consentLinks(control)[0]!;
+      expect(link.target).toBe("_blank");
+      expect(link.rel).toBe("noreferrer");
+    });
+
+    it("is a real <a> element, not a styled span - visibly a link, not merely a colour change", () => {
+      const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
+
+      const link = consentLinks(control)[0]!;
+      expect(link.tagName).toBe("A");
+      expect(link.classList.contains("ago-contact-capture-consent-link")).toBe(true);
+    });
+
+    // The interaction the item's own "Where this is likely to go wrong" names by name: a link
+    // nested inside a checkbox's own <label> is the classic way to get both behaviours firing on
+    // one click. Both directions are asserted so a regression in either shows up here rather than
+    // only ever being noticed by a visitor.
+    it("clicking the link does not also toggle the checkbox underneath it", () => {
+      const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
+      // Attached to a real document, not left detached - jsdom only runs a <label>'s native
+      // click-forwarding to its control for a connected element, matching real browsers.
+      document.body.appendChild(control);
+      const checkbox = consentCheckboxes(control)[0]!;
+      const link = consentLinks(control)[0]!;
+      expect(checkbox.checked).toBe(false);
+
+      link.click();
+
+      expect(checkbox.checked).toBe(false);
+      control.remove();
+    });
+
+    it("clicking the checkbox itself still toggles it - the link's presence does not disturb that", () => {
+      const control = renderContactCaptureControl(en, vi.fn(), requiredConsent, POLICY_BASE_URL);
+      document.body.appendChild(control);
+      const checkbox = consentCheckboxes(control)[0]!;
+      expect(checkbox.checked).toBe(false);
+
+      checkbox.click();
+
+      expect(checkbox.checked).toBe(true);
+      control.remove();
+    });
+
+    // `25-27`: `policyBaseUrl` has no fallback (`config.ts`'s own remarks on why) - a caller that
+    // renders a checkbox but forgets to pass it must fail loudly rather than link a visitor to
+    // `undefined/policies/...`. The only real caller (`ui/widget.ts`) always passes it; this proves
+    // the guard exists for the case where a future caller does not.
+    it("throws rather than building a link with a missing policyBaseUrl", () => {
+      expect(() => renderContactCaptureControl(en, vi.fn(), requiredConsent)).toThrow(/policyBaseUrl/);
+    });
   });
 });

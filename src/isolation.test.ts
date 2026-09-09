@@ -35,6 +35,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 (globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_API_BASE_URL__"] = "https://built-in.example";
 (globalThis as unknown as Record<string, string>)["__AGO_WIDGET_VERSION__"] = "0.1.0-test";
 (globalThis as unknown as Record<string, string>)["__AGO_COMMIT__"] = "0".repeat(40);
+// `25-27`: the fourth - `WidgetConfig.policyBaseUrl` has no override and no inference step to
+// short-circuit it (`config.ts`'s own remarks say why), so `readConfig` always evaluates this one.
+(globalThis as unknown as Record<string, string>)["__AGO_DEFAULT_POLICY_BASE_URL__"] = "https://office.built-in.example";
 
 const SITE_KEY = "demo_site";
 const API_BASE_URL = "https://api.test.invalid";

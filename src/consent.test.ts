@@ -6,6 +6,7 @@ const config: WidgetConfig = {
   siteKey: "shop_test",
   apiBaseUrl: "https://api.test.invalid",
   demoNotice: "none",
+  policyBaseUrl: "https://office.test.invalid",
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
@@ -79,7 +80,11 @@ describe("getConsentRequirement", () => {
     const result = await getConsentRequirement(config, "visitor-token", "conv-1", fetchImpl);
 
     expect(result.contactRequired).toBe(true);
-    expect(result.contact).toEqual({ title: "We use your number to call you back.", body: "Full text." });
+    expect(result.contact).toEqual({
+      documentKey: "site-consent-contact-...",
+      title: "We use your number to call you back.",
+      body: "Full text.",
+    });
   });
 
   it("treats a required document with no published version yet as no document to show", async () => {

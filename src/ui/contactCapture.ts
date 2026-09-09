@@ -1,4 +1,4 @@
-import type { ConsentRequirement } from "../consent.js";
+import type { ConsentDocumentSummary, ConsentRequirement } from "../consent.js";
 import type { WidgetStrings } from "../i18n/strings.js";
 import { isValidEmail } from "./emailValidation.js";
 import { formatPhoneInput } from "./phoneFormat.js";
@@ -65,16 +65,33 @@ export type ContactCaptureSubmitHandler = (result: ContactCaptureResult) => Prom
  * the native `required` attribute, the identical HTML5-validation mechanism `phoneInput.required`
  * already uses - the browser itself refuses to fire `submit` while it is unticked, so there is no
  * second, hand-rolled validation path to keep in sync with the server's own gate. The checkbox's own
- * label is always the tenant's own document title (`ConsentDocumentSummary.title`), rendered as
- * `textContent` - the identical "escaped, never HTML" posture `applyProcessingNotice` already takes
- * for `WidgetConfig.NoticeText`, since this is exactly the same shape of risk: a tenant-supplied string
- * rendered inside a shadow tree this widget's own script controls. AGO never authors this sentence
- * either way (`adr/0076`'s stance, unchanged by this item).
+ * label names the tenant's own document title (`ConsentDocumentSummary.title`), set as `textContent`
+ * on the link built below - the identical "escaped, never HTML" posture `applyProcessingNotice`
+ * already takes for `WidgetConfig.NoticeText`, since this is exactly the same shape of risk: a
+ * tenant-supplied string rendered inside a shadow tree this widget's own script controls. AGO never
+ * authors this sentence either way (`adr/0076`'s stance, unchanged by this item).
+ *
+ * `25-27`: before this item that title rendered as a plain, unclickable `<span>` - a visitor was
+ * asked to accept a document they had no way to open. `buildConsentLabel` now renders it as a real
+ * `<a>`, pointed at that document's public page (`ago-console`'s `/policies/:documentKey`, `23-37`)
+ * on the console's own origin (`policyBaseUrl` - a different host from the widget's own `apiBaseUrl`,
+ * `config.ts`'s own remarks on `WidgetConfig.policyBaseUrl` say why neither can be inferred from the
+ * other), `target="_blank" rel="noreferrer"` so opening it never navigates the visitor's own
+ * conversation away. `policyBaseUrl` is threaded through as this function's own parameter rather than
+ * the whole `WidgetConfig` for the same reason `siteKey` alone rides through `archive.ts`'s params
+ * (this file's own sibling module) instead of a config object: the smallest thing the callee actually
+ * needs, not everything the caller happens to have.
  */
 export function renderContactCaptureControl(
   strings: WidgetStrings,
   onSubmit: ContactCaptureSubmitHandler,
   consent?: ConsentRequirement | null,
+  // `25-27`: required whenever a caller passes a `consent` that can actually show a checkbox -
+  // there is no fallback value to reach for instead (`WidgetConfig.policyBaseUrl`'s own doc comment
+  // says why none exists), so a caller that forgets it gets a broken link rather than a silently
+  // guessed host. Optional only so every pre-25-27 call site that never renders a checkbox at all
+  // (`consent` omitted or `null`) does not have to pass a value that would never be read.
+  policyBaseUrl?: string,
 ): HTMLElement {
   const container = document.createElement("div");
   container.className = "ago-contact-capture";
@@ -151,11 +168,11 @@ export function renderContactCaptureControl(
 
   form.append(nameInput, phoneInput, emailInput);
   if (contactCheckbox && consent?.contact) {
-    form.appendChild(buildConsentLabel(contactCheckbox, consent.contact.title));
+    form.appendChild(buildConsentLabel(contactCheckbox, consent.contact, requirePolicyBaseUrl(policyBaseUrl)));
   }
 
   if (marketingCheckbox && consent?.marketing) {
-    form.appendChild(buildConsentLabel(marketingCheckbox, consent.marketing.title));
+    form.appendChild(buildConsentLabel(marketingCheckbox, consent.marketing, requirePolicyBaseUrl(policyBaseUrl)));
   }
 
   form.appendChild(submitButton);
@@ -230,13 +247,54 @@ export function renderContactCaptureControl(
   return container;
 }
 
-/** A `<label>` wrapping one checkbox and its own tenant-supplied sentence - `textContent`, never
- * `innerHTML`, this function's own doc comment on why. */
-function buildConsentLabel(checkbox: HTMLInputElement, text: string): HTMLLabelElement {
+/**
+ * A `<label>` wrapping one checkbox and a link naming the tenant's own document.
+ *
+ * `25-27`: before this item the title rendered as a plain, unclickable `<span>` - a visitor was
+ * asked to accept a document they had no way to open. It is now a real `<a>` to that document's
+ * public page (`ago-console`'s `/policies/:documentKey`, `23-37`), `target="_blank" rel="noreferrer"`
+ * - the exact pattern `DocumentsPage.tsx`'s own "read as visitor" link already uses in `ago-console`
+ * - so opening it never navigates the visitor's own conversation away. `textContent`, never
+ * `innerHTML`: the tenant's own title is untrusted, escaped exactly as the `<span>` it replaces
+ * already escaped it (`renderContactCaptureControl`'s own doc comment on this, above).
+ *
+ * The link's own `click` handler calls `stopPropagation`, and that is what keeps the checkbox's own
+ * click target from becoming ambiguous: without it, a click on the link both opens the policy *and*
+ * bubbles up to this `<label>`, whose native click-forwarding would toggle the checkbox underneath it
+ * - a visitor who meant only to read the document would also have silently agreed to it. Nothing
+ * about the checkbox's own click target changes: clicking it directly, or anywhere else in the
+ * label, is unaffected (`contactCapture.test.ts`'s own "consent link" tests verify both directions).
+ */
+function buildConsentLabel(
+  checkbox: HTMLInputElement,
+  summary: ConsentDocumentSummary,
+  policyBaseUrl: string,
+): HTMLLabelElement {
   const label = document.createElement("label");
   label.className = "ago-contact-capture-consent";
-  const span = document.createElement("span");
-  span.textContent = text;
-  label.append(checkbox, span);
+  const link = document.createElement("a");
+  link.className = "ago-contact-capture-consent-link";
+  link.href = `${policyBaseUrl}/policies/${encodeURIComponent(summary.documentKey)}`;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = summary.title;
+  link.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  label.append(checkbox, link);
   return label;
+}
+
+/**
+ * `25-27`: `policyBaseUrl` has no fallback to guess - `WidgetConfig.policyBaseUrl`'s own doc comment
+ * says why no such fallback exists to reach for. A caller that gets this far (a checkbox is actually
+ * about to render) with no value passed failed to wire the one thing this feature needs; a loud
+ * throw here beats silently linking a visitor to `undefined/policies/...`.
+ */
+function requirePolicyBaseUrl(policyBaseUrl: string | undefined): string {
+  if (!policyBaseUrl) {
+    throw new Error("AGO Chat widget: a consent document is being rendered with no policyBaseUrl configured.");
+  }
+
+  return policyBaseUrl;
 }

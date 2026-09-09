@@ -19,6 +19,20 @@ if (!apiBaseUrl) {
   process.exit(1);
 }
 
+// `25-27`: the widget bundle's second baked-in origin - `config.ts`'s own `WidgetConfig.policyBaseUrl`
+// doc comment explains why it cannot be inferred the way `apiBaseUrl` can (the console is a genuinely
+// different host from the API, related by no naming rule this build could apply), so it gets the
+// identical refusal `apiBaseUrl` above already has, for the identical reason.
+const policyBaseUrl = process.env.AGO_POLICY_BASE_URL;
+if (!policyBaseUrl) {
+  console.error(
+    "AGO_POLICY_BASE_URL is not set. There is no real hosted deployment for this portfolio project " +
+      "to default to (CLAUDE.md: 'do not invent numbers, benchmarks, or endpoints') - set it " +
+      "explicitly, e.g. AGO_POLICY_BASE_URL=http://localhost:5173 for the local console.",
+  );
+  process.exit(1);
+}
+
 // `15-07`: the commit this bundle was built from, baked in the same way the version already is.
 // The widget is the one artifact here that is *not* loaded from an origin we control - a tenant's
 // page fetches widget.js and nothing else, so the version.json the container serves next to it
@@ -70,6 +84,7 @@ const result = await build({
   define: {
     __AGO_WIDGET_VERSION__: JSON.stringify(packageJson.version),
     __AGO_DEFAULT_API_BASE_URL__: JSON.stringify(apiBaseUrl),
+    __AGO_DEFAULT_POLICY_BASE_URL__: JSON.stringify(policyBaseUrl),
     __AGO_COMMIT__: JSON.stringify(commit),
   },
 });

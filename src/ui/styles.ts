@@ -580,6 +580,20 @@ export const widgetStyles = /* css */ `
     flex-shrink: 0;
   }
 
+  /* 25-27: the tenant's own document title, now a real link rather than plain text - underlined
+     rather than a colour change alone (the backlog item's own Done-when), the identical
+     .ago-processing-notice__link treatment a few rules up already gives the other tenant-facing
+     link in this panel. */
+  .ago-contact-capture-consent-link {
+    color: var(--ago-accent);
+    text-decoration: underline;
+  }
+
+  .ago-contact-capture-consent-link:focus-visible {
+    outline: 0.1875rem solid var(--ago-accent);
+    outline-offset: 0.125rem;
+  }
+
   .ago-contact-capture-submit {
     align-self: flex-start;
     border: none;

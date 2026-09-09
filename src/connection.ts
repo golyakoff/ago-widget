@@ -245,6 +245,15 @@ export class VisitorConnection {
    * each argument by its own JS shape, so an object landed on the wire as a JSON object where the
    * hub method's parameter is `string?`, a mismatch SignalR rejects before the method is ever
    * invoked (no server log, a generic client-side error) - found live, this exact way.
+   *
+   * `23-64`/`adr/0148`: `materializeAutoGreeting` picks a *third* target,
+   * `VisitorHub.SendMessageWithAutoGreetingAsync` - the identical "a second hub method, never a
+   * parameter on `SendMessageAsync`" reasoning this comment already states for structured content,
+   * applied to a second new capability. `ui/widget.ts`'s `completeSend` is the one caller that ever
+   * passes `true`, and only for the one send it decides is eligible (that method's own remarks).
+   * Mutually exclusive with `contentKind` in practice - the first send after an auto-opened panel is
+   * always plain typed text - so this parameter is checked first and short-circuits the existing
+   * structured-vs-plain branch below rather than adding a third arm to it.
    */
   async sendMessage(
     conversationId: string,
@@ -253,12 +262,23 @@ export class VisitorConnection {
     attachmentId?: string,
     contentKind?: string,
     content?: string,
+    materializeAutoGreeting?: boolean,
   ): Promise<number> {
     if (this.connection.state !== signalR.HubConnectionState.Connected) {
       throw new NotConnectedError();
     }
 
     try {
+      if (materializeAutoGreeting) {
+        return await this.connection.invoke<number>(
+          "SendMessageWithAutoGreetingAsync",
+          conversationId,
+          body,
+          attachmentId ?? null,
+          clientMessageId,
+        );
+      }
+
       return contentKind === undefined
         ? await this.connection.invoke<number>(
             "SendMessageAsync",

@@ -48,9 +48,13 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: ["calendar"],
       widgetAttractAttention: true,
+      widgetAutoOpenEnabled: true,
+      widgetAutoOpenDelaySeconds: 60,
+      widgetAutoOpenGreetingText: "Hi, need any help?",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
+    storage.setAutoOpenGreetingShown();
 
     const actual = new Set(normalise(actualKeySuffixes()));
     const documented = new Set(WIDGET_STORAGE_DISCLOSURE.map((entry) => entry.key));
@@ -73,9 +77,13 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: ["calendar"],
       widgetAttractAttention: true,
+      widgetAutoOpenEnabled: true,
+      widgetAutoOpenDelaySeconds: 60,
+      widgetAutoOpenGreetingText: "Hi, need any help?",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
+    storage.setAutoOpenGreetingShown();
 
     const actual = new Set(normalise(actualKeySuffixes()));
     for (const entry of WIDGET_STORAGE_DISCLOSURE) {

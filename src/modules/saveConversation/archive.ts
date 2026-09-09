@@ -184,9 +184,16 @@ function renderMessageRow(
   copy: SaveConversationCopy,
   attachmentEntryNames: ReadonlyMap<string, string>,
 ): string {
+  // `23-64`: `"AutoGreeting"` reads as `"Operator"` here too - the identical author's-own-decision
+  // reasoning `ui/widget.ts`'s `renderBubble` states for the live panel, restated for the saved
+  // transcript so a downloaded copy never disagrees with what the visitor actually saw on screen.
   const label =
-    message.authorKind === "Visitor" ? copy.visitorLabel : message.authorKind === "Operator" ? copy.operatorLabel : copy.systemLabel;
-  const cssClass = message.authorKind.toLowerCase();
+    message.authorKind === "Visitor"
+      ? copy.visitorLabel
+      : message.authorKind === "Operator" || message.authorKind === "AutoGreeting"
+        ? copy.operatorLabel
+        : copy.systemLabel;
+  const cssClass = message.authorKind === "AutoGreeting" ? "operator" : message.authorKind.toLowerCase();
   const attachmentHtml = message.attachmentId ? renderAttachmentRow(message.attachmentId, copy, attachmentEntryNames) : "";
 
   return (

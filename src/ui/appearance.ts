@@ -94,3 +94,44 @@ export function parseNoticeUrl(value: string | null | undefined): string | undef
 export function parseAttractAttention(value: boolean | null | undefined): boolean {
   return value === true;
 }
+
+/**
+ * `23-64`: the closed set `Ago.Chat.Domain.AutoOpenDelay` fixes - 15, 30, 45, 60, 90 or 120 seconds.
+ * The same "courtesy validation, default to the least-surprising behaviour" posture
+ * `parseAttractAttention` already takes: anything not exactly one of those six values (missing, a
+ * malformed number, a value this widget's own build predates) falls back to 30 seconds - the server's
+ * own default - never `0` or `NaN`, which `scheduleAutoOpen` would otherwise read as "open
+ * immediately" or "never open" by accident.
+ */
+const AUTO_OPEN_DELAY_SECONDS = new Set([15, 30, 45, 60, 90, 120]);
+
+export function parseAutoOpenDelaySeconds(value: number | null | undefined): number {
+  return typeof value === "number" && AUTO_OPEN_DELAY_SECONDS.has(value) ? value : 30;
+}
+
+/**
+ * `23-64`/`adr/0148`: the tenant's own auto-open greeting line - never a default sentence this widget
+ * would supply on the tenant's behalf (the backlog item's own Scope: "There is no default sentence we
+ * supply"). `undefined` on rejection, matching `parseNoticeText`'s own convention - a missing,
+ * whitespace-only, or non-string value means "draw nothing", the same as a site that never configured
+ * one at all.
+ */
+export function parseAutoOpenGreetingText(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/**
+ * `23-64`: whether the tenant turned on «Раскрывать виджет автоматически» - gated on *both* the
+ * enabled flag and a real greeting to draw, since an enabled flag with no usable greeting text
+ * (`parseAutoOpenGreetingText` rejected it) has nothing to show and must not schedule a timer that
+ * opens an empty panel. The identical "off is the safe fallback for anything not positively
+ * confirmed" posture `parseAttractAttention` already takes.
+ */
+export function parseAutoOpenEnabled(enabled: boolean | null | undefined, greetingText: string | undefined): boolean {
+  return enabled === true && greetingText !== undefined;
+}

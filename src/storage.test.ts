@@ -18,6 +18,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -29,6 +32,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -43,6 +49,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -60,6 +69,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -71,6 +83,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -87,6 +102,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -98,6 +116,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -114,6 +135,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -125,6 +149,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -142,6 +169,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: ["calendar"],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -153,6 +183,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: ["calendar"],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -170,6 +203,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: true,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -181,6 +217,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: true,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 
@@ -196,6 +235,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: true,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -207,6 +249,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()?.widgetAttractAttention).toBe(false);
   });
@@ -223,6 +268,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: ["calendar"],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -234,6 +282,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -245,6 +296,9 @@ describe("WidgetStorage", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
     });
   });
 

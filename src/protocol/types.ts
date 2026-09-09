@@ -19,8 +19,15 @@ export interface MessageDto {
   /** `14-04`: `"System"` is a message AGO Chat authored on the shop's behalf - today the offline
    * auto-reply, and nothing else. Additive, exactly as api-design.md's versioning rule promises: a
    * widget build older than `14-04` still receives one and simply falls through to its own
-   * unrecognised-kind path, which renders it on the incoming side. */
-  authorKind: "Visitor" | "Operator" | "System";
+   * unrecognised-kind path, which renders it on the incoming side.
+   *
+   * `23-64`: `"AutoGreeting"` joins on the identical additive terms - the auto-open greeting,
+   * materialised as the conversation's real first message the moment the visitor writes
+   * (`adr/0148`). Rendered like `"Operator"`, not like `"System"` - see `ui/widget.ts`'s
+   * `renderBubble`/`modules/saveConversation/archive.ts`'s own remarks for why: this is the
+   * author's own decision that the greeting reads as if from the shop's side, the exact opposite of
+   * `"System"`'s (future, `23-56`) tenant-editable machine name. */
+  authorKind: "Visitor" | "Operator" | "System" | "AutoGreeting";
   authorId: string;
   body: string;
   createdAt: string;
@@ -105,6 +112,18 @@ export interface VisitorSessionResponse {
   widgetNoticeUrl: string | null;
   enabledModules: string[];
   widgetAttractAttention?: boolean;
+  /**
+   * `23-64`/`adr/0148`: three more additive fields, on the identical "optional, absent for a
+   * pre-existing session, `parse*` normalises" terms `widgetAttractAttention` already established.
+   * `widgetAutoOpenDelaySeconds` crosses the wire as the plain `int` `Ago.Chat.Domain.AutoOpenDelay`
+   * already is (`AutoOpenConfig`'s own remarks - no PascalCase-string convention to parse, unlike
+   * `widgetPosition`/`widgetLocale`). `widgetAutoOpenGreetingText` is `null`/absent for every site
+   * that has not configured one - never a default sentence this widget would supply on the tenant's
+   * behalf.
+   */
+  widgetAutoOpenEnabled?: boolean;
+  widgetAutoOpenDelaySeconds?: number;
+  widgetAutoOpenGreetingText?: string | null;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

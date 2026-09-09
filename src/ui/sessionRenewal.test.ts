@@ -152,6 +152,9 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeUrl: null,
     enabledModules: [],
     widgetAttractAttention: false,
+    widgetAutoOpenEnabled: false,
+    widgetAutoOpenDelaySeconds: 30,
+    widgetAutoOpenGreetingText: null,
   });
   return token;
 }

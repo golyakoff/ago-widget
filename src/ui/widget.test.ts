@@ -473,30 +473,54 @@ describe("the panel's composer", () => {
   });
 
   /**
-   * `23-61`: the two reserved places (emoji, save-the-conversation) must not be reachable by
-   * keyboard as though they were controls. A `<span>` with no `tabindex` attribute answers `-1` from
-   * `.tabIndex` (not part of the tab order) and has no `href`/`type`/click handler to make it one -
-   * the same "inert, not merely disabled" shape `23-31` used for the console's own reserved nav
-   * entries. `aria-disabled="true"` names what is there without hiding it from assistive tech the way
-   * `aria-hidden` would.
+   * `23-61`: the emoji place is still reserved (a picker is its own, not-yet-built item), and must
+   * not be reachable by keyboard as though it were a control. A `<span>` with no `tabindex`
+   * attribute answers `-1` from `.tabIndex` (not part of the tab order) and has no
+   * `href`/`type`/click handler to make it one - the same "inert, not merely disabled" shape `23-31`
+   * used for the console's own reserved nav entries. `aria-disabled="true"` names what is there
+   * without hiding it from assistive tech the way `aria-hidden` would.
+   *
+   * `23-62` fills the other place `23-61` reserved with a real button - covered by the tests below,
+   * not by this one, since a real control is exactly what this test proves the emoji place is not.
    */
-  it("renders the reserved emoji and save places as inert spans, not controls", async () => {
+  it("renders the reserved emoji place as an inert span, not a control", async () => {
     joinQueue.push(joinResult([]));
     const panel = await openWidget();
 
     const reserved = [...panel.root.querySelectorAll<HTMLSpanElement>(".ago-composer-reserved")];
-    expect(reserved).toHaveLength(2);
+    expect(reserved).toHaveLength(1);
 
-    for (const place of reserved) {
-      expect(place.tagName).toBe("SPAN");
-      expect(place.getAttribute("aria-disabled")).toBe("true");
-      expect(place.hasAttribute("tabindex")).toBe(false);
-      expect(place.tabIndex).toBe(-1);
-      expect(place.hasAttribute("href")).toBe(false);
-    }
+    const [place] = reserved;
+    expect(place!.tagName).toBe("SPAN");
+    expect(place!.getAttribute("aria-disabled")).toBe("true");
+    expect(place!.hasAttribute("tabindex")).toBe(false);
+    expect(place!.tabIndex).toBe(-1);
+    expect(place!.hasAttribute("href")).toBe(false);
+    expect(place!.title).toBe(en.emojiComingSoon);
+  });
 
-    expect(reserved[0]!.title).toBe(en.emojiComingSoon);
-    expect(reserved[1]!.title).toBe(en.saveConversationComingSoon);
+  /**
+   * `23-62`: the place `23-61` reserved for «Сохранить диалог» now holds a real button - a genuine
+   * `<button>`, reachable and operable like `attachButton`, not the inert `<span>` shape the emoji
+   * place above still uses. Enabled/disabled tracks the same `isConnected` signal every other
+   * composer control already does (`renderConnectionState`); what a click actually does is
+   * `ui/saveConversation.test.ts`'s own job, not this file's.
+   */
+  it("fills the save place with a real, icon-only button that tracks the connection", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    const save = panel.root.querySelector<HTMLButtonElement>(".ago-save");
+    expect(save).not.toBeNull();
+    expect(save!.tagName).toBe("BUTTON");
+    expect(save!.type).toBe("button");
+    expect(save!.getAttribute("aria-label")).toBe(en.saveConversation);
+    expect(save!.textContent?.trim().length).toBeGreaterThan(0);
+    expect(save!.disabled).toBe(false);
+
+    currentHub().dropToReconnecting();
+    await flush();
+    expect(save!.disabled).toBe(true);
   });
 
   it("keeps the send button a small round icon-only control with an accessible name", async () => {

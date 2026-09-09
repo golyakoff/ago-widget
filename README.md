@@ -122,6 +122,24 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**32.3 KB gzipped** (121.1 KB raw, minified), `23-62` measured 2026-09-09 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 npm run build`) - **+0.5 KB gzipped** over the
+31.8 KB this item's own base commit (`5964509`, checked directly rather than trusted against the
+27.1 KB figure immediately below - see the note two paragraphs down about why that figure is stale)
+measures with nothing changed. The `+0.5 KB` is the real save button (`.ago-save`, replacing `23-61`'s
+inert placeholder), its click wiring, and two new i18n strings - the archive-building logic itself
+(the ZIP writer, the HTML transcript builder, `adr/0162`) never enters this number at all: it lives in
+`dist/widget-module-save.js`, a lazily-loaded chunk fetched only on a visitor's own click
+(`bundleInputs.test.ts` proves it absent from this bundle), measuring 2.51 KB gzipped on its own,
+accounted separately below with the booking module. Leaves 12.7 KB of the 45 KB budget unused.
+
+**This section's own last-recorded figure (27.1 KB, immediately below) had drifted from what `main`
+actually built to before this item touched anything** - measured directly against a clean checkout of
+this item's own base commit (`5964509`) rather than trusted: 31.8 KB gzipped, not 27.1 KB. Found
+while measuring for this item, the same gap this section's own 2026-08-29 entry already documented
+once before ("several items landed on `main` between that measurement and this one") - not something
+`23-62` caused, and not chased further than confirming it, for the same reason that entry gives.
+
 **27.1 KB gzipped** (101.3 KB raw, minified), `23-07` measured 2026-09-06 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_COMMIT=$(git rev-parse HEAD) npm run build`)
 - **+0.6 KB gzipped** over the `16-04`/`20-07` baseline immediately below, from `src/beacon.ts` (the

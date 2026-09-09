@@ -93,6 +93,23 @@ await build({
   sourcemap: true,
 });
 
+// `23-62`: the save-the-conversation archive builder's own lazily-loaded chunk - the identical split
+// the booking chip above already established (a genuinely separate esbuild entry point, ESM so
+// `ui/moduleLoader.ts`'s runtime `import()` can load it, invisible to `bundleInputs.test.ts`'s scan of
+// `dist/widget.js`'s own inputs because nothing here is ever a static import). This one carries real
+// logic (the ZIP writer, the HTML transcript builder), not only copy - the reason it is its own chunk
+// at all rather than a few lines in `ui/widget.ts` is exactly that: a feature most visitors never
+// click should not cost every visitor a single byte of it.
+await build({
+  entryPoints: ["src/modules/saveConversation/archive.ts"],
+  bundle: true,
+  minify: true,
+  format: "esm",
+  target: "es2022",
+  outfile: "dist/widget-module-save.js",
+  sourcemap: true,
+});
+
 const bundleBytes = readFileSync("dist/widget.js");
 const gzipBytes = gzipSync(bundleBytes).length;
 const gzipKb = (gzipBytes / 1024).toFixed(1);
@@ -113,6 +130,11 @@ console.log(`Demo boot: ${demoGzipKb} KB gzipped (demo pages only, not part of t
 // artifact, downloaded by a different subset of visitors, if at all).
 const bookingModuleGzipKb = (gzipSync(readFileSync("dist/widget-module-booking.js")).length / 1024).toFixed(2);
 console.log(`Booking module: ${bookingModuleGzipKb} KB gzipped (lazily loaded, not part of the widget budget)`);
+
+// `23-62`: the same "different artifact, different subset of visitors" accounting as the booking
+// module above - not part of the base bundle's own 45 KB gzipped budget.
+const saveModuleGzipKb = (gzipSync(readFileSync("dist/widget-module-save.js")).length / 1024).toFixed(2);
+console.log(`Save-conversation module: ${saveModuleGzipKb} KB gzipped (lazily loaded, not part of the widget budget)`);
 
 if (process.env["AGO_WRITE_METAFILE"]) {
   const { writeFileSync } = await import("node:fs");

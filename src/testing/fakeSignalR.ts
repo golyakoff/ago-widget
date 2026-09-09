@@ -54,6 +54,16 @@ export interface Invocation {
  */
 export const joinQueue: unknown[] = [];
 
+/**
+ * `23-62`: answers to `GetHistoryAsync` (`VisitorConnection.loadOlderHistory`), consumed in order
+ * across every hub built - the identical shape `joinQueue` above already uses, for the identical
+ * reason: an entry may be a plain `HistoryPage`-shaped answer, or a function from the call's own
+ * `args` (`[conversationId, beforeSequence, pageSize]`) to one, which is what lets a test simulate a
+ * real multi-page walk (a different answer for each `beforeSequence` the code under test asks for)
+ * rather than one fixed response regardless of which cursor was actually requested.
+ */
+export const historyQueue: unknown[] = [];
+
 export type AccessTokenFactory = () => string | Promise<string>;
 
 export class FakeHubConnection {
@@ -105,6 +115,12 @@ export class FakeHubConnection {
       const entry = joinQueue.shift();
       const answer = typeof entry === "function" ? (entry as (args: unknown[]) => unknown)(args) : entry;
       return Promise.resolve(answer ?? { conversationId: null, isNew: false, history: [] });
+    }
+
+    if (method === "GetHistoryAsync") {
+      const entry = historyQueue.shift();
+      const answer = typeof entry === "function" ? (entry as (args: unknown[]) => unknown)(args) : entry;
+      return Promise.resolve(answer ?? { messages: [], nextBeforeSequence: null });
     }
 
     if (method === "SendMessageAsync" && this.failNextSend !== null) {
@@ -197,6 +213,7 @@ export class HubConnectionBuilder {
 export function resetFakeSignalR(): void {
   hubs.length = 0;
   joinQueue.length = 0;
+  historyQueue.length = 0;
 }
 
 /** The hub most recently built - the one a test's next action reaches. */

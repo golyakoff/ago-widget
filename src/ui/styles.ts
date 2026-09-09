@@ -354,14 +354,15 @@ export const widgetStyles = /* css */ `
   }
 
   .ago-send:disabled,
-  .ago-attach:disabled {
+  .ago-attach:disabled,
+  .ago-save:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  /* 23-61: the second row - attach (moved down from the field's own row) plus the two reserved
-     places, align-items: center so the emoji-and-floppy-disk placeholders line up with attach's
-     own glyph rather than sitting off-baseline next to it. */
+  /* 23-61/23-62: the second row - attach (moved down from the field's own row), the still-reserved
+     emoji place, then save (23-62), align-items: center so every icon lines up on one baseline
+     rather than sitting off it. */
   .ago-composer-controls {
     display: flex;
     align-items: center;
@@ -375,8 +376,13 @@ export const widgetStyles = /* css */ `
      into .ago-composer-controls - a row of same-sized icons, align-items: center - removed that
      accidental stretch and let it collapse to its own content box: 20px tall (font-size 1.25rem,
      line-height 1, no vertical padding), under WCAG 2.5.8's 24px floor. 2rem (32px) is a size chosen
-     on purpose now rather than inherited from a neighbour by accident. */
-  .ago-attach {
+     on purpose now rather than inherited from a neighbour by accident.
+
+     23-62: .ago-save shares this exact box - the same reasoning applies to a second same-row icon
+     button, and a mismatched size here would read as two different kinds of control rather than one
+     aligned strip. */
+  .ago-attach,
+  .ago-save {
     display: flex;
     align-items: center;
     justify-content: center;

@@ -91,6 +91,16 @@ COPY --from=build /app/dist/widget.js.map /usr/share/nginx/html/widget.js.map
 # image happens to be nginx's document root.
 COPY --from=build /app/dist/widget-module-booking.js /usr/share/nginx/html/widget-module-booking.js
 COPY --from=build /app/dist/widget-module-booking.js.map /usr/share/nginx/html/widget-module-booking.js.map
+# `25-35`: `23-62`'s own lazily-loaded chunk (build.mjs's fourth entry point), the identical
+# "sibling of widget.js" reasoning the booking module's own COPY above already states - missing
+# from this stage since `23-62` shipped, which is why `ui/moduleLoader.ts`'s dynamic `import()` of
+# it 404s live: the file is built (`build.mjs` emits it, `dist/` has it) but was never copied into
+# the served image. Found live, 2026-09-10 - `docs/backlog/25-35-*.md`'s own two candidate causes
+# (a CORS class, a bucket policy) were both ruled out by reproducing the failure against the real
+# demo origin with devtools open: the actual response is a plain 404, and `widget-module-booking.js`
+# answers 200 on the identical origin at the identical moment, which rules out anything origin-wide.
+COPY --from=build /app/dist/widget-module-save.js /usr/share/nginx/html/widget-module-save.js
+COPY --from=build /app/dist/widget-module-save.js.map /usr/share/nginx/html/widget-module-save.js.map
 # The nginx base image ships its own `index.html` - the stock "Welcome to nginx!" page. Harmless in
 # the demo images, which overwrite it, but this stage is served at a *public* URL where it would
 # answer `/widget/` with a default welcome page that also announces what the server is. Removed here;

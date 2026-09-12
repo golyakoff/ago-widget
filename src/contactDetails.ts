@@ -28,7 +28,7 @@ async function problemMessage(response: Response): Promise<string> {
 }
 
 /**
- * One row per call - `kind` is `"Phone"` or `"Other"`, the same
+ * One row per call - `kind` is `"Phone"` or `"Name"`, the same
  * `Ago.Chat.Domain.VisitorContactDetailKind` member names every other client in this codebase sends
  * verbatim (`ago-console`'s own `contactDetailsApi.ts`). The control this file backs
  * (`ui/contactCapture.ts`) calls this once for the phone number and, only if the visitor typed one,

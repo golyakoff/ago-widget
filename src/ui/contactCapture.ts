@@ -23,8 +23,8 @@ import { formatPhoneInput } from "./phoneFormat.js";
  * costs" section, recorded there rather than here) trades completion rate for completeness now that a
  * second entry point (the online «Представиться…» link, `ui/widget.ts`'s `appendVisitorIntroControl`)
  * means this form is offered far more often. Submitting records three rows: the phone as
- * `Kind: "Phone"`, the name as `Kind: "Other"` (`VisitorContactDetailKind.Other`'s own remarks name "a
- * preferred name" as exactly this case), and the e-mail as `Kind: "Email"` - not a new kind this item
+ * `Kind: "Phone"`, the name as `Kind: "Name"` (`VisitorContactDetailKind.Name`'s own remarks -
+ * the visitor's own name, this member's one real writer), and the e-mail as `Kind: "Email"` - not a new kind this item
  * had to add: `VisitorContactDetailKind.Email` already existed in `ago-chat`'s domain (`14-14`) and was
  * simply never a field this widget offered.
  *

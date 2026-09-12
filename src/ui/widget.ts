@@ -68,6 +68,20 @@ export const ATTRACT_PULSE_INTERVAL_MS = 4_000;
 export const ATTRACT_PULSE_DURATION_MS = 700;
 
 /**
+ * `25-61`: the literal prefix `VisitorHub.SendAsync` (`ago-chat`, `Ago.Chat.Api/Hubs/VisitorHub.cs`)
+ * puts ahead of its own free-text message on exactly one rejection - a visitor's send failing because
+ * the conversation they are sending into has already closed. Hardcoded here rather than referencing
+ * that repository's own `VisitorHub.ConversationClosedHubErrorPrefix`: a different language, a
+ * different repository, and not visible to this one anyway (`internal`, scoped to `ago-chat`'s own
+ * integration tests). `completeSend`'s check below is a plain `startsWith` against this exact literal
+ * (trailing space included) - never `.includes()`, and never anything after the prefix, since the
+ * English sentence that follows it is `Conversation.AddVisitorMessage`'s own wording for a human
+ * reading logs, not a stable contract, and may be reworded or localised in `ago-chat` without this
+ * widget knowing.
+ */
+const CONVERSATION_CLOSED_HUB_ERROR_PREFIX = "Conversation.InvalidState: ";
+
+/**
  * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1`/`demo-shop2` (public) or a
  * tenant minted by `8-07`'s button (private) must have read before typing - three short statements of
  * fact for the public case, a precise reassurance plus the tenant's own disposability for the private
@@ -1341,10 +1355,23 @@ export class ChatWidget {
           // stays until the visitor does something about it, and a visitor message arriving with
           // this id anyway would be a genuinely new message - which is how it would render.
           this.pendingSends.delete(clientMessageId);
-          this.markBubbleFailed(
-            bubble,
-            error instanceof NotConnectedError ? this.strings.notConnectedRetryNote : this.strings.sendFailedNote,
-          );
+
+          // `25-61`: checked before the two branches below, and the only one of the three that reads
+          // the caught error's own message rather than its type - `VisitorHub.SendAsync` (`ago-chat`)
+          // has no second .NET exception type to distinguish this from any other hub rejection, only
+          // this one prefixed string (see `CONVERSATION_CLOSED_HUB_ERROR_PREFIX`'s own remarks). This
+          // is the fix itself: without it, a visitor whose conversation already closed was told the
+          // same "Failed to send." as a real network/server failure, unable to tell the two apart.
+          let note: string;
+          if (error instanceof Error && error.message.startsWith(CONVERSATION_CLOSED_HUB_ERROR_PREFIX)) {
+            note = this.strings.conversationEndedNote;
+          } else if (error instanceof NotConnectedError) {
+            note = this.strings.notConnectedRetryNote;
+          } else {
+            note = this.strings.sendFailedNote;
+          }
+
+          this.markBubbleFailed(bubble, note);
         }
 
         logWidgetError(error);

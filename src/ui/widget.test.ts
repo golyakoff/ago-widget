@@ -527,7 +527,8 @@ describe("the panel's composer", () => {
     expect(save!.tagName).toBe("BUTTON");
     expect(save!.type).toBe("button");
     expect(save!.getAttribute("aria-label")).toBe(en.saveConversation);
-    expect(save!.textContent?.trim().length).toBeGreaterThan(0);
+    // Icon-only: contains an SVG child element instead of text content
+    expect(save!.querySelector("svg")).not.toBeNull();
     expect(save!.disabled).toBe(false);
 
     currentHub().dropToReconnecting();
@@ -540,9 +541,10 @@ describe("the panel's composer", () => {
     const panel = await openWidget();
 
     expect(panel.send.getAttribute("aria-label")).toBe(en.send);
-    // Icon-only: nothing but the glyph, so the accessible name comes from `aria-label` alone rather
-    // than from text content the way an unlabelled icon button would otherwise fall back to.
-    expect(panel.send.textContent?.trim().length).toBeGreaterThan(0);
+    // Icon-only: contains an SVG child element rather than text content, so the accessible name
+    // comes from `aria-label` alone rather than from text content the way an unlabelled icon
+    // button would otherwise fall back to.
+    expect(panel.send.querySelector("svg")).not.toBeNull();
     expect(panel.send.type).toBe("submit");
   });
 });

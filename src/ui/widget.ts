@@ -110,6 +110,29 @@ function createProcessingNotice(): HTMLDivElement {
 }
 
 /**
+ * Renders one Material Symbols Outlined glyph as an inline SVG - the icon's own `d` path, verbatim
+ * from Google's own `material-design-icons` source (the `-960 0 960 960` viewBox that font family
+ * ships with, not the older Material Icons' `0 0 24 24` convention - the two are not interchangeable
+ * path data). `fill: currentColor` and no stroke, matching how that source renders it: the outline
+ * look comes from the path data itself, not from a stroke drawn around a filled shape.
+ */
+function createSvgIcon(d: string): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 -960 960 960");
+  svg.setAttribute("width", "1em");
+  svg.setAttribute("height", "1em");
+  svg.setAttribute("fill", "currentColor");
+  svg.style.display = "inline-block";
+  svg.style.verticalAlign = "text-bottom";
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", d);
+  svg.appendChild(path);
+
+  return svg;
+}
+
+/**
  * Assembles the widget's whole visible surface inside one Shadow DOM root. This is intentionally
  * one class rather than a component framework: the panel has a fixed, small set of views (closed,
  * connecting, open) and pulling in a UI framework's runtime for that would blow the bundle budget
@@ -324,7 +347,12 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-haspopup", "dialog");
     this.toggle.setAttribute("aria-expanded", "false");
     this.toggle.setAttribute("aria-label", this.strings.openChat);
-    this.toggle.textContent = "💬";
+    // Material Symbols Outlined: chat_bubble
+    this.toggle.appendChild(
+      createSvgIcon(
+        "M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z",
+      ),
+    );
     this.toggle.addEventListener("click", () => this.toggleOpen());
 
     this.panel = document.createElement("div");
@@ -347,7 +375,12 @@ export class ChatWidget {
     this.closeButton.type = "button";
     this.closeButton.className = "ago-close";
     this.closeButton.setAttribute("aria-label", this.strings.closeChat);
-    this.closeButton.textContent = "✕";
+    // Material Symbols Outlined: close
+    this.closeButton.appendChild(
+      createSvgIcon(
+        "m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z",
+      ),
+    );
     this.closeButton.addEventListener("click", () => this.close());
 
     // `20-07`: **one script tag, one launcher, one panel, one transcript.** Booking is no longer a
@@ -422,7 +455,12 @@ export class ChatWidget {
     this.sendButton.type = "submit";
     this.sendButton.className = "ago-send";
     this.sendButton.setAttribute("aria-label", this.strings.send);
-    this.sendButton.textContent = "➤";
+    // Material Symbols Outlined: send
+    this.sendButton.appendChild(
+      createSvgIcon(
+        "M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z",
+      ),
+    );
     this.sendButton.disabled = true;
 
     // A native file picker, not a drag-and-drop zone or a custom widget - the skill's
@@ -444,7 +482,12 @@ export class ChatWidget {
     this.attachButton.type = "button";
     this.attachButton.className = "ago-attach";
     this.attachButton.setAttribute("aria-label", this.strings.attachAFile);
-    this.attachButton.textContent = "📎";
+    // Material Symbols Outlined: attach_file
+    this.attachButton.appendChild(
+      createSvgIcon(
+        "M720-330q0 104-73 177T470-80q-104 0-177-73t-73-177v-370q0-75 52.5-127.5T400-880q75 0 127.5 52.5T580-700v350q0 46-32 78t-78 32q-46 0-78-32t-32-78v-370h80v370q0 13 8.5 21.5T470-320q13 0 21.5-8.5T500-350v-350q-1-42-29.5-71T400-800q-42 0-71 29t-29 71v370q-1 71 49 120.5T470-160q70 0 119-49.5T640-330v-390h80v390Z",
+      ),
+    );
     this.attachButton.disabled = true;
     // `23-78`: hidden until `connect()` learns this conversation actually carries a grant - the
     // `moduleChip` precedent right below this file's own remarks on it ("`hidden` guards this too...
@@ -467,7 +510,12 @@ export class ChatWidget {
     this.saveButton.className = "ago-save";
     this.saveButton.setAttribute("aria-label", this.strings.saveConversation);
     this.saveButton.title = this.strings.saveConversation;
-    this.saveButton.textContent = "⬇";
+    // Material Symbols Outlined: download
+    this.saveButton.appendChild(
+      createSvgIcon(
+        "M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z",
+      ),
+    );
     this.saveButton.disabled = true;
     this.saveButton.addEventListener("click", () => guardAsync(() => this.saveConversation()));
 

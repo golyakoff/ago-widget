@@ -1633,7 +1633,7 @@ export class ChatWidget {
   }
 
   /**
-   * `23-09`/`23-58`: records the phone, the name (as `Kind: "Other"`) and the e-mail (as
+   * `23-09`/`23-58`: records the phone, the name (as `Kind: "Name"`) and the e-mail (as
    * `Kind: "Email"`) - three unconditional rows now that `ui/contactCapture.ts` requires all three
    * fields, rather than the two rows `23-09` wrote when the name was optional. `Email` needed no new
    * domain work on the `ago-chat` side: `VisitorContactDetailKind.Email` already existed (`14-14`),
@@ -1663,7 +1663,7 @@ export class ChatWidget {
     }
 
     await recordContactDetail(this.config, token, this.conversationId, "Phone", result.phone);
-    await recordContactDetail(this.config, token, this.conversationId, "Other", result.name);
+    await recordContactDetail(this.config, token, this.conversationId, "Name", result.name);
     await recordContactDetail(this.config, token, this.conversationId, "Email", result.email);
   }
 

@@ -28,6 +28,7 @@ export const en: WidgetStrings = {
   sendOutcomeUnknownNote: "Not sure this was sent - the connection dropped mid-request.",
   notConnectedRetryNote: "Not sent - reconnecting. It will not be retried automatically.",
   sendFailedNote: "Failed to send.",
+  conversationEndedNote: "Not sent - this conversation has ended.",
   uploading: "Uploading…",
   uploadFailedNote: "Couldn't send the attachment.",
   downloadAttachment: "📎 Download attachment",

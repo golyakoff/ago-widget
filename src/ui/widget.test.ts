@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageDto, VisitorJoinResult } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
-import { currentHub, hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
+import { HubConnectionState, currentHub, hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 import { en } from "../i18n/en.js";
 
 /**
@@ -235,6 +235,65 @@ describe("the panel while the connection is gone and after it returns", () => {
     await flush();
 
     expect(panel.bubbleTexts()).toEqual(["hello"]);
+  });
+});
+
+/**
+ * `25-61`: the hub-refusal half of `completeSend`'s `.catch` - the socket stays up and
+ * `SendMessageAsync` itself rejects (`fakeSignalR`'s `failNextSend` with `leavingState:
+ * HubConnectionState.Connected`, the same shape `connection.test.ts`'s "is reported as itself when
+ * the connection is still up and the server refused it" already exercises one layer down). The two
+ * tests below are a pair on purpose: the first proves the new `Conversation.InvalidState: `-prefixed
+ * rejection gets its own distinct note rather than the generic one; the second proves an ordinary
+ * hub refusal - anything not carrying that exact prefix - still gets the old, unchanged note. Without
+ * the second test, a fix that widened the match (e.g. `.includes()` instead of `.startsWith()`, or
+ * matching on any `Error` at all) would pass the first test while quietly breaking every other
+ * send-failure message this widget has ever shown.
+ */
+describe("a send the hub refuses while the connection stays up", () => {
+  it("tells the visitor the conversation has ended, not that the send merely failed", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    // The exact wire shape `VisitorHub.SendAsync` (`ago-chat`) produces for this one rejection:
+    // the literal prefix, then `Conversation.AddVisitorMessage`'s own English sentence - never
+    // matched on below the prefix, which is why this fixture uses a different id/wording than any
+    // other test in this file would need to.
+    currentHub().failNextSend = {
+      error: new Error("Conversation.InvalidState: Cannot add a message to closed conversation abc-123."),
+      leavingState: HubConnectionState.Connected,
+    };
+
+    type(panel, "are you there?");
+    pressEnter(panel);
+    await flush();
+
+    expect(panel.bubbleTexts().join(" ")).toContain(en.conversationEndedNote);
+    expect(panel.bubbleTexts().join(" ")).not.toContain(en.sendFailedNote);
+    expect(logged).toHaveBeenCalled();
+  });
+
+  it("still shows the generic send-failed note for an ordinary hub refusal", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    // Deliberately unrelated wording and unrelated cause (a rate limit, a malformed body, a
+    // participant mismatch, or genuinely anything else the hub might say) - the point is that it
+    // does not start with the one prefix that means "this conversation is closed."
+    currentHub().failNextSend = {
+      error: new Error("An unexpected error occurred invoking 'SendMessageAsync' on the server."),
+      leavingState: HubConnectionState.Connected,
+    };
+
+    type(panel, "are you there?");
+    pressEnter(panel);
+    await flush();
+
+    expect(panel.bubbleTexts().join(" ")).toContain(en.sendFailedNote);
+    expect(panel.bubbleTexts().join(" ")).not.toContain(en.conversationEndedNote);
+    expect(logged).toHaveBeenCalled();
   });
 });
 

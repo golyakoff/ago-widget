@@ -43,6 +43,12 @@ export interface WidgetStrings {
   readonly sendOutcomeUnknownNote: string;
   readonly notConnectedRetryNote: string;
   readonly sendFailedNote: string;
+  /** `25-61`: shown instead of `sendFailedNote` - never alongside it, never falling back to it - when
+   * a send failed specifically because the conversation had already closed (`ui/widget.ts`'s
+   * `completeSend`, matching `VisitorHub.SendAsync`'s `"Conversation.InvalidState: "`-prefixed
+   * rejection). A closed conversation is not "the send failed"; it is "there is nothing left to send
+   * to," which is the distinction this whole backlog item exists to make visible to the visitor. */
+  readonly conversationEndedNote: string;
   /** The word only - `ui/widget.ts` builds `` `${uploading} ${percent}%` `` itself, keeping the
    * number interpolation out of this table (Out of scope: number formatting is not this item's job). */
   readonly uploading: string;

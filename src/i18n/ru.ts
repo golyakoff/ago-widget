@@ -28,6 +28,7 @@ export const ru: WidgetStrings = {
   sendOutcomeUnknownNote: "Не уверены, что сообщение отправлено — соединение прервалось во время запроса.",
   notConnectedRetryNote: "Не отправлено — идёт переподключение. Повторная отправка не выполняется автоматически.",
   sendFailedNote: "Не удалось отправить.",
+  conversationEndedNote: "Не отправлено — диалог завершён.",
   uploading: "Загрузка…",
   uploadFailedNote: "Не удалось отправить вложение.",
   downloadAttachment: "📎 Скачать вложение",

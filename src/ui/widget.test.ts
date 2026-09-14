@@ -30,7 +30,12 @@ const config: WidgetConfig = {
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
-function message(id: string, sequence: number, authorKind: MessageDto["authorKind"] = "Operator"): MessageDto {
+function message(
+  id: string,
+  sequence: number,
+  authorKind: MessageDto["authorKind"] = "Operator",
+  attachmentId?: string,
+): MessageDto {
   return {
     id,
     sequence,
@@ -38,6 +43,10 @@ function message(id: string, sequence: number, authorKind: MessageDto["authorKin
     authorId: "88888888-8888-8888-8888-888888888888",
     body: `message ${id}`,
     createdAt: "2026-08-25T09:00:00+00:00",
+    // `25-80`: `exactOptionalPropertyTypes` again (see `joinResult`'s own identical spread just
+    // below) - an omitted `attachmentId` and one explicitly `undefined` are distinct types here,
+    // and a fixture with no attachment must produce the former to match a real history message.
+    ...(attachmentId !== undefined ? { attachmentId } : {}),
   };
 }
 
@@ -675,6 +684,118 @@ describe("the attach control's visibility", () => {
     await flush();
 
     expect(panel.attach.hidden).toBe(false);
+  });
+});
+
+/**
+ * `25-80`: the one download failure that is permanent (`Attachment.Removed`, `23-80`'s own new HTTP
+ * 410) earns a distinct sentence in `renderAttachmentInto`'s catch; every other failure a download
+ * can have - a still-`Pending` upload's `Attachment.NotReady`, a network error, an unreachable API -
+ * keeps today's generic `attachmentUnavailable` text, unchanged. `ago-console`'s `ConversationPage`
+ * drew the identical line for the operator side in `23-80`; this is the visitor-facing counterpart.
+ *
+ * Each test here answers the *session mint* (`POST /visitor-sessions`) that `openWidget()` always
+ * triggers, and the *session renewal* (`POST /visitor-sessions/renew`) that `currentToken()` also
+ * triggers here - the fixture token is not a real JWT, so `VisitorSessionManager` always finds itself
+ * "in the renewal window" and renews before returning it, exactly as `23-09`'s own comment on this
+ * same behaviour already notes ("a second flush lets that promise chain ... settle"). Only the
+ * `/attachments/{id}` download call is varied per test.
+ */
+describe("the download-failure message renderAttachmentInto shows", () => {
+  const ATTACHMENT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  function sessionResponse(status: number): Response {
+    return new Response(
+      JSON.stringify({
+        token: "visitor-token",
+        visitorId: "99999999-9999-9999-9999-999999999999",
+        widgetPrimaryColorHex: null,
+        widgetPosition: "BottomRight",
+        enabledModules: [],
+      }),
+      { status, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  /** `downloadHandler` answers only the `GET /attachments/{id}` call; every session-mint/renewal
+   * call this test's own `openWidget()`/`currentToken()` round trips through is answered the same
+   * way `beforeEach`'s own default stub already does, so a test here only ever has to describe the
+   * one call it is actually about. */
+  function stubFetchForDownload(downloadHandler: () => Response): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/attachments/")) {
+          return Promise.resolve(downloadHandler());
+        }
+
+        return Promise.resolve(sessionResponse(url.endsWith("/renew") ? 200 : 201));
+      }),
+    );
+  }
+
+  it("shows the distinct removed message for Attachment.Removed (410)", async () => {
+    stubFetchForDownload(
+      () =>
+        new Response(JSON.stringify({ type: "Attachment.Removed", title: "The attachment has been deleted." }), {
+          status: 410,
+          headers: { "Content-Type": "application/problem+json" },
+        }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    await vi.waitFor(() => expect(panel.root.querySelector(".ago-message .ago-status")).not.toBeNull());
+
+    expect(panel.root.querySelector(".ago-message .ago-status")?.textContent).toBe(en.attachmentRemoved);
+    expect(panel.root.querySelector(".ago-message .ago-status")?.textContent).not.toBe(en.attachmentUnavailable);
+  });
+
+  it("keeps the generic message for a transient Attachment.NotReady (400)", async () => {
+    stubFetchForDownload(
+      () =>
+        new Response(JSON.stringify({ type: "Attachment.NotReady", title: "Not ready yet." }), {
+          status: 400,
+          headers: { "Content-Type": "application/problem+json" },
+        }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    await vi.waitFor(() => expect(panel.root.querySelector(".ago-message .ago-status")).not.toBeNull());
+
+    expect(panel.root.querySelector(".ago-message .ago-status")?.textContent).toBe(en.attachmentUnavailable);
+  });
+
+  it("keeps the generic message for a network-level failure (no response at all)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/attachments/")) {
+          return Promise.reject(new TypeError("network error"));
+        }
+
+        return Promise.resolve(sessionResponse(url.endsWith("/renew") ? 200 : 201));
+      }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    await vi.waitFor(() => expect(panel.root.querySelector(".ago-message .ago-status")).not.toBeNull());
+
+    expect(panel.root.querySelector(".ago-message .ago-status")?.textContent).toBe(en.attachmentUnavailable);
+  });
+
+  it("keeps the generic message when the API is unreachable and answers with a non-problem+json body", async () => {
+    stubFetchForDownload(() => new Response("<html>502 Bad Gateway</html>", { status: 502 }));
+
+    joinQueue.push(joinResult([message("m1", 1, "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    await vi.waitFor(() => expect(panel.root.querySelector(".ago-message .ago-status")).not.toBeNull());
+
+    expect(panel.root.querySelector(".ago-message .ago-status")?.textContent).toBe(en.attachmentUnavailable);
   });
 });
 

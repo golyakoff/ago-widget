@@ -33,6 +33,7 @@ export const ru: WidgetStrings = {
   uploadFailedNote: "Не удалось отправить вложение.",
   downloadAttachment: "📎 Скачать вложение",
   attachmentUnavailable: "Вложение недоступно.",
+  attachmentRemoved: "Этот файл был удалён.",
   attachmentAlt: "Вложение",
   publicDemoNotice:
     "Это публичная демонстрация. Всё, что вы здесь напишете, может прочитать любой, кто откроет демо-консоль оператора. Не указывайте реальные данные.",

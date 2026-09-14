@@ -55,6 +55,13 @@ export interface WidgetStrings {
   readonly uploadFailedNote: string;
   readonly downloadAttachment: string;
   readonly attachmentUnavailable: string;
+  /** `25-80`: shown instead of `attachmentUnavailable` - never alongside it - for the one download
+   * failure that is permanent rather than retryable: the server's `Attachment.Removed` (HTTP 410,
+   * `23-80`). Every other failure a download can have (a still-`Pending` upload, a network error,
+   * the API unreachable) keeps `attachmentUnavailable`, unchanged - `ago-console`'s own
+   * `conversationAttachmentDeleted` draws the identical distinction for an operator; this is its
+   * visitor-facing counterpart, the gap `25-80`'s own backlog item names. */
+  readonly attachmentRemoved: string;
   readonly attachmentAlt: string;
   readonly publicDemoNotice: string;
   readonly privateDemoNotice: string;

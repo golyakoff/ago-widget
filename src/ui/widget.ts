@@ -5,7 +5,14 @@ import { VisitorSessionExpiredError, VisitorSessionManager } from "../session.js
 import { sendBeacon } from "../beacon.js";
 import { NotConnectedError, SendOutcomeUnknownError, VisitorConnection, type ConnectionState } from "../connection.js";
 import { newClientMessageId } from "../protocol/dedup.js";
-import { courtesyValidate, createAttachment, confirmAttachment, getAttachmentDownload, uploadToPresignedUrl } from "../attachments.js";
+import {
+  courtesyValidate,
+  createAttachment,
+  confirmAttachment,
+  getAttachmentDownload,
+  uploadToPresignedUrl,
+  AttachmentRejectedError,
+} from "../attachments.js";
 import { recordContactDetail } from "../contactDetails.js";
 import { getConsentRequirement, recordConsent, type ConsentRequirement } from "../consent.js";
 import { createShadowHost } from "./shadow-root.js";
@@ -1767,7 +1774,14 @@ export class ChatWidget {
         logWidgetError(error);
         const note = document.createElement("div");
         note.className = "ago-status";
-        note.textContent = this.strings.attachmentUnavailable;
+        // `25-80`: `Attachment.Removed` (`ConversationErrors`, `23-80`) is the one download failure
+        // that is permanent - the file itself is gone, not merely not-ready-yet or unreachable - so
+        // it is the one case that earns a distinct sentence. Every other failure this promise chain
+        // can reject with (a still-`Pending` upload's `Attachment.NotReady`, a network error, the
+        // API unreachable, an expired session) falls through to the original, unnarrowed
+        // `attachmentUnavailable` text, exactly as before this item.
+        const removed = error instanceof AttachmentRejectedError && error.code === "Attachment.Removed";
+        note.textContent = removed ? this.strings.attachmentRemoved : this.strings.attachmentUnavailable;
         bubble.appendChild(note);
       });
   }

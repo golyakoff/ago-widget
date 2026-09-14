@@ -23,6 +23,22 @@ export interface AttachmentLocation {
   readonly contentType: string;
 }
 
+/**
+ * `25-94`: the reason a lookup produced no {@link AttachmentLocation}, carried as a plain string
+ * literal rather than a class - this module's own boundary comment above says the information
+ * crosses into `ui/widget.ts`'s `AttachmentRejectedError`/`getAttachmentDownload`, never the other
+ * way; a literal type needs no import to name, so `fetchAttachmentLocation` can report the identical
+ * distinction `25-80` already drew for the live rendering path (`AttachmentRejectedError.code ===
+ * "Attachment.Removed"`, `attachments.ts`) without this module reaching back into `ui/widget.ts` or
+ * `attachments.ts` for the class that distinction actually lives on.
+ * - `"removed"`: the server said the file is gone for good (`Attachment.Removed`, HTTP 410) -
+ *   `renderAttachmentRow` shows `copy.attachmentRemoved` for this and only this case.
+ * - `"unavailable"`: everything else a lookup can fail with - an expired presigned URL, a network
+ *   error, the API unreachable, a still-`Pending` upload - `renderAttachmentRow` keeps today's
+ *   generic `copy.attachmentUnavailable` line, unchanged.
+ */
+export type AttachmentLookupFailure = "removed" | "unavailable";
+
 export interface BuildConversationArchiveInput {
   /** Every message this panel has already rendered (the initial history page, and every message that
    * has arrived live since), in any order - the seed set {@link collectFullHistory} walks *backward*
@@ -38,10 +54,11 @@ export interface BuildConversationArchiveInput {
    * so "no other visitor's conversation" is a server-side guarantee this call inherits, not one this
    * module re-checks. */
   readonly fetchOlderPage: (beforeSequence: number, pageSize: number) => Promise<HistoryPage>;
-  /** Resolves a presigned download location for one attachment, or `null` if the lookup itself failed
-   * - `ui/widget.ts`'s own `getAttachmentDownload` call, the same one `renderAttachmentInto` already
-   * makes for an inline bubble, reused rather than a second attachment-fetch mechanism. */
-  readonly fetchAttachmentLocation: (attachmentId: string) => Promise<AttachmentLocation | null>;
+  /** Resolves a presigned download location for one attachment, or an {@link AttachmentLookupFailure}
+   * naming why the lookup itself failed - `ui/widget.ts`'s own `getAttachmentDownload` call, the same
+   * one `renderAttachmentInto` already makes for an inline bubble, reused rather than a second
+   * attachment-fetch mechanism. */
+  readonly fetchAttachmentLocation: (attachmentId: string) => Promise<AttachmentLocation | AttachmentLookupFailure>;
   readonly locale: SupportedLocale;
   /** `WidgetConfig.siteKey` - already public (embeddable-widget skill's Bootstrap section: "the site
    * key is public"), and the one identifier the file name is allowed to carry, per the backlog item's
@@ -183,6 +200,7 @@ function renderMessageRow(
   message: MessageDto,
   copy: SaveConversationCopy,
   attachmentEntryNames: ReadonlyMap<string, string>,
+  removedAttachmentIds: ReadonlySet<string>,
 ): string {
   // `23-64`: `"AutoGreeting"` reads as `"Operator"` here too - the identical author's-own-decision
   // reasoning `ui/widget.ts`'s `renderBubble` states for the live panel, restated for the saved
@@ -194,7 +212,9 @@ function renderMessageRow(
         ? copy.operatorLabel
         : copy.systemLabel;
   const cssClass = message.authorKind === "AutoGreeting" ? "operator" : message.authorKind.toLowerCase();
-  const attachmentHtml = message.attachmentId ? renderAttachmentRow(message.attachmentId, copy, attachmentEntryNames) : "";
+  const attachmentHtml = message.attachmentId
+    ? renderAttachmentRow(message.attachmentId, copy, attachmentEntryNames, removedAttachmentIds)
+    : "";
 
   return (
     `<div class="message message--${cssClass}">` +
@@ -205,14 +225,23 @@ function renderMessageRow(
   );
 }
 
+/** `25-94`: `attachmentEntryNames` misses an attachment id for two different reasons now, and this is
+ * the one place that turns that absence back into a sentence - `removedAttachmentIds` (populated by
+ * `buildConversationArchive` from `fetchAttachmentLocation`'s own `"removed"` outcome) says which of
+ * the two it was, the identical branch `ui/widget.ts`'s `renderAttachmentInto` already makes for the
+ * live path via `AttachmentRejectedError.code` (`25-80`). Everything else - an expired URL, a network
+ * error, the API unreachable - has no entry in either collection and keeps the original
+ * `copy.attachmentUnavailable` line, unchanged. */
 function renderAttachmentRow(
   attachmentId: string,
   copy: SaveConversationCopy,
   attachmentEntryNames: ReadonlyMap<string, string>,
+  removedAttachmentIds: ReadonlySet<string>,
 ): string {
   const entryName = attachmentEntryNames.get(attachmentId);
   if (entryName === undefined) {
-    return `<div class="attachment attachment--unavailable">${escapeHtml(copy.attachmentUnavailable)}</div>`;
+    const text = removedAttachmentIds.has(attachmentId) ? copy.attachmentRemoved : copy.attachmentUnavailable;
+    return `<div class="attachment attachment--unavailable">${escapeHtml(text)}</div>`;
   }
 
   // A relative link into this same archive's own `attachments/` entry - opening `conversation.html`
@@ -226,8 +255,13 @@ function buildTranscriptHtml(
   messages: readonly MessageDto[],
   copy: SaveConversationCopy,
   attachmentEntryNames: ReadonlyMap<string, string>,
+  // Defaulted rather than mandatory: `archive.test.ts`'s own pre-`25-94` calls pass only three
+  // arguments to prove the transcript's non-attachment rendering in isolation, and none of those
+  // cases involves a removed attachment - forcing every one of them to thread through an empty set
+  // just to keep compiling would be churn with no test-value of its own.
+  removedAttachmentIds: ReadonlySet<string> = new Set(),
 ): string {
-  const rows = messages.map((message) => renderMessageRow(message, copy, attachmentEntryNames)).join("\n");
+  const rows = messages.map((message) => renderMessageRow(message, copy, attachmentEntryNames, removedAttachmentIds)).join("\n");
   return (
     `<!doctype html>\n<html lang="${copy.htmlLang}">\n<head>\n<meta charset="utf-8">\n` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">\n` +
@@ -257,29 +291,34 @@ export async function buildConversationArchive(input: BuildConversationArchiveIn
 
   const entries: ZipEntryInput[] = [];
   const attachmentEntryNames = new Map<string, string>();
+  const removedAttachmentIds = new Set<string>();
 
   for (const message of messages) {
     const attachmentId = message.attachmentId;
-    if (!attachmentId || attachmentEntryNames.has(attachmentId)) {
+    if (!attachmentId || attachmentEntryNames.has(attachmentId) || removedAttachmentIds.has(attachmentId)) {
       continue;
     }
 
-    const location = await input.fetchAttachmentLocation(attachmentId);
-    if (location === null) {
+    const outcome = await input.fetchAttachmentLocation(attachmentId);
+    if (outcome === "removed") {
+      removedAttachmentIds.add(attachmentId);
+      continue;
+    }
+    if (outcome === "unavailable") {
       continue;
     }
 
-    const bytes = await fetchAttachmentBytes(location.url);
+    const bytes = await fetchAttachmentBytes(outcome.url);
     if (bytes === null) {
       continue;
     }
 
-    const entryName = `attachments/${message.sequence}-${shortId(attachmentId)}${extensionFor(location.contentType)}`;
+    const entryName = `attachments/${message.sequence}-${shortId(attachmentId)}${extensionFor(outcome.contentType)}`;
     attachmentEntryNames.set(attachmentId, entryName);
     entries.push({ name: entryName, data: bytes });
   }
 
-  const html = buildTranscriptHtml(messages, copy, attachmentEntryNames);
+  const html = buildTranscriptHtml(messages, copy, attachmentEntryNames, removedAttachmentIds);
   entries.unshift({ name: "conversation.html", data: new TextEncoder().encode(html) });
 
   const blob = await buildZip(entries);

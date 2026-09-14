@@ -44,7 +44,11 @@ import type { ModuleChipSpec } from "../modules/booking/chip.js";
 // exactly as it already covers `modules/booking/`), and the one place in this file allowed to know
 // the save archive builder's own shape is `saveConversation` below, which names the lazy chunk's file
 // name and nothing else about how it is built.
-import type { AttachmentLocation, BuildConversationArchiveInput } from "../modules/saveConversation/archive.js";
+import type {
+  AttachmentLocation,
+  AttachmentLookupFailure,
+  BuildConversationArchiveInput,
+} from "../modules/saveConversation/archive.js";
 
 /**
  * `23-63`: the bound the backlog item's own "Where this is likely to go wrong" section asked to be
@@ -1838,17 +1842,26 @@ export class ChatWidget {
 
   /** `23-62`: the same `getAttachmentDownload` call `renderAttachmentInto` above already makes for an
    * inline bubble - reused, not duplicated, so there is exactly one place in this widget that turns
-   * an attachment id into a presigned download location. `null` on any failure (an expired session,
-   * the API unreachable), which `archive.ts` treats as "leave this attachment out of the file",
-   * never a thrown exception that would abort the whole save over one unreachable attachment. */
-  private async fetchAttachmentLocationForExport(attachmentId: string): Promise<AttachmentLocation | null> {
+   * an attachment id into a presigned download location. An {@link AttachmentLookupFailure} on any
+   * failure (an expired session, the API unreachable), which `archive.ts` treats as "leave this
+   * attachment out of the file", never a thrown exception that would abort the whole save over one
+   * unreachable attachment.
+   *
+   * `25-94`: `"removed"` vs `"unavailable"` is the identical branch `renderAttachmentInto` above
+   * already makes on `error.code === "Attachment.Removed"` (`25-80`) - repeated here rather than
+   * factored into one shared helper, because the two call sites disagree on what to do with the
+   * result: this one returns a plain string across the `saveConversation` module boundary,
+   * `renderAttachmentInto` picks a `WidgetStrings` value directly. */
+  private async fetchAttachmentLocationForExport(
+    attachmentId: string,
+  ): Promise<AttachmentLocation | AttachmentLookupFailure> {
     try {
       const token = await this.currentToken();
       const info = await getAttachmentDownload(this.config, token, attachmentId);
       return { url: info.url, contentType: info.contentType };
     } catch (error) {
       logWidgetError(error);
-      return null;
+      return error instanceof AttachmentRejectedError && error.code === "Attachment.Removed" ? "removed" : "unavailable";
     }
   }
 }

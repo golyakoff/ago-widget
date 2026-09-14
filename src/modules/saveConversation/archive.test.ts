@@ -143,6 +143,32 @@ describe("buildTranscriptHtml", () => {
     expect(html).toContain('href="attachments/1-att1.png"');
     expect(html).toContain(copy.attachmentUnavailable);
   });
+
+  /** `25-94`: the identical distinction `25-80` already drew for the live rendering path - a
+   * permanently removed attachment earns its own sentence, distinct from the generic "unavailable"
+   * one every other lookup failure still shows. `removedAttachmentIds` is the fourth, optional
+   * parameter `buildConversationArchive` now passes; a message whose attachment id is in neither
+   * collection (this test's `att-other-failure`) still falls back to the untouched generic text. */
+  it("shows the distinct removed line for an attachment `removedAttachmentIds` names, and the generic line for one it does not", () => {
+    const messages = [
+      message({ id: "a1", sequence: 1, attachmentId: "att-removed" }),
+      message({ id: "a2", sequence: 2, attachmentId: "att-other-failure" }),
+    ];
+    const html = buildTranscriptHtml(messages, copy, new Map(), new Set(["att-removed"]));
+
+    expect(html).toContain(copy.attachmentRemoved);
+    expect(html).toContain(copy.attachmentUnavailable);
+
+    // Each message gets exactly the sentence that matches its own outcome, not both for either one -
+    // proof that this is a per-attachment branch, not two independent strings appended somewhere.
+    // Splitting on the opening tag of each message row puts the first message's own markup at index
+    // 1 and the second's at index 2 (index 0 is everything before the first message: the `<head>`).
+    const rows = html.split('<div class="message');
+    expect(rows[1]).toContain(copy.attachmentRemoved);
+    expect(rows[1]).not.toContain(copy.attachmentUnavailable);
+    expect(rows[2]).toContain(copy.attachmentUnavailable);
+    expect(rows[2]).not.toContain(copy.attachmentRemoved);
+  });
 });
 
 describe("buildConversationArchive", () => {
@@ -165,7 +191,7 @@ describe("buildConversationArchive", () => {
     const archive = await buildConversationArchive({
       knownMessages: known,
       fetchOlderPage,
-      fetchAttachmentLocation: () => Promise.resolve(null),
+      fetchAttachmentLocation: () => Promise.resolve("unavailable"),
       locale: "en",
       siteKey: "shop_demo",
       now: new Date("2026-09-09T12:34:00Z"),
@@ -242,11 +268,37 @@ describe("buildConversationArchive", () => {
     expect(text).toContain(saveConversationCopy("en").attachmentUnavailable);
   });
 
+  /** `25-94`: the archive's own end of the distinction - `fetchAttachmentLocation` returning
+   * `"removed"` (rather than throwing, and rather than the generic `"unavailable"`) reaches the
+   * rendered transcript as `attachmentRemoved`, not `attachmentUnavailable`, and no bytes for that
+   * attachment are fetched at all (there is nothing to fetch - the file is genuinely gone). This is
+   * the fails-before case: before this item, `fetchAttachmentLocation`'s return type had no way to
+   * say "removed" at all, so this exact assertion could not even be written against the old code. */
+  it("shows the distinct removed line, and fetches no bytes, when fetchAttachmentLocation reports the attachment removed", async () => {
+    const known = [message({ id: "withFile", sequence: 1, attachmentId: "att-removed" })];
+    const fetchBytes = vi.fn();
+    vi.stubGlobal("fetch", fetchBytes);
+
+    const archive = await buildConversationArchive({
+      knownMessages: known,
+      fetchOlderPage: () => Promise.resolve({ messages: [], nextBeforeSequence: null }),
+      fetchAttachmentLocation: () => Promise.resolve("removed"),
+      locale: "en",
+      siteKey: "shop_demo",
+      now: new Date("2026-09-09T12:34:00Z"),
+    });
+
+    const text = await extractTranscriptText(archive.blob);
+    expect(text).toContain(saveConversationCopy("en").attachmentRemoved);
+    expect(text).not.toContain(saveConversationCopy("en").attachmentUnavailable);
+    expect(fetchBytes).not.toHaveBeenCalled();
+  });
+
   it("names the file after the site key and the timestamp, never anything from contact capture", async () => {
     const archive = await buildConversationArchive({
       knownMessages: [message({ id: "m1", sequence: 1 })],
       fetchOlderPage: () => Promise.resolve({ messages: [], nextBeforeSequence: null }),
-      fetchAttachmentLocation: () => Promise.resolve(null),
+      fetchAttachmentLocation: () => Promise.resolve("unavailable"),
       locale: "en",
       siteKey: "shop_demo",
       now: new Date("2026-09-09T12:34:00Z"),

@@ -5,6 +5,7 @@ import type { WidgetConfig } from "../config.js";
 import { currentHub, historyQueue, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 import { en } from "../i18n/en.js";
 import * as saveConversationArchiveModule from "../modules/saveConversation/archive.js";
+import { saveConversationCopy } from "../modules/saveConversation/copy.js";
 
 /**
  * `23-62`: «Сохранить диалог», driven through the real panel - the click, the button's own
@@ -54,7 +55,13 @@ const config: WidgetConfig = {
   scriptUrl: "https://cdn.test.invalid/dist/widget.js",
 };
 
-function message(id: string, sequence: number, body: string, authorKind: MessageDto["authorKind"] = "Operator"): MessageDto {
+function message(
+  id: string,
+  sequence: number,
+  body: string,
+  authorKind: MessageDto["authorKind"] = "Operator",
+  attachmentId?: string,
+): MessageDto {
   return {
     id,
     sequence,
@@ -62,6 +69,10 @@ function message(id: string, sequence: number, body: string, authorKind: Message
     authorId: "88888888-8888-8888-8888-888888888888",
     body,
     createdAt: "2026-09-09T09:00:00+00:00",
+    // `25-80`'s own `ui/widget.test.ts` `message()` helper hits the identical `exactOptionalPropertyTypes`
+    // point: an omitted `attachmentId` and one explicitly `undefined` are distinct types here, and a
+    // fixture with no attachment must produce the former to match a real history message.
+    ...(attachmentId !== undefined ? { attachmentId } : {}),
   };
 }
 
@@ -236,5 +247,115 @@ describe("saving the conversation", () => {
     expect(panel.messagesEl.textContent).toContain(en.saveConversationFailedNote);
     expect(unhandled).not.toHaveBeenCalled();
     process.off("unhandledRejection", unhandled);
+  });
+});
+
+/**
+ * `25-94`: the export-time counterpart of `25-80`'s own `renderAttachmentInto` distinction, proven
+ * here through the real click path rather than only against `fetchAttachmentLocationForExport` or
+ * `buildConversationArchive` in isolation (`archive.test.ts` already covers those at the unit level)
+ * - this is the seam that actually crosses `ui/widget.ts`'s module boundary into `archive.ts`'s own
+ * rendering, which is the one thing a narrower test cannot show.
+ *
+ * `sessionResponse`/`stubFetchForAttachmentDownload` mirror `ui/widget.test.ts`'s identical helpers
+ * added by `25-80` for the live path: every fetch call this test doesn't care about (the session
+ * mint, its renewal) is answered the same canned way, so each test only has to describe the one
+ * `GET /attachments/{id}` call it is actually about.
+ */
+describe("the attachment line a saved archive shows on a download failure", () => {
+  const ATTACHMENT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+  function sessionResponse(status: number): Response {
+    return new Response(
+      JSON.stringify({
+        token: "visitor-token",
+        visitorId: "99999999-9999-9999-9999-999999999999",
+        widgetPrimaryColorHex: null,
+        widgetPosition: "BottomRight",
+        enabledModules: [],
+      }),
+      { status, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  function stubFetchForAttachmentDownload(downloadHandler: () => Response): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/attachments/")) {
+          return Promise.resolve(downloadHandler());
+        }
+
+        return Promise.resolve(sessionResponse(url.endsWith("/renew") ? 200 : 201));
+      }),
+    );
+  }
+
+  it("shows the distinct removed line for a message whose attachment was permanently deleted (410 Attachment.Removed)", async () => {
+    stubFetchForAttachmentDownload(
+      () =>
+        new Response(JSON.stringify({ type: "Attachment.Removed", title: "The attachment has been deleted." }), {
+          status: 410,
+          headers: { "Content-Type": "application/problem+json" },
+        }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "here is the file", "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    panel.save.click();
+    await flush();
+    await flush();
+
+    expect(capturedBlob).not.toBeNull();
+    const text = await extractTranscriptText(capturedBlob!);
+    expect(text).toContain(saveConversationCopy("en").attachmentRemoved);
+    expect(text).not.toContain(saveConversationCopy("en").attachmentUnavailable);
+  });
+
+  it("keeps the generic unavailable line for every other download failure (a network error)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/attachments/")) {
+          return Promise.reject(new TypeError("network error"));
+        }
+
+        return Promise.resolve(sessionResponse(url.endsWith("/renew") ? 200 : 201));
+      }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "here is the file", "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    panel.save.click();
+    await flush();
+    await flush();
+
+    expect(capturedBlob).not.toBeNull();
+    const text = await extractTranscriptText(capturedBlob!);
+    expect(text).toContain(saveConversationCopy("en").attachmentUnavailable);
+    expect(text).not.toContain(saveConversationCopy("en").attachmentRemoved);
+  });
+
+  it("keeps the generic unavailable line for a still-Pending upload (400 Attachment.NotReady), the same generic message every other non-410 failure gets", async () => {
+    stubFetchForAttachmentDownload(
+      () =>
+        new Response(JSON.stringify({ type: "Attachment.NotReady", title: "Not ready yet." }), {
+          status: 400,
+          headers: { "Content-Type": "application/problem+json" },
+        }),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "here is the file", "Operator", ATTACHMENT_ID)]));
+    const panel = await openWidget();
+    panel.save.click();
+    await flush();
+    await flush();
+
+    expect(capturedBlob).not.toBeNull();
+    const text = await extractTranscriptText(capturedBlob!);
+    expect(text).toContain(saveConversationCopy("en").attachmentUnavailable);
+    expect(text).not.toContain(saveConversationCopy("en").attachmentRemoved);
   });
 });

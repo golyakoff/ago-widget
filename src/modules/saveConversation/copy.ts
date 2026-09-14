@@ -17,6 +17,14 @@ export interface SaveConversationCopy {
   readonly systemLabel: string;
   readonly attachmentLabel: string;
   readonly attachmentUnavailable: string;
+  /** `25-94`: shown instead of `attachmentUnavailable` - never alongside it - for the one lookup
+   * failure that is permanent: `fetchAttachmentLocation` returning `"removed"`
+   * (`AttachmentLookupFailure`, `archive.ts`), the identical distinction `25-80` drew for the live
+   * rendering path's own `attachmentRemoved` string in `i18n/strings.ts`. Kept in this module's own
+   * small table rather than added by reaching into `WidgetStrings` - this table already exists
+   * precisely so a handful of transcript-only words do not grow the base bundle every visitor pays
+   * for (see this file's own top-of-file doc comment). */
+  readonly attachmentRemoved: string;
 }
 
 const COPY: Record<SupportedLocale, SaveConversationCopy> = {
@@ -28,6 +36,7 @@ const COPY: Record<SupportedLocale, SaveConversationCopy> = {
     systemLabel: "Automatic reply",
     attachmentLabel: "Attachment",
     attachmentUnavailable: "Attachment unavailable.",
+    attachmentRemoved: "This file was removed.",
   },
   ru: {
     documentTitle: "Копия диалога",
@@ -37,6 +46,7 @@ const COPY: Record<SupportedLocale, SaveConversationCopy> = {
     systemLabel: "Автоматический ответ",
     attachmentLabel: "Вложение",
     attachmentUnavailable: "Вложение недоступно.",
+    attachmentRemoved: "Этот файл был удалён.",
   },
 };
 

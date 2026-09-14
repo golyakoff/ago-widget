@@ -24,7 +24,23 @@ const COURTESY_ALLOWED_CONTENT_TYPES = new Set([
   "application/pdf",
 ]);
 
-export class AttachmentRejectedError extends Error {}
+/**
+ * `25-80`: `code` carries the server's stable RFC 7807 `type` slug (`ConversationErrors`'s own
+ * vocabulary, `ago-chat`; `api-design.md`: "clients branch on `type`, never on the message") -
+ * `null` when the body was not problem+json at all (a network-level failure, a proxy error page) or
+ * carried no `type`. This mirrors `ago-console`'s own `AttachmentApiError` (`attachmentsApi.ts`,
+ * `23-80`), which drew the identical distinction for the operator side of this same defect - the
+ * widget had no equivalent until this item, so every failure collapsed into one generic message
+ * regardless of whether the file was gone for good or the request merely hiccupped.
+ */
+export class AttachmentRejectedError extends Error {
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null = null) {
+    super(message);
+    this.code = code;
+  }
+}
 export class AttachmentUploadFailedError extends Error {}
 
 /** Returns a human-readable reason the file fails the courtesy check, or `null` if it passes.
@@ -42,12 +58,23 @@ export function courtesyValidate(file: File, strings: WidgetStrings): string | n
   return null;
 }
 
-async function problemMessage(response: Response): Promise<string> {
+interface ProblemInfo {
+  readonly message: string;
+  readonly code: string | null;
+}
+
+/** `25-80`: renamed from `problemMessage` and widened to also return `type` - every caller of this
+ * file's `Response`-to-error path shares this one parse, so this is the only place that reads the
+ * body, rather than a second reader added next to it just for `getAttachmentDownload`. */
+async function problemInfo(response: Response): Promise<ProblemInfo> {
   try {
     const problem = (await response.json()) as ProblemDetails;
-    return problem.title ?? `Request failed: ${response.status}`;
+    return {
+      message: problem.title ?? `Request failed: ${response.status}`,
+      code: problem.type ?? null,
+    };
   } catch {
-    return `Request failed: ${response.status}`;
+    return { message: `Request failed: ${response.status}`, code: null };
   }
 }
 
@@ -66,7 +93,8 @@ export async function createAttachment(
   });
 
   if (response.status !== 201) {
-    throw new AttachmentRejectedError(await problemMessage(response));
+    const info = await problemInfo(response);
+    throw new AttachmentRejectedError(info.message, info.code);
   }
 
   return (await response.json()) as CreateAttachmentResponse;
@@ -119,7 +147,7 @@ export async function confirmAttachment(
   });
 
   if (response.status !== 204) {
-    throw new AttachmentUploadFailedError(await problemMessage(response));
+    throw new AttachmentUploadFailedError((await problemInfo(response)).message);
   }
 }
 
@@ -135,7 +163,13 @@ export async function getAttachmentDownload(
   });
 
   if (response.status !== 200) {
-    throw new AttachmentRejectedError(await problemMessage(response));
+    // `25-80`: `info.code` is `ConversationErrors`' stable `Attachment.Removed` (permanent, HTTP
+    // 410) when that is what the server sent, and `null` for everything else this call can fail
+    // with (a still-`Pending` upload's `Attachment.NotReady`, a network error, an unreachable API,
+    // or any body that is not problem+json at all) - `renderAttachmentInto`'s catch is what turns
+    // this into a distinct message; this call site only has to carry the code that far.
+    const info = await problemInfo(response);
+    throw new AttachmentRejectedError(info.message, info.code);
   }
 
   return (await response.json()) as AttachmentDownloadInfo;

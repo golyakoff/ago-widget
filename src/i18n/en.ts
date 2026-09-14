@@ -33,6 +33,7 @@ export const en: WidgetStrings = {
   uploadFailedNote: "Couldn't send the attachment.",
   downloadAttachment: "📎 Download attachment",
   attachmentUnavailable: "Attachment unavailable.",
+  attachmentRemoved: "This file was removed.",
   attachmentAlt: "Attachment",
   // `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
   // short statements of fact, no hedging and no reassurance - the backlog item's own point is that a

@@ -181,6 +181,16 @@ export const widgetStyles = /* css */ `
     gap: 0.375rem;
   }
 
+  /* 23-78's own finding, restated for the identical bug found one element over on the same pass:
+     createProcessingNotice builds this element hidden = true and only reveals it once a site's own
+     notice text or URL actually arrives - but the display: flex two rules above is an author rule
+     with no [hidden] exception, so it silently outranks the browser's own [hidden] default the same
+     way .ago-attach's did. Every widget on every site that has never configured a processing notice
+     was rendering this as a real, empty, 17px grey strip under the header - not absent, just blank. */
+  .ago-processing-notice[hidden] {
+    display: none;
+  }
+
   .ago-processing-notice__link {
     color: var(--ago-accent);
     font-weight: 600;
@@ -394,6 +404,18 @@ export const widgetStyles = /* css */ `
     cursor: pointer;
     padding: 0;
     line-height: 1;
+  }
+
+  /* 23-78: found live, 2026-09-16 - attachButton.hidden = true (this button's own default, and
+     onAttachmentUploadGrantChange's own toggle) set the hidden attribute correctly, but had no
+     visible effect: the browser's own [hidden] display:none UA rule loses to any author rule that
+     sets display on the same element, regardless of selector specificity, because author-origin CSS
+     always outranks user-agent-origin CSS for a plain, non-important declaration - and the rule just
+     above sets display: flex unconditionally. .ago-panel[hidden] above already has to say this
+     explicitly for the identical reason; this button needed the same explicit override and never had
+     it, so every visitor saw the attach button regardless of whether they held a grant. */
+  .ago-attach[hidden] {
+    display: none;
   }
 
   /* 23-61: a reserved place, styled to look reserved rather than broken or clickable - the

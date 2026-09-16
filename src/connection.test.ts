@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MessageDto, VisitorJoinResult } from "./protocol/types.js";
+import type { AttachmentUploadGrantChangedDto, MessageDto, VisitorJoinResult } from "./protocol/types.js";
 import { WidgetStorage } from "./storage.js";
 import type { WidgetConfig } from "./config.js";
 import { HubConnectionState, currentHub, joinQueue, resetFakeSignalR } from "./testing/fakeSignalR.js";
@@ -47,6 +47,10 @@ function message(id: string, sequence: number, authorKind: "Visitor" | "Operator
     body: `message ${id}`,
     createdAt: "2026-08-25T09:00:00+00:00",
   };
+}
+
+function grantChanged(granted: boolean): AttachmentUploadGrantChangedDto {
+  return { conversationId: CONVERSATION_ID, granted, occurredAt: "2026-09-16T09:00:00+00:00" };
 }
 
 function joinResult(history: MessageDto[], hasAttachmentUploadGrant?: boolean): VisitorJoinResult {
@@ -213,6 +217,89 @@ describe("a connection that drops and comes back", () => {
     await connection.start();
 
     expect(grants).toEqual([false]);
+  });
+});
+
+describe("a live attachment-upload grant push while the connection stays open", () => {
+  /**
+   * `25-110`'s own fix, proven as behaviour: a connection that never drops, never reconnects, still
+   * sees the operator's own grant land - `onAttachmentUploadGrantChange` fires straight from the
+   * `"AttachmentUploadGrantChanged"` push, not from a rejoin. Fails before this item (the listener had
+   * no way to hear this event at all - `currentHub().pushAttachmentUploadGrantChanged` would find no
+   * handler registered, so nothing would fire), passes after it.
+   */
+  it("reports a grant the instant it is pushed, with no reconnect", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push(joinResult([], false));
+    await connection.start();
+    expect(grants).toEqual([false]);
+
+    currentHub().pushAttachmentUploadGrantChanged(grantChanged(true));
+
+    expect(grants).toEqual([false, true]);
+    expect(currentHub().invocationsOf("JoinAsync")).toHaveLength(0);
+  });
+
+  // `25-110`'s own "revoke matters as much as grant" - a visitor mid-upload when the operator revokes
+  // must lose the icon live too, on the identical push mechanism.
+  it("reports a revoke the instant it is pushed, with no reconnect", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push(joinResult([], true));
+    await connection.start();
+    expect(grants).toEqual([true]);
+
+    currentHub().pushAttachmentUploadGrantChanged(grantChanged(false));
+
+    expect(grants).toEqual([true, false]);
+    expect(currentHub().invocationsOf("JoinAsync")).toHaveLength(0);
+  });
+
+  // The reconnect-riding fallback (`onAttachmentUploadGrantChange`'s own pre-25-110 behaviour) must
+  // keep working unchanged - a dropped-and-recovered connection still catches up correctly even when
+  // no live push ever arrived for the change it missed.
+  it("still catches up on reconnect when a push was missed entirely", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push(joinResult([], false));
+    await connection.start();
+    expect(grants).toEqual([false]);
+
+    // No live push here - the connection drops before the operator's grant ever reaches it.
+    joinQueue.push(joinResult([], true));
+    currentHub().dropToReconnecting();
+    currentHub().completeReconnect();
+    await Promise.resolve();
+
+    expect(grants).toEqual([false, true]);
+  });
+
+  // A live push and a rejoin can both report the same fact - the widget's own icon toggle is
+  // idempotent either way, so this connection does not need to suppress the second, redundant report.
+  it("reports both a live push and a later reconnect's own re-read, even when they agree", async () => {
+    const connection = newConnection();
+    const grants: boolean[] = [];
+    connection.onAttachmentUploadGrantChange((hasGrant) => grants.push(hasGrant));
+
+    joinQueue.push(joinResult([], false));
+    await connection.start();
+
+    currentHub().pushAttachmentUploadGrantChanged(grantChanged(true));
+    expect(grants).toEqual([false, true]);
+
+    joinQueue.push(joinResult([], true));
+    currentHub().dropToReconnecting();
+    currentHub().completeReconnect();
+    await Promise.resolve();
+
+    expect(grants).toEqual([false, true, true]);
   });
 });
 

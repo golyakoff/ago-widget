@@ -1,5 +1,10 @@
 import * as signalR from "@microsoft/signalr";
-import type { HistoryPage, MessageDto, VisitorJoinResult } from "./protocol/types.js";
+import type {
+  AttachmentUploadGrantChangedDto,
+  HistoryPage,
+  MessageDto,
+  VisitorJoinResult,
+} from "./protocol/types.js";
 import type { WidgetConfig } from "./config.js";
 import type { WidgetStorage } from "./storage.js";
 import { defaultBackoffOptions, jitteredDelayMs } from "./protocol/backoff.js";
@@ -121,6 +126,15 @@ export class VisitorConnection {
 
     this.connection.on("MessageReceived", (dto: MessageDto) => this.handleIncoming(dto));
 
+    // `25-110`: the live push - an operator's grant/revoke click reaches this connection the instant
+    // it happens, no reload, no reconnect required. A thin wrapper, like `MessageReceived` right
+    // above: no filtering by `this.conversationId` (this widget only ever holds one conversation open
+    // per connection, and the server only ever addresses this connection's own principal), no business
+    // logic - just forward `granted` to whoever is listening.
+    this.connection.on("AttachmentUploadGrantChanged", (dto: AttachmentUploadGrantChangedDto) => {
+      this.grantListener?.(dto.granted);
+    });
+
     // realtime.md: the server may ask a client to reconnect on its own schedule before a draining
     // node shuts down. Purely informational here - the drain sequence's own subsequent disconnect
     // is what actually triggers `onreconnecting`/`onreconnected` below; this hook exists so a host
@@ -143,21 +157,23 @@ export class VisitorConnection {
   }
 
   /**
-   * `23-78`: fired with the fresh `VisitorJoinResult.hasAttachmentUploadGrant` every time this
-   * connection actually rejoins the conversation - the initial `start()` and, just as importantly,
-   * every automatic `resumeAfterReconnect()` below, which already calls plain `JoinAsync` for its own
-   * message-history reason and was simply discarding this field until now. A missing field (an older
-   * server) folds to `false` at the one place both call sites read it, `emitGrantChange` below - the
-   * closed-by-default direction `VisitorJoinResult.hasAttachmentUploadGrant`'s own remarks commit to.
+   * `25-110`: fires two ways now, and both matter.
    *
-   * This is *not* a live push from the server the moment an operator toggles the grant mid-session -
-   * there still is none, the same gap this widget already accepts for a block/unblock. It is a
-   * free-of-extra-cost refresh riding a network event (an automatic reconnect) this connection was
-   * already going to make for an unrelated reason, which is a strictly cheaper thing to wire than a
-   * new push channel would have been - a visitor whose connection drops and recovers, or whose laptop
-   * sleeps and wakes, sees the icon catch up to the operator's latest decision without a full page
-   * reload; one who stays connected the whole time still does not, until this method's own
-   * `onreconnected` fires or the page is reloaded.
+   * **Live**, the instant an operator's own grant/revoke click lands - the `"AttachmentUploadGrantChanged"`
+   * listener above calls this connection's `grantListener` directly, with no reconnect and no reload,
+   * for a visitor who has been connected the whole time. This is the fix for the gap this doc comment
+   * used to describe in as many words: "there still is none... a visitor who stays connected the whole
+   * time still does not [see it], until... the page is reloaded."
+   *
+   * **Riding a rejoin**, exactly as before `25-110` - fired with the fresh
+   * `VisitorJoinResult.hasAttachmentUploadGrant` on the initial `start()` and on every automatic
+   * `resumeAfterReconnect()` below. This is not merely legacy: it is the backstop for a live push that
+   * a drop-and-recover window could have missed entirely (`onreconnected` re-running `JoinAsync` is
+   * the same self-healing read this widget already relied on for every other kind of missed update),
+   * so a visitor whose connection drops and recovers, or whose laptop sleeps and wakes, still catches
+   * up correctly even if the live push above never arrived. A missing field (an older server) folds to
+   * `false` at the one place both call sites read it, `emitGrantChange` below - the closed-by-default
+   * direction `VisitorJoinResult.hasAttachmentUploadGrant`'s own remarks commit to.
    */
   onAttachmentUploadGrantChange(listener: (hasAttachmentUploadGrant: boolean) => void): void {
     this.grantListener = listener;

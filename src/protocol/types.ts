@@ -65,18 +65,30 @@ export interface VisitorJoinResult {
   isNew: boolean;
   history: MessageDto[];
   /** `23-78`: `Ago.Chat.Contracts.VisitorJoinResult.HasAttachmentUploadGrant` - whether this
-   * conversation currently carries a visitor-side attachment-upload grant. This is the widget's one
-   * and only channel for the fact; `ui/widget.ts` uses it only to decide whether to show the attach
-   * icon at all - the server's own `CreateAttachmentHandler.HandleAsVisitorAsync` is the real control
-   * regardless of what this field says (hiding the icon is a consequence, never the control). Missing
-   * on an older server (before this field existed) reads as `undefined`, which this widget treats the
-   * same as `false` - the closed-by-default direction is the safe one for a field this widget cannot
-   * itself verify. Still not a live push the instant an operator toggles it - `connection.ts`'s
-   * `onAttachmentUploadGrantChange` re-reads this same field on every automatic reconnect (a network
-   * blip, a laptop waking up), which narrows the staleness window to that but does not close it: a
-   * visitor who stays connected the whole time sees the icon catch up only on the next reconnect or a
-   * full page reload, the same residual gap this widget already accepts for a block/unblock. */
+   * conversation currently carries a visitor-side attachment-upload grant. This is the widget's own
+   * read of the fact at the moment of joining/resuming; `ui/widget.ts` uses it only to decide whether
+   * to show the attach icon at all - the server's own `CreateAttachmentHandler.HandleAsVisitorAsync` is
+   * the real control regardless of what this field says (hiding the icon is a consequence, never the
+   * control). Missing on an older server (before this field existed) reads as `undefined`, which this
+   * widget treats the same as `false` - the closed-by-default direction is the safe one for a field
+   * this widget cannot itself verify.
+   *
+   * `25-110`: no longer the only channel for this fact - a connection that stays open the whole time
+   * now also receives `AttachmentUploadGrantChanged` live (`connection.ts`'s own remarks on
+   * `onAttachmentUploadGrantChange`). This field's own job shrank to exactly two moments: the initial
+   * join, and the reconnect-riding backstop for a push that a drop-and-recover window could have
+   * missed - it is no longer the only way this widget ever learns the current state. */
   hasAttachmentUploadGrant?: boolean;
+}
+
+/** `25-110`: `Ago.Chat.Contracts.AttachmentUploadGrantChangedDto` - the live push an operator's own
+ * grant/revoke click sends to the one visitor connection holding this conversation open, the instant
+ * it happens (no reconnect, no reload). See `connection.ts`'s `onAttachmentUploadGrantChange` for how
+ * this widget reacts to it. */
+export interface AttachmentUploadGrantChangedDto {
+  conversationId: string;
+  granted: boolean;
+  occurredAt: string;
 }
 
 export interface HistoryPage {

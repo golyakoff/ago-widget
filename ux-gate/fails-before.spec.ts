@@ -138,4 +138,44 @@ test.describe("fails-before proof", () => {
     const after = await page.evaluate(measureContrastViolations);
     expect(after.violations, "expected removing the probe to restore a clean pass").toEqual([]);
   });
+
+  /**
+   * `23-78`: found live, 2026-09-16, against the real production widget - a visitor with no
+   * attachment-upload grant and a site with no processing notice configured saw both anyway.
+   * `widget.ts` sets `.hidden = true` on both elements correctly; `styles.ts` gave both a `display:
+   * flex` rule with no `[hidden]` exception, and an author `display` rule always outranks the
+   * browser's own `[hidden]` default regardless of specificity - so the property was right and the
+   * pixel was wrong. `openWidget`'s own fixture never connects the hub and never configures a notice,
+   * so both elements sit exactly in their construction-time `hidden = true` state here - the one
+   * jsdom (`src/ui/widget.test.ts`) could not be trusted to check, because its CSS cascade does not
+   * reliably reproduce this exact author-versus-user-agent precedence rule the way a real browser
+   * does - only a real rendering engine can prove a `display: none` fight was actually won.
+   */
+  test("hidden means invisible: the attach button and the processing notice, not just marked hidden", async ({
+    page,
+  }) => {
+    await openWidget(page, { open: true });
+
+    const attach = page.locator(".ago-attach");
+    const processingNotice = page.locator(".ago-processing-notice");
+
+    await expect(attach, "the attach button carries no grant here and must not be visible").toBeHidden();
+    await expect(
+      processingNotice,
+      "no notice is configured in this fixture and the strip must not be visible",
+    ).toBeHidden();
+
+    // Prove the check itself is not vacuous: removing the `hidden` attribute must flip both to
+    // visible, the same "seen to fail" discipline this file's own header states.
+    await page.evaluate(() => {
+      const host = Array.from(document.querySelectorAll("*")).find(
+        (el) => (el as Element & { shadowRoot: ShadowRoot | null }).shadowRoot,
+      ) as (Element & { shadowRoot: ShadowRoot }) | undefined;
+      host?.shadowRoot.querySelector(".ago-attach")?.removeAttribute("hidden");
+      host?.shadowRoot.querySelector(".ago-processing-notice")?.removeAttribute("hidden");
+    });
+
+    await expect(attach).toBeVisible();
+    await expect(processingNotice).toBeVisible();
+  });
 });

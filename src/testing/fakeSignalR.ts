@@ -20,7 +20,7 @@
  * connection that renews its token and one that has been carrying a captured, expired string since
  * the page loaded - nothing else about the fake, or about a real socket, distinguishes them.
  */
-import type { MessageDto } from "../protocol/types.js";
+import type { AttachmentUploadGrantChangedDto, MessageDto } from "../protocol/types.js";
 
 export const HubConnectionState = {
   Disconnected: "Disconnected",
@@ -149,6 +149,12 @@ export class FakeHubConnection {
   /** The server pushing over this connection. */
   push(dto: MessageDto): void {
     this.handlers.get("MessageReceived")?.(dto as never);
+  }
+
+  /** `25-110`: the server's live grant/revoke push, over this same connection - the identical shape
+   * `push` above already gives `MessageReceived`, for `AttachmentUploadGrantChanged` instead. */
+  pushAttachmentUploadGrantChanged(dto: AttachmentUploadGrantChangedDto): void {
+    this.handlers.get("AttachmentUploadGrantChanged")?.(dto as never);
   }
 
   /** The transport noticing the connection is gone and starting to retry. */

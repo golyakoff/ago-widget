@@ -132,6 +132,19 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**36.4 KB gzipped** (135.2 KB raw, minified), `25-120` measured 2026-09-17 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
+run build`) - **+1.3 KB gzipped** over the 35.1 KB baseline immediately below, checked directly the
+same way (stash this item's own changes, build, unstash, build again) rather than trusted. The
+`+1.3 KB` is the whole of this item: the real `.ago-emoji` trigger button and its picker's static
+40-cell grid, the click/keyboard/outside-click wiring (`toggleEmojiPicker`/`openEmojiPicker`/
+`closeEmojiPicker`/`insertEmoji`/`handleEmojiPickerKeydown` in `ui/widget.ts`), and two new i18n
+strings in each locale (`insertEmoji`, `emojiPickerLabel`, replacing `emojiComingSoon`) - no
+dependency was added. The 40 emoji themselves are plain characters, not an npm emoji-picker package
+(this item's own Scope names that alternative and rules it out - a real one would drag in a keyword
+index and skin-tone variants this fixed-40, no-search scope has no use for). Leaves 8.6 KB of the
+45 KB budget unused.
+
 **33.6 KB gzipped** (126.3 KB raw, minified), `25-27` measured 2026-09-09 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
 run build`) - **+0.3 KB gzipped** over the 33.3 KB baseline immediately below, checked directly the

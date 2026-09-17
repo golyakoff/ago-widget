@@ -53,7 +53,9 @@ export const widgetStyles = /* css */ `
   .ago-toggle:focus-visible,
   .ago-send:focus-visible,
   .ago-close:focus-visible,
-  .ago-input:focus-visible {
+  .ago-input:focus-visible,
+  .ago-emoji:focus-visible,
+  .ago-emoji-cell:focus-visible {
     outline: 0.1875rem solid var(--ago-accent);
     outline-offset: 0.125rem;
   }
@@ -365,15 +367,21 @@ export const widgetStyles = /* css */ `
 
   .ago-send:disabled,
   .ago-attach:disabled,
+  .ago-emoji:disabled,
   .ago-save:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  /* 23-61/23-62: the second row - attach (moved down from the field's own row), the still-reserved
-     emoji place, then save (23-62), align-items: center so every icon lines up on one baseline
-     rather than sitting off it. */
+  /* 23-61/23-62/25-120: the second row - attach (moved down from the field's own row), the emoji
+     picker's own trigger (25-120, filling the place 23-61 reserved), then save (23-62),
+     align-items: center so every icon lines up on one baseline rather than sitting off it.
+
+     25-120: position: relative is new - the one thing .ago-emoji-picker below needs from this
+     row in order to anchor itself above it (position: absolute there) rather than the viewport;
+     nothing else in this rule changes for it. */
   .ago-composer-controls {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -390,8 +398,13 @@ export const widgetStyles = /* css */ `
 
      23-62: .ago-save shares this exact box - the same reasoning applies to a second same-row icon
      button, and a mismatched size here would read as two different kinds of control rather than one
-     aligned strip. */
+     aligned strip.
+
+     25-120: .ago-emoji fills 23-61's own reserved place with the identical box, for the identical
+     reason - it used to be .ago-composer-reserved's own copy of these same four rules further down;
+     this is that rule inherited by the real button rather than duplicated a third time. */
   .ago-attach,
+  .ago-emoji,
   .ago-save {
     display: flex;
     align-items: center;
@@ -418,27 +431,60 @@ export const widgetStyles = /* css */ `
     display: none;
   }
 
-  /* 23-61: a reserved place, styled to look reserved rather than broken or clickable - the
-     backlog item's own requirement. Grayscale plus reduced opacity mutes the glyph without needing a
-     second icon set; no :hover rule at all, deliberately (the same reasoning 23-31's own CSS
-     states for the console's reserved nav entries: "the one thing this row must not look like is
-     clickable"). Sized and positioned like .ago-attach so the row reads as one aligned icon strip,
-     not because it needs to clear a target-size floor - ux-gate's minSize.ts never scores this
-     element at all, because a bare span with no interactive role does not match its selector list
-     (that file's own remarks: this is not an interactive element under-sized, it is not an
-     interactive element). */
-  .ago-composer-reserved {
-    display: inline-flex;
+  /* 25-120: the picker's own popover - anchored to .ago-composer-controls (position: relative
+     above), not to the viewport, so it moves with the row it belongs to rather than needing its own
+     coordinate math. left: 0 only, no right - an explicit width would either overflow the panel
+     on the narrow side or leave dead space on the wide one; shrink-to-fit content sizing (the default
+     for an absolutely positioned block with no width set) sizes it to the grid's own eight columns
+     and nothing more, comfortably inside .ago-panel's own content width either way this row's
+     buttons sit. A second, differently-styled overlay mechanism is exactly what this item's own
+     "Where this is likely to go wrong" warns against - this reuses the row's own icon sizing
+     (.ago-emoji-cell below matches .ago-attach/.ago-emoji/.ago-save's own 2rem box) and the
+     panel's own surface (white, rounded, shadowed) rather than inventing a second look. */
+  .ago-emoji-picker {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 0.5rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    background: #fff;
+    border: 0.0625rem solid #d1d5db;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.2);
+    padding: 0.375rem;
+    z-index: 1;
+  }
+
+  .ago-emoji-picker[hidden] {
+    display: none;
+  }
+
+  .ago-emoji-picker-row {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  /* Same 2rem box .ago-attach/.ago-emoji/.ago-save already use, for the identical WCAG 2.5.8
+     reason that rule's own comment states - forty of these are ux-gate's own minSize.ts scanning
+     every one of them, not just the row's three single buttons. */
+  .ago-emoji-cell {
+    display: flex;
     align-items: center;
     justify-content: center;
     width: 2rem;
     height: 2rem;
+    border: none;
+    background: transparent;
+    border-radius: 0.25rem;
     font-size: 1.25rem;
     line-height: 1;
-    opacity: 0.45;
-    filter: grayscale(1);
-    cursor: default;
-    user-select: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .ago-emoji-cell:hover {
+    background: rgba(0, 0, 0, 0.08);
   }
 
   .ago-file-input {

@@ -18,7 +18,8 @@ export const en: WidgetStrings = {
   typeAMessage: "Type a message…",
   send: "Send",
   attachAFile: "Attach a file",
-  emojiComingSoon: "Emoji (coming soon)",
+  insertEmoji: "Insert emoji",
+  emojiPickerLabel: "Emoji picker",
   saveConversation: "Save conversation",
   saveConversationFailedNote: "Couldn't save the conversation. Please try again.",
   previousChatExpired:

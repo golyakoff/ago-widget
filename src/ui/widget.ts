@@ -158,6 +158,25 @@ function createSvgIcon(d: string): SVGSVGElement {
 }
 
 /**
+ * `25-120`: the fixed, curated 40-emoji set the backlog item names, verbatim and in that exact
+ * order - a flat, static list, never a search index or a category tree (`docs/backlog/
+ * 25-120-*.md`'s own Scope: "no search, no categories, no recently-used tracking, no skin-tone
+ * variants"). Forty literal characters cost nothing meaningful against the gzip budget - the
+ * alternative this item explicitly rules out is an npm emoji-picker package, which would drag in
+ * thousands of entries, a keyword index and skin-tone variants this fixed-40 scope has no use for.
+ */
+const EMOJI_PICKER_GLYPHS: readonly string[] = [
+  "😀", "😊", "🙂", "😉", "😂", "😍", "🤔", "😮", "😢", "😡", "😴", "🥳",
+  "👍", "👎", "🙏", "👏", "🤝", "💪", "✋", "👋",
+  "❤️", "💔", "⭐", "🔥", "✅", "❌", "⚠️", "❓",
+  "🎉", "🎁", "📅", "📞", "📧", "🕒", "💰", "🛒", "📦", "🚀", "💡", "📎",
+];
+
+/** 40 divides evenly by this, so every column has exactly the same number of rows and `ArrowUp`/
+ * `ArrowDown` in `handleEmojiPickerKeydown` never has to special-case a short last row. */
+const EMOJI_PICKER_COLUMNS = 8;
+
+/**
  * Assembles the widget's whole visible surface inside one Shadow DOM root. This is intentionally
  * one class rather than a component framework: the panel has a fixed, small set of views (closed,
  * connecting, open) and pulling in a UI framework's runtime for that would blow the bundle budget
@@ -186,14 +205,31 @@ export class ChatWidget {
   private readonly input: HTMLTextAreaElement;
   private readonly sendButton: HTMLButtonElement;
   private readonly attachButton: HTMLButtonElement;
-  /** `23-61`: the composer's second row's still-reserved place - an emoji picker is its own,
-   * not-yet-built item. A plain `<span>`, never a `<button>`: no `href`/`tabindex`/click handler, so
-   * it is neither part of the tab order nor reachable by keyboard as though it were a control - the
-   * same shape `23-31` used for the console's own reserved nav entries (a `<span
-   * aria-disabled="true">`, `ago-console`'s `AppShell.tsx`), followed here rather than invented
-   * fresh. `aria-disabled="true"` names what is there (a place, not yet a control) without hiding it
-   * from assistive tech the way `aria-hidden` would. */
-  private readonly emojiPlaceholder: HTMLSpanElement;
+  /** `25-120`: the real button that fills the place `23-61` reserved and explicitly deferred ("An
+   * emoji picker. This reserves its place; choosing and building one is a separate item.") - icon-
+   * only, the same "accessible name from `aria-label` alone" shape every other composer-row button
+   * already uses. The glyph itself is a plain 🙂 character, not an SVG: Material Symbols Outlined has
+   * no "emoji" glyph this file could point at honestly (unlike `attachAFile`/`saveConversation`,
+   * which reuse verified icon paths from Google's own source), and inventing one here would be worse
+   * than the character it stands for. Gated on the identical `isConnected || autoOpenedWithoutConnecting`
+   * signal `updateSendButtonEnabled` already uses, not `attachButton`'s stricter `isConnected`-only
+   * one - inserting an emoji is a local textarea edit, not a call to the server the way an upload or
+   * an archive build is, so it should be exactly as available as typing itself already is. */
+  private readonly emojiButton: HTMLButtonElement;
+  /** `25-120`: the picker's own popover, hidden by default and toggled by `emojiButton` - a
+   * `role="grid"` of `role="gridcell"` buttons (`emojiCells` below), the ARIA Authoring Practices'
+   * own pattern for "a 2-D grid of simple, equally-weighted choices" (its own worked example is an
+   * emoji picker). Chosen over `role="listbox"`/`role="menu"` because arrow-key movement here is
+   * genuinely two-dimensional (`ArrowUp`/`ArrowDown` cross rows, `ArrowLeft`/`ArrowRight` cross
+   * columns) - a listbox's own one-dimensional model would have to fake the vertical axis, which a
+   * grid already names correctly. Anchored to `.ago-composer-controls` (`position: relative` there,
+   * `ui/styles.ts`) rather than a second, differently-styled overlay mechanism - reuses this row's
+   * own sizing/spacing rather than inventing a new surface. */
+  private readonly emojiPicker: HTMLDivElement;
+  /** `25-120`: every cell button in `emojiPicker`, in the same row-major order as
+   * `EMOJI_PICKER_GLYPHS` - what `handleEmojiPickerKeydown`'s roving-tabindex arithmetic walks.
+   * Kept alongside the picker itself rather than re-queried from the DOM on every keypress. */
+  private readonly emojiCells: readonly HTMLButtonElement[];
   /** `23-62`: the real button that fills the second reserved place `23-61` left - a down-arrow icon
    * (the author's own decision, recorded in the backlog item), disabled/enabled on the identical
    * `isConnected` signal `attachButton` already uses, since building the archive needs the same live
@@ -523,7 +559,19 @@ export class ChatWidget {
     this.attachButton.hidden = true;
     this.attachButton.addEventListener("click", () => this.fileInput.click());
 
-    this.emojiPlaceholder = this.buildReservedComposerPlace("🙂", this.strings.emojiComingSoon);
+    this.emojiButton = document.createElement("button");
+    this.emojiButton.type = "button";
+    this.emojiButton.className = "ago-emoji";
+    this.emojiButton.setAttribute("aria-label", this.strings.insertEmoji);
+    this.emojiButton.setAttribute("aria-haspopup", "grid");
+    this.emojiButton.setAttribute("aria-expanded", "false");
+    this.emojiButton.textContent = "🙂";
+    this.emojiButton.disabled = true;
+    this.emojiButton.addEventListener("click", () => this.toggleEmojiPicker());
+
+    const { picker, cells } = this.buildEmojiPicker();
+    this.emojiPicker = picker;
+    this.emojiCells = cells;
 
     // `23-62`: a real button now, in the place `23-61` reserved for it - a down-arrow icon, the
     // author's own decision (backlog item's own "Decision" line). Sized and laid out identically to
@@ -558,7 +606,13 @@ export class ChatWidget {
     // backlog item's own order.
     const composerControls = document.createElement("div");
     composerControls.className = "ago-composer-controls";
-    composerControls.append(this.attachButton, this.fileInput, this.emojiPlaceholder, this.saveButton);
+    composerControls.append(
+      this.attachButton,
+      this.fileInput,
+      this.emojiButton,
+      this.emojiPicker,
+      this.saveButton,
+    );
 
     composer.append(composerRow, composerControls);
     this.panel.append(header);
@@ -759,7 +813,8 @@ export class ChatWidget {
     this.input.placeholder = strings.typeAMessage;
     this.sendButton.setAttribute("aria-label", strings.send);
     this.attachButton.setAttribute("aria-label", strings.attachAFile);
-    this.emojiPlaceholder.title = strings.emojiComingSoon;
+    this.emojiButton.setAttribute("aria-label", strings.insertEmoji);
+    this.emojiPicker.setAttribute("aria-label", strings.emojiPickerLabel);
     this.saveButton.setAttribute("aria-label", strings.saveConversation);
     this.saveButton.title = strings.saveConversation;
 
@@ -974,6 +1029,7 @@ export class ChatWidget {
     this.autoOpenedWithoutConnecting = true;
     this.input.disabled = false;
     this.updateSendButtonEnabled();
+    this.updateEmojiButtonEnabled();
 
     this.drawAutoGreeting(greetingText);
   }
@@ -1175,6 +1231,11 @@ export class ChatWidget {
     this.input.disabled = true;
     this.attachButton.disabled = true;
     this.sendButton.disabled = true;
+    // Set directly, not via `updateEmojiButtonEnabled()` - that helper also honours
+    // `autoOpenedWithoutConnecting`, which a session expiring mid-auto-greeting does not reset, and
+    // `sendButton` just above has the identical reason for the same direct assignment.
+    this.emojiButton.disabled = true;
+    this.closeEmojiPicker("none");
     this.status.textContent = this.strings.sessionExpired;
 
     const connection = this.connection;
@@ -1203,6 +1264,7 @@ export class ChatWidget {
     }
     this.updateSendButtonEnabled();
     this.updateSaveButtonEnabled();
+    this.updateEmojiButtonEnabled();
     this.status.textContent =
       state === "connecting"
         ? this.strings.connecting
@@ -1235,25 +1297,221 @@ export class ChatWidget {
     this.saveButton.disabled = !this.isConnected || this.isSavingConversation;
   }
 
-  /** `23-61`: a reserved composer place - `<span>`, not `<button>`, so there is no `href`, `type`,
-   * click handler or `tabindex` to ever add: this element cannot become reachable by keyboard as a
-   * control by accident the way an unconditionally-`disabled` `<button>` still could (a `disabled`
-   * attribute removed by a future edit would silently turn it into a real one). `aria-disabled="true"`
-   * rather than `aria-hidden="true"` - it names "a place, not a control", not "nothing here" - and
-   * `title` gives a mouse-hovering visitor the same "coming soon" context a sighted keyboard user
-   * gets for free from `ux-gate`'s contrast/size checks never touching this element at all (it never
-   * matches `minSize.ts`'s `INTERACTIVE_SELECTOR`, which lists `button`/`a[href]`/`[role='button']`
-   * and the like - a bare `<span>` with no role is not on that list, deliberately: this is not an
-   * interactive element under-sized, it is not an interactive element). Mirrors `23-31`'s own shape
-   * for the console's reserved nav entries (`ago-console`'s `AppShell.tsx`) rather than inventing a
-   * new one for this widget. */
-  private buildReservedComposerPlace(icon: string, title: string): HTMLSpanElement {
-    const place = document.createElement("span");
-    place.className = "ago-composer-reserved";
-    place.setAttribute("aria-disabled", "true");
-    place.title = title;
-    place.textContent = icon;
-    return place;
+  /** `25-120`: mirrors `updateSendButtonEnabled`/`updateSaveButtonEnabled` above - re-evaluated on
+   * every connection-state change and once more when an auto-greeted panel enables the composer
+   * without a live connection (`openForAutoGreeting`). Inserting an emoji is a local edit to
+   * `this.input`, not a call to the server, so it tracks the same "can the visitor type at all"
+   * signal `updateSendButtonEnabled` uses (`isConnected || autoOpenedWithoutConnecting`) rather than
+   * `attachButton`'s stricter connection-only gate. Closes the picker the moment it goes disabled -
+   * a disabled trigger can no longer be clicked to close it, so this is the one path that must do it
+   * instead (found by asking "what closes the picker if the connection drops while it's open?", not
+   * by a failing test). */
+  private updateEmojiButtonEnabled(): void {
+    const enabled = this.isConnected || this.autoOpenedWithoutConnecting;
+    this.emojiButton.disabled = !enabled;
+    if (!enabled) {
+      this.closeEmojiPicker("none");
+    }
+  }
+
+  /**
+   * `25-120`: builds the picker's whole static DOM once, in the constructor - the 40-emoji set never
+   * changes at runtime, so there is nothing to rebuild on open/close, only `hidden`/`disabled`/
+   * `tabIndex` to flip. `role="grid"` > `role="row"` > `role="gridcell"`, the ARIA Authoring
+   * Practices' own shape for a fixed 2-D grid of equally-weighted choices (that pattern's own worked
+   * example is an emoji picker) - `emojiButton`'s own doc comment has the fuller reasoning for
+   * choosing it over a listbox/menu. Each cell is a real `<button>` rather than a `<div
+   * role="gridcell">` wrapping something else focusable: a native button gets `Enter`/`Space`
+   * activation (dispatching `click`) for free, which is exactly the "Enter/Space picks the focused
+   * one" Done-when and needs no hand-rolled key handling of its own - `handleEmojiPickerKeydown`
+   * below only ever has to deal with the arrow keys and `Escape`.
+   *
+   * <b>Roving tabindex, not a fixed one.</b> Every cell starts at `tabIndex = -1` except the first,
+   * which starts at `0` - the standard composite-widget technique this item's own Scope names by
+   * name ("a roving-tabindex ... pattern"): `Tab` reaches the grid as a single stop, and the arrow
+   * keys move which cell that stop lands on. This only works correctly inside `WidgetPanel`'s own
+   * `FocusTrap` because of the accompanying fix in `focus-trap.ts` - see that file's own doc comment
+   * on why a roving-tabindex sibling group needed it.
+   */
+  private buildEmojiPicker(): { picker: HTMLDivElement; cells: HTMLButtonElement[] } {
+    const picker = document.createElement("div");
+    picker.className = "ago-emoji-picker";
+    picker.setAttribute("role", "grid");
+    picker.setAttribute("aria-label", this.strings.emojiPickerLabel);
+    picker.hidden = true;
+    picker.addEventListener("keydown", (event) => this.handleEmojiPickerKeydown(event));
+
+    const cells: HTMLButtonElement[] = [];
+    for (let rowStart = 0; rowStart < EMOJI_PICKER_GLYPHS.length; rowStart += EMOJI_PICKER_COLUMNS) {
+      const row = document.createElement("div");
+      row.setAttribute("role", "row");
+      row.className = "ago-emoji-picker-row";
+
+      for (const glyph of EMOJI_PICKER_GLYPHS.slice(rowStart, rowStart + EMOJI_PICKER_COLUMNS)) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "ago-emoji-cell";
+        cell.setAttribute("role", "gridcell");
+        cell.tabIndex = cells.length === 0 ? 0 : -1;
+        cell.textContent = glyph;
+        cell.addEventListener("click", () => this.insertEmoji(glyph));
+        row.appendChild(cell);
+        cells.push(cell);
+      }
+
+      picker.appendChild(row);
+    }
+
+    return { picker, cells };
+  }
+
+  private toggleEmojiPicker(): void {
+    if (this.emojiPicker.hidden) {
+      this.openEmojiPicker();
+    } else {
+      this.closeEmojiPicker("trigger");
+    }
+  }
+
+  /** Resets the roving tabindex to the first cell on every open, rather than remembering the last
+   * focused one across opens - the picker is a flat, static grid with no notion of "where you left
+   * off" worth preserving (`docs/backlog/25-120-*.md`'s own Scope: no recently-used tracking), so a
+   * deterministic starting corner is simpler than state to carry between an open and the next. */
+  private openEmojiPicker(): void {
+    this.emojiPicker.hidden = false;
+    this.emojiButton.setAttribute("aria-expanded", "true");
+
+    for (const [index, cell] of this.emojiCells.entries()) {
+      cell.tabIndex = index === 0 ? 0 : -1;
+    }
+    this.emojiCells[0]?.focus();
+
+    document.addEventListener("click", this.handleDocumentClickForEmojiPicker, true);
+  }
+
+  /**
+   * `focusTarget` is why this is not simply "close" - the three callers each land focus somewhere
+   * different for a different reason: `Escape`/an outside click return it to `emojiButton` itself
+   * (the backlog item's own words, "returns focus to the emoji button"); picking an emoji returns it
+   * to `this.input` instead, so typing continues without an extra click (the item's own words again);
+   * and `updateEmojiButtonEnabled` closing the picker out from under a connection drop moves focus
+   * nowhere; `emojiButton` is about to become `disabled` and cannot accept it.
+   */
+  private closeEmojiPicker(focusTarget: "trigger" | "input" | "none"): void {
+    if (this.emojiPicker.hidden) {
+      return;
+    }
+
+    this.emojiPicker.hidden = true;
+    this.emojiButton.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", this.handleDocumentClickForEmojiPicker, true);
+
+    if (focusTarget === "trigger") {
+      this.emojiButton.focus();
+    } else if (focusTarget === "input") {
+      this.input.focus();
+    }
+  }
+
+  /**
+   * `event.composedPath()`, not `event.target` - the widget renders inside a Shadow DOM
+   * (`shadow-root.ts`), and a click originating inside it retargets `event.target` to the shadow
+   * host by the time this listener (registered on `document`, outside the shadow tree) observes it.
+   * `composedPath()` is the one API that still names the real, shadow-internal element the click
+   * actually landed on, which is what lets this tell "inside the picker" and "on the trigger button
+   * itself" apart from "genuinely outside both" - `FocusTrap`'s own remarks on `getRootNode()` solve
+   * the analogous problem for `document.activeElement`.
+   *
+   * The trigger button is excluded deliberately: it already toggles the picker from its own `click`
+   * handler, so this listener staying silent about it is what stops a click there from closing the
+   * picker (this handler) and immediately reopening it (the button's own handler) on the same click.
+   */
+  private readonly handleDocumentClickForEmojiPicker = (event: MouseEvent): void => {
+    const path = event.composedPath();
+    if (path.includes(this.emojiPicker) || path.includes(this.emojiButton)) {
+      return;
+    }
+
+    this.closeEmojiPicker("trigger");
+  };
+
+  /**
+   * `25-120`: cursor-position insert, not append-only - the backlog item's own concrete case is a
+   * visitor who clicked back into the middle of what they already typed, who must get the emoji
+   * where their cursor actually is, not at the end. `selectionStart`/`selectionEnd` rather than
+   * always the same value: a visitor who had a *range* selected (rather than a collapsed cursor)
+   * gets the emoji replacing that selection, matching how typing a character over a selection
+   * already behaves in every text field.
+   *
+   * `updateSendButtonEnabled()` right after, not left to the next keystroke - setting `.value`
+   * programmatically never fires the `input` event `this.input`'s own listener depends on
+   * (`invokeModule` above has the identical call for the identical reason), so nothing else here
+   * would otherwise notice the composer went from empty to non-empty.
+   */
+  private insertEmoji(emoji: string): void {
+    const value = this.input.value;
+    const start = this.input.selectionStart ?? value.length;
+    const end = this.input.selectionEnd ?? value.length;
+
+    this.input.value = value.slice(0, start) + emoji + value.slice(end);
+    const cursor = start + emoji.length;
+    this.input.setSelectionRange(cursor, cursor);
+    this.updateSendButtonEnabled();
+
+    this.closeEmojiPicker("input");
+  }
+
+  /**
+   * Arrow-key roving-tabindex navigation for `emojiPicker`'s `role="grid"` - `Enter`/`Space` need no
+   * branch here at all, since every cell is a real `<button>` that already activates on both (this
+   * method's own doc comment on `buildEmojiPicker` has the reasoning). `Escape` stops the event from
+   * reaching `WidgetPanel`'s own `keydown` listener (`event.stopPropagation()`) - without it, closing
+   * just the picker on `Escape` would also close the whole chat panel, since that listener treats
+   * every `Escape` anywhere inside it as "close the dialog".
+   *
+   * Movement clamps at the grid's own edges rather than wrapping - `EMOJI_PICKER_COLUMNS` divides
+   * `EMOJI_PICKER_GLYPHS.length` evenly (that constant's own doc comment), so every column has the
+   * same five rows and `ArrowUp`/`ArrowDown` never has to special-case a short one.
+   */
+  private handleEmojiPickerKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeEmojiPicker("trigger");
+      return;
+    }
+
+    const currentIndex = this.emojiCells.findIndex((cell) => cell === this.root.activeElement);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    let nextIndex: number;
+    switch (event.key) {
+      case "ArrowRight":
+        nextIndex = Math.min(currentIndex + 1, this.emojiCells.length - 1);
+        break;
+      case "ArrowLeft":
+        nextIndex = Math.max(currentIndex - 1, 0);
+        break;
+      case "ArrowDown":
+        nextIndex = Math.min(currentIndex + EMOJI_PICKER_COLUMNS, this.emojiCells.length - 1);
+        break;
+      case "ArrowUp":
+        nextIndex = Math.max(currentIndex - EMOJI_PICKER_COLUMNS, 0);
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    if (nextIndex === currentIndex) {
+      return;
+    }
+
+    this.emojiCells[currentIndex]!.tabIndex = -1;
+    this.emojiCells[nextIndex]!.tabIndex = 0;
+    this.emojiCells[nextIndex]!.focus();
   }
 
   private sendCurrentMessage(): void {

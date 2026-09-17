@@ -136,6 +136,20 @@ export interface VisitorSessionResponse {
   widgetNoticeText: string | null;
   widgetNoticeUrl: string | null;
   enabledModules: string[];
+  /**
+   * `25-131`: an additive sibling of `enabledModules` above, never a reshape of it - a real, live
+   * tenant's own booking chip sent the literal text `/booking` because nothing on this response ever
+   * carried a site's own configured trigger words, and the chip hardcoded that command word
+   * unconditionally. A map from module key to that module's own, currently-configured
+   * `Ago.Chat.Domain.EnabledModule.TriggerWords` (e.g. `{"calendar": ["/записаться"]}`) - optional and
+   * absent for a session cached before this field existed, the same courtesy-re-check posture every
+   * other optional field here already gets. `ui/widget.ts`'s `loadBookingModuleChip` reads this
+   * module's own first entry instead of a hardcoded command word; a module present in `enabledModules`
+   * with no non-empty entry here is treated exactly like "not enabled" (`EnabledModule`'s own
+   * constructor, `ago-chat`, refuses to persist an empty trigger-word list in the first place, so this
+   * is a defensive re-check rather than the normal case).
+   */
+  enabledModuleTriggerWords?: Record<string, string[]>;
   widgetAttractAttention?: boolean;
   /**
    * `23-64`/`adr/0148`: three more additive fields, on the identical "optional, absent for a

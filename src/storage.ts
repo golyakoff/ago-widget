@@ -112,6 +112,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "enabled-module-trigger-words",
+    holds: "The real, currently-configured trigger word(s) for each add-on above - the tenant's own choice, never a value this widget invents.",
+    why: "Lets an add-on's own entry point (for example, the booking chip) send the word the tenant actually configured, instead of a fixed one that may no longer mean anything on this site (`25-131`).",
+    lifetime: "Same as the add-on list above; removed entirely once the tenant has no add-on switched on.",
+    survivesTabClose: true,
+  },
+  {
     key: "widget-attract-attention",
     holds: "Whether the tenant turned on «Привлекать внимание» - the launcher drawing attention to itself while closed (`23-63`).",
     why: "Same purpose as the colour above - a cached rendering preference, refreshed with the session.",
@@ -227,6 +234,17 @@ export interface VisitorSession {
    * pre-`23-105` attribute this field replaces.
    */
   enabledModules: string[];
+  /**
+   * `25-131`: cached alongside the rest on the identical terms - a map from each of
+   * `enabledModules`'s own keys to that module's own real, currently-configured trigger word(s), the
+   * raw `AuthEndpoints.VisitorSessionResponse.EnabledModuleTriggerWords` (`ago-chat`) carried on the
+   * response that minted or last renewed this session, refreshed on the identical schedule (`25-05`).
+   * `{}`, never absent, for a session written before this field existed or for a site with no grant at
+   * all - `session.ts`'s `store` already collapses the wire's optional field before this type ever
+   * sees it, the same "no third state to represent here" reasoning `widgetAttractAttention`'s own
+   * remarks give for its own boolean.
+   */
+  enabledModuleTriggerWords: Record<string, string[]>;
   /** `23-63`: cached alongside the rest on the identical terms - whether the tenant turned
    * «Привлекать внимание» on, refreshed on the identical schedule (`25-05`). Unlike the string fields
    * above, this one is a plain `boolean` rather than `T | null`: `session.ts`'s `store` already
@@ -301,6 +319,7 @@ export class WidgetStorage {
       widgetNoticeText: this.readSafe("widget-notice-text"),
       widgetNoticeUrl: this.readSafe("widget-notice-url"),
       enabledModules: this.readEnabledModulesSafe(),
+      enabledModuleTriggerWords: this.readEnabledModuleTriggerWordsSafe(),
       widgetAttractAttention: this.readSafe("widget-attract-attention") === "true",
       widgetAutoOpenEnabled: this.readSafe("widget-auto-open-enabled") === "true",
       widgetAutoOpenDelaySeconds: this.readAutoOpenDelaySecondsSafe(),
@@ -342,6 +361,37 @@ export class WidgetStorage {
       return Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string") ? parsed : [];
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * `25-131`: the identical "corrupted or unparsable degrades to the honest empty default" posture
+   * `readEnabledModulesSafe` above already takes, for the map beside it - a malformed value here must
+   * never surface as a trigger word the tenant did not actually configure. Each entry is re-validated
+   * on its own: one module's own malformed array is dropped without discarding every other module's
+   * perfectly good one.
+   */
+  private readEnabledModuleTriggerWordsSafe(): Record<string, string[]> {
+    const raw = this.readSafe("enabled-module-trigger-words");
+    if (raw === null) {
+      return {};
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {};
+      }
+
+      const result: Record<string, string[]> = {};
+      for (const [moduleKey, triggerWords] of Object.entries(parsed as Record<string, unknown>)) {
+        if (Array.isArray(triggerWords) && triggerWords.every((word) => typeof word === "string")) {
+          result[moduleKey] = triggerWords;
+        }
+      }
+      return result;
+    } catch {
+      return {};
     }
   }
 
@@ -393,6 +443,15 @@ export class WidgetStorage {
       this.writeSafe("enabled-modules", JSON.stringify(session.enabledModules));
     } else {
       this.removeSafe("enabled-modules");
+    }
+
+    // `25-131`: the identical "written only when non-empty" shape immediately above, for the map
+    // beside it - a site with no grant at all (or none carrying a trigger word) leaves no trace of
+    // this key either.
+    if (Object.keys(session.enabledModuleTriggerWords).length > 0) {
+      this.writeSafe("enabled-module-trigger-words", JSON.stringify(session.enabledModuleTriggerWords));
+    } else {
+      this.removeSafe("enabled-module-trigger-words");
     }
 
     // `23-63`: only written when `true`, matching every other field above - a tenant who has never

@@ -37,11 +37,15 @@ import { currentHub, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.
 
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
+// `25-131`: the fake mirrors the real `bookingChipSpec`'s own new signature - it takes the caller's
+// trigger word and echoes it back, rather than inventing `/booking` itself, so a test that stubs a
+// different word actually exercises the real wiring (`loadBookingModuleChip` reading
+// `enabledModuleTriggerWords` and passing it through) instead of a fake that would pass regardless.
 const loadModuleMock = vi.fn((_scriptUrl: string, _fileName: string) => ({
-  bookingChipSpec: (locale: string) =>
+  bookingChipSpec: (locale: string, triggerWord: string) =>
     locale === "ru"
-      ? { label: "Записаться", ariaLabel: "Записаться на приём", triggerText: "/booking" }
-      : { label: "Book", ariaLabel: "Book an appointment", triggerText: "/booking" },
+      ? { label: "Записаться", ariaLabel: "Записаться на приём", triggerText: triggerWord }
+      : { label: "Book", ariaLabel: "Book an appointment", triggerText: triggerWord },
 }));
 vi.mock("./moduleLoader.js", () => ({
   loadModule: (scriptUrl: string, fileName: string) => loadModuleMock(scriptUrl, fileName),
@@ -77,7 +81,20 @@ function urlOf(input: RequestInfo | URL): string {
 // `23-105`: `enabledModules` is the one parameter that decides whether the module chip appears -
 // the site's own handshake response, not an attribute on `config` above. Defaults to `[]`, the
 // same "no grant, no booking" default `VisitorSession.enabledModules`'s own doc comment gives.
-function stubFetch(widgetLocale?: string, enabledModules: string[] = []): ReturnType<typeof vi.fn> {
+//
+// `25-131`: `enabledModuleTriggerWords` joins beside it - defaulted to `{ calendar: ["/booking"] }`
+// whenever `calendar` is granted (so every pre-existing test in this file, which never customized a
+// trigger word, keeps seeing the same `/booking` it always did - the item's own "additive, no
+// behavior change for a site that never customized its trigger words" requirement) and overridable
+// per-test for the real reported scenario: a site whose calendar module's trigger word is something
+// else entirely.
+function stubFetch(
+  widgetLocale?: string,
+  enabledModules: string[] = [],
+  enabledModuleTriggerWords: Record<string, string[]> = enabledModules.includes("calendar")
+    ? { calendar: ["/booking"] }
+    : {},
+): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(() =>
     Promise.resolve(
       new Response(
@@ -87,6 +104,7 @@ function stubFetch(widgetLocale?: string, enabledModules: string[] = []): Return
           widgetPrimaryColorHex: null,
           widgetPosition: "BottomRight",
           enabledModules,
+          enabledModuleTriggerWords,
           ...(widgetLocale === undefined ? {} : { widgetLocale }),
         }),
         { status: 201, headers: { "Content-Type": "application/json" } },
@@ -220,6 +238,53 @@ describe("the module invocation chip", () => {
     const invocation = currentHub().invocationAt("SendMessageAsync", 0);
     expect(invocation.args[1]).toBe("/booking");
     expect(invocation.args.length).toBe(4);
+  });
+
+  // `25-131`'s own fails-before proof: the exact real-tenant scenario found live, a calendar module
+  // whose only configured trigger word is `/записаться` - `/booking` is nowhere in that site's own
+  // list. Before this item the chip always sent the hardcoded `/booking`, which `TriggerCommandMatcher`
+  // (`ago-chat`) would refuse to open this module for on a real site shaped exactly like this fixture.
+  it("`25-131`: sends the site's own configured trigger word, not a hardcoded /booking, when they differ", async () => {
+    stubFetch(undefined, ["calendar"], { calendar: ["/записаться"] });
+    const root = await mountAndOpen(config);
+    await flush();
+
+    const chip = root.querySelector<HTMLButtonElement>(".ago-module-chip")!;
+    // The visible copy is unaffected by the site's own trigger word - only the invisible command
+    // text changes (this item's own scope: "the chip's own visible label/ariaLabel are unaffected").
+    expect(chip.textContent).toBe("Book");
+    chip.click();
+    await flush();
+
+    const bubbles = [...root.querySelectorAll(".ago-message--visitor")];
+    expect(bubbles.some((bubble) => bubble.textContent?.includes("/записаться"))).toBe(true);
+    expect(bubbles.some((bubble) => bubble.textContent?.includes("/booking"))).toBe(false);
+
+    const invocation = currentHub().invocationAt("SendMessageAsync", 0);
+    expect(invocation.args[1]).toBe("/записаться");
+  });
+
+  // `25-131`'s own decision for the state `EnabledModule`'s own constructor (`ago-chat`) never
+  // actually allows to be written (it throws on an empty trigger-word list) - a defensive re-check
+  // this widget takes anyway, the same "never trust the wire value blindly" posture every other field
+  // on this response already gets: treated identically to "module not enabled" rather than sending a
+  // trigger word nobody configured.
+  it("`25-131`: stays absent when the handshake grants calendar but carries no trigger word for it", async () => {
+    stubFetch(undefined, ["calendar"], { calendar: [] });
+    const root = await mountAndOpen(config);
+    await flush();
+
+    expect(root.querySelector(".ago-module-chip")).toBeNull();
+    expect(loadModuleMock).not.toHaveBeenCalled();
+  });
+
+  it("`25-131`: stays absent when the handshake grants calendar but the trigger-word map has no entry for it at all", async () => {
+    stubFetch(undefined, ["calendar"], {});
+    const root = await mountAndOpen(config);
+    await flush();
+
+    expect(root.querySelector(".ago-module-chip")).toBeNull();
+    expect(loadModuleMock).not.toHaveBeenCalled();
   });
 
   it("never makes a direct HTTP request to AGO Calendar - there is no client left in this bundle that could", async () => {

@@ -24,23 +24,33 @@ export interface ModuleChipSpec {
    * `Composer.tsx`: `pickerOpen` derived purely from `draft.startsWith("/")`, no separate open/closed
    * state). Clicking the chip inserts this text into the composer and sends it - structurally
    * identical to a visitor typing it themselves, not a second code path (`ui/widget.ts`'s
-   * `invokeModule`). Fixed and unlocalized on purpose: it is a command word a visitor might also type
-   * directly, and a translated trigger would mean two words did the same thing depending on which one
-   * a visitor happened to read first.
+   * `invokeModule`).
+   *
+   * `25-131`: no longer a fixed, unlocalized `/booking` this file invents. A real, live tenant's
+   * `calendar` module carries `["/записаться"]` as its own configured trigger word and nothing else -
+   * `/booking` was never in that site's own list, so the chip sent a command word
+   * `TriggerCommandMatcher.Match` (`ago-chat`) could never open the module for, and clicking it did
+   * nothing. `bookingChipSpec`'s own caller (`ui/widget.ts`'s `loadBookingModuleChip`) now supplies
+   * the site's own real, first configured word, read off the visitor handshake response's
+   * `enabledModuleTriggerWords` - this field is that word, verbatim, never re-localized here.
    */
   readonly triggerText: string;
 }
 
-const COPY: Record<SupportedLocale, ModuleChipSpec> = {
-  en: { label: "Book", ariaLabel: "Book an appointment", triggerText: "/booking" },
+const COPY: Record<SupportedLocale, { label: string; ariaLabel: string }> = {
+  en: { label: "Book", ariaLabel: "Book an appointment" },
   // `25-126`: `label` renamed from "Запись" to "Записаться" - the noun read as a plain schedule
   // entry, not an invitation to act, on a chip that is now a real, prominent button rather than a
-  // header link. `ariaLabel` already said "Записаться на приём" and needs no change; `triggerText`
-  // stays the fixed, unlocalized `/booking` command word this chip and a visitor typing it directly
-  // both rely on meaning the same thing (`ModuleChipSpec`'s own doc comment).
-  ru: { label: "Записаться", ariaLabel: "Записаться на приём", triggerText: "/booking" },
+  // header link. `ariaLabel` already said "Записаться на приём" and needs no change.
+  ru: { label: "Записаться", ariaLabel: "Записаться на приём" },
 };
 
-export function bookingChipSpec(locale: SupportedLocale): ModuleChipSpec {
-  return COPY[locale];
+/**
+ * `25-131`: `triggerWord` is the site's own real, first configured trigger word - the caller's job to
+ * supply, never this function's to invent. `label`/`ariaLabel` are unaffected by which word is passed:
+ * the chip's own visible copy (`25-126`'s restyled Russian/English wording) stays exactly what the
+ * resolved locale says regardless of what a site happened to configure as its command word.
+ */
+export function bookingChipSpec(locale: SupportedLocale, triggerWord: string): ModuleChipSpec {
+  return { ...COPY[locale], triggerText: triggerWord };
 }

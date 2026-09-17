@@ -109,6 +109,7 @@ function sessionBody(token: string, visitorId: string): string {
     widgetPrimaryColorHex: null,
     widgetPosition: "BottomRight",
     enabledModules: [],
+    enabledModuleTriggerWords: {},
   });
 }
 
@@ -152,6 +153,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeText: null,
     widgetNoticeUrl: null,
     enabledModules: [],
+    enabledModuleTriggerWords: {},
     widgetAttractAttention: false,
     widgetAutoOpenEnabled: false,
     widgetAutoOpenDelaySeconds: 30,

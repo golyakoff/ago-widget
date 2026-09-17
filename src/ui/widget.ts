@@ -1181,9 +1181,13 @@ export class ChatWidget {
    * `import()` is a runtime-computed URL rather than a literal - that, not this method, is what keeps
    * `src/modules/booking/` out of the base bundle's inputs.
    *
-   * Awaits `sessionPromise` first, for two reasons now instead of one: `this.locale` needs to be
-   * resolved (unchanged since `20-07`), and `23-105` adds the actual gate - whether the resolved
-   * session's `enabledModules` contains this widget's one statically-wired module key. This is the
+   * Awaits `sessionPromise` first, for three reasons now instead of one: `this.locale` needs to be
+   * resolved (unchanged since `20-07`), `23-105` adds the entitlement gate - whether the resolved
+   * session's `enabledModules` contains this widget's one statically-wired module key - and `25-131`
+   * adds a second gate right beside it: the resolved session's own `enabledModuleTriggerWords` must
+   * carry a real, non-empty word for that same key, or the chip stays absent exactly as it would for
+   * "not enabled" (a real, live tenant's chip sent a hardcoded `/booking` no site had to have
+   * configured before this, which is the bug this second gate exists to close). This is the
    * single place in `ago-widget` allowed to compare a module key against the literal `"calendar"`:
    * `adr/0065` guard 9 forbids that literal inside `Ago.Chat.*`, because that assembly must stay
    * ignorant of what any module *is* - a constraint this repository was never under, and could not
@@ -1219,6 +1223,18 @@ export class ChatWidget {
       return;
     }
 
+    // `25-131`: the site's own real, first configured trigger word - never a hardcoded `/booking`.
+    // `EnabledModule`'s own constructor (`ago-chat`) refuses to persist an empty trigger-word list, so
+    // a module present in `enabledModules` is guaranteed at least one word by the server's own
+    // invariant; this is still a defensive re-check, the same "never trust the wire value blindly"
+    // posture every other field on this response already gets, rather than a `!`. A missing or empty
+    // entry here is treated exactly like "not enabled" - the chip stays absent rather than sending a
+    // trigger word nobody on this platform actually granted.
+    const triggerWord = session.enabledModuleTriggerWords["calendar"]?.[0];
+    if (!triggerWord) {
+      return;
+    }
+
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "ago-module-chip";
@@ -1227,11 +1243,10 @@ export class ChatWidget {
     this.composer.parentElement?.insertBefore(chip, this.composer);
     this.moduleChip = chip;
 
-    const bookingModule = await loadModule<{ bookingChipSpec: (locale: SupportedLocale) => ModuleChipSpec }>(
-      this.config.scriptUrl,
-      "widget-module-booking.js",
-    );
-    const spec = bookingModule.bookingChipSpec(this.locale);
+    const bookingModule = await loadModule<{
+      bookingChipSpec: (locale: SupportedLocale, triggerWord: string) => ModuleChipSpec;
+    }>(this.config.scriptUrl, "widget-module-booking.js");
+    const spec = bookingModule.bookingChipSpec(this.locale, triggerWord);
 
     chip.textContent = spec.label;
     chip.setAttribute("aria-label", spec.ariaLabel);

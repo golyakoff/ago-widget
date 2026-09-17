@@ -33,6 +33,10 @@ const SESSION_RESPONSE = {
   // asserts nothing about booking - the chip below appears only because the *server* says this site
   // has the module, which is what an entitlement means (`adr/0151`).
   enabledModules: ["calendar"],
+  // `25-131`: the chip now also needs the site's own real trigger word to appear at all - without
+  // this, `loadBookingModuleChip` treats a granted module with no trigger word exactly like "not
+  // enabled" and never fetches the lazy bundle this gate exists to prove resolves.
+  enabledModuleTriggerWords: { calendar: ["/booking"] },
 };
 
 test.describe("the booking module is fetched as a sibling of the renamed entry", () => {

@@ -433,6 +433,11 @@ export class VisitorSessionManager {
       widgetNoticeText: body.widgetNoticeText,
       widgetNoticeUrl: body.widgetNoticeUrl,
       enabledModules: body.enabledModules,
+      // `25-131`: the identical "collapse the wire's optional field to this type's own stored shape,
+      // right here" posture every other optional field on this response already gets - `{}` for a
+      // response from before this field existed, never `undefined` threaded one layer further into
+      // `VisitorSession`/`WidgetStorage` for no caller that needs it.
+      enabledModuleTriggerWords: body.enabledModuleTriggerWords ?? {},
       // `23-63`: cached as a plain `boolean`, not the wire's optional field - `undefined` (a response
       // from before this setting existed) collapses to `false` right here, the same point every other
       // field on this response is normalised to its stored shape, rather than threading "maybe absent"

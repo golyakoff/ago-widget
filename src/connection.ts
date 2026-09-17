@@ -11,6 +11,7 @@ import { defaultBackoffOptions, jitteredDelayMs } from "./protocol/backoff.js";
 import { SeenMessageIds } from "./protocol/dedup.js";
 import { SequenceTracker } from "./protocol/sequence.js";
 import { captureTrafficSource } from "./traffic.js";
+import { guardAsync } from "./errors.js";
 
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
 
@@ -250,6 +251,12 @@ export class VisitorConnection {
     for (const message of result.history) {
       this.rememberSequence(message);
       this.seenMessageIds.markSeen(message.id);
+      // `25-119`: a fresh page load is itself a "reconnecting later" moment for a visitor whose
+      // browser never got the chance to ack an operator message before (closed the tab, crashed,
+      // lost the socket mid-session) - see `acknowledgeDelivered`'s own doc comment for why acking
+      // an already-`DeliveredAt`-set message again here, on every single reload, is accepted rather
+      // than guarded against.
+      this.acknowledgeDelivered(message);
     }
 
     this.emitGrantChange(result);
@@ -387,7 +394,52 @@ export class VisitorConnection {
     this.rememberSequence(dto);
     if (this.seenMessageIds.markSeen(dto.id)) {
       this.messageListener?.(dto);
+      // `25-119`: only for a message this connection had not already recorded as seen - the exact
+      // gate that already exists to stop a resume delta that overlaps a live push (this file's own
+      // `connection.test.ts`, "does not deliver a message twice when the resume delta overlaps a live
+      // push") from rendering the same message twice also stops it from acking the same message
+      // twice inside one connection's lifetime. This is a courtesy, not a correctness requirement -
+      // `acknowledgeDelivered`'s own doc comment covers why a genuine duplicate is harmless anyway.
+      this.acknowledgeDelivered(dto);
     }
+  }
+
+  /**
+   * `25-119`: the widget's own half of the delivered-ack round trip
+   * (`docs/backlog/25-119-the-widget-gives-an-operator-no-delivered-signal.md`, "Answered - the
+   * design", points 2 and 5). "Delivered" here means this connection's own JS runtime actually
+   * received the push, not merely that the server attempted one - a stronger, more honest signal
+   * than `ChannelDelivery.Delivered` ever was for a Telegram/MAX conversation.
+   *
+   * Scoped to `authorKind === "Operator"` only, the *exact* gate `ago-console`'s `Thread.tsx` already
+   * uses for the channel-kind badge (`item.message.authorKind === "Operator"`) - not `"AutoGreeting"`,
+   * even though that kind renders with the operator's own bubble styling (`protocol/types.ts`'s own
+   * remarks on why): a visitor's own echoed-back message, a `"System"` message, and an
+   * `"AutoGreeting"` message all have no "did the operator see it" concept this item was asked to
+   * build, and console's own precedent for what counts as "operator-authored" for this exact badge
+   * is the one this file matches rather than inventing its own.
+   *
+   * Fire-and-forget through `guardAsync` (`errors.ts`) - the one convention this codebase already has
+   * for a connection-boundary call this widget must not let throw into `@microsoft/signalr`'s own
+   * event loop (`errors.ts`'s own doc comment names "connection callbacks" as one of the boundaries
+   * `guardAsync`/`guardSync` exist for). This file had no *other* fire-and-forget hub invocation to
+   * match before this one - every existing `.invoke(...)` call here (`start`, `sendMessage`,
+   * `loadOlderHistory`, `resumeAfterReconnect`) is awaited and lets its rejection propagate to a
+   * caller that decides what to do about it - so `guardAsync`'s swallow-and-log behaviour (last
+   * resort: `console.error`, never a silent catch) is the closest existing convention for a call this
+   * method deliberately does not want to block message rendering on, or retry itself: no retry on
+   * failure, and no local idempotency ledger, because `adr/0020`'s "at-least-once, redelivery is
+   * harmless" already covers a duplicate or a lost ack the same way it covers every other consumer in
+   * this system - the backend's own handler treats a repeat ack against an already-`DeliveredAt`-set
+   * message as a no-op, so sending one more than strictly necessary costs nothing.
+   */
+  private acknowledgeDelivered(message: MessageDto): void {
+    const conversationId = this.conversationId;
+    if (message.authorKind !== "Operator" || conversationId === null) {
+      return;
+    }
+
+    guardAsync(() => this.connection.invoke<void>("AcknowledgeDeliveredAsync", conversationId, message.id));
   }
 
   private rememberSequence(message: MessageDto): void {

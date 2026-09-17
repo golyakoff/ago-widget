@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseAttractAttention, parseNoticeText, parseNoticeUrl, parseWidgetColor, parseWidgetPosition } from "./appearance.js";
+import {
+  parseAttractAttention,
+  parseContactCaptureConfirmationText,
+  parseNoticeText,
+  parseNoticeUrl,
+  parseWidgetColor,
+  parseWidgetPosition,
+} from "./appearance.js";
 
 describe("parseWidgetColor", () => {
   it("accepts a well-formed six-digit hex color", () => {
@@ -141,5 +148,33 @@ describe("parseAttractAttention", () => {
 
   it("falls back to false for undefined - a session cached before this setting existed", () => {
     expect(parseAttractAttention(undefined)).toBe(false);
+  });
+});
+
+describe("parseContactCaptureConfirmationText", () => {
+  it("accepts an ordinary sentence with a {name} placeholder", () => {
+    expect(parseContactCaptureConfirmationText("Спасибо, {name}, мы всё записали.")).toBe(
+      "Спасибо, {name}, мы всё записали.",
+    );
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(parseContactCaptureConfirmationText("  Thanks, {name}!  ")).toBe("Thanks, {name}!");
+  });
+
+  it("falls back to undefined for null - no override configured server-side", () => {
+    expect(parseContactCaptureConfirmationText(null)).toBeUndefined();
+  });
+
+  it("falls back to undefined for undefined", () => {
+    expect(parseContactCaptureConfirmationText(undefined)).toBeUndefined();
+  });
+
+  it("falls back to undefined for an empty string", () => {
+    expect(parseContactCaptureConfirmationText("")).toBeUndefined();
+  });
+
+  it("falls back to undefined for a whitespace-only string", () => {
+    expect(parseContactCaptureConfirmationText("   ")).toBeUndefined();
   });
 });

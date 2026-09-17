@@ -140,6 +140,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "widget-contact-capture-confirmation-text",
+    holds: "The tenant's own contact-capture confirmation text (`25-129`) - words the tenant wrote, not the widget's own.",
+    why: "Same purpose as the notice text above - lets the widget show the tenant's confirmation without a second round trip once the session is cached.",
+    lifetime: "Same as the colour above.",
+    survivesTabClose: true,
+  },
+  {
     key: "auto-open-greeting-shown",
     holds: "Whether this browser has already been shown the tenant's auto-open greeting (`23-64`) - a yes/no flag, never the greeting text itself.",
     why: "«Opening is once» - a returning visitor within the same identity is not shown the greeting a second time.",
@@ -231,6 +238,13 @@ export interface VisitorSession {
   widgetAutoOpenEnabled: boolean;
   widgetAutoOpenDelaySeconds: number;
   widgetAutoOpenGreetingText: string | null;
+  /** `25-129`: cached alongside the rest on the identical terms `widgetNoticeText` already has -
+   * the tenant's own contact-capture confirmation text, refreshed on the identical schedule
+   * (`25-05`). `null` for a session written before this field existed, or for a site that has not
+   * configured one - `ui/appearance.ts`'s `parseContactCaptureConfirmationText` treats both
+   * identically to "not set", and `ui/widget.ts`'s `appendContactCaptureControl` falls back to the
+   * widget's own default sentence. */
+  widgetContactCaptureConfirmationText: string | null;
 }
 
 export class WidgetStorage {
@@ -283,6 +297,7 @@ export class WidgetStorage {
       widgetAutoOpenEnabled: this.readSafe("widget-auto-open-enabled") === "true",
       widgetAutoOpenDelaySeconds: this.readAutoOpenDelaySecondsSafe(),
       widgetAutoOpenGreetingText: this.readSafe("widget-auto-open-greeting-text"),
+      widgetContactCaptureConfirmationText: this.readSafe("widget-contact-capture-confirmation-text"),
     };
   }
 
@@ -356,6 +371,12 @@ export class WidgetStorage {
       this.writeSafe("widget-notice-url", session.widgetNoticeUrl);
     } else {
       this.removeSafe("widget-notice-url");
+    }
+
+    if (session.widgetContactCaptureConfirmationText) {
+      this.writeSafe("widget-contact-capture-confirmation-text", session.widgetContactCaptureConfirmationText);
+    } else {
+      this.removeSafe("widget-contact-capture-confirmation-text");
     }
 
     // `23-105`: written only when non-empty, matching every optional field above - a site with no

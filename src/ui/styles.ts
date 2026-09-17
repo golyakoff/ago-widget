@@ -332,6 +332,15 @@ export const widgetStyles = /* css */ `
     gap: 0.5rem;
   }
 
+  /* 25-130: min-height joins the existing max-height here rather than as a rows attribute on the
+     <textarea> element (ui/widget.ts) - both bounds on this box's own vertical size already live
+     in this one rule, and a floor set as a DOM attribute instead would split "how tall this box is
+     allowed to be" across a stylesheet and a piece of markup for no reason. 5.5rem, not a round
+     guess: this element is box-sizing: border-box (this file's own * rule), so the floor has to
+     account for the padding and border below it too - 0.5rem*2 vertical padding + 0.0625rem*2 border
+     leaves 4.4375rem for content, and three lines at this element's own inherited line-height (.ago-
+     root's line-height: 1.4 against its font-size: 1rem, i.e. 1.4rem/line) need 4.2rem, so 5.5rem
+     clears three full lines with a little to spare rather than clipping the third by a hair. */
   .ago-input {
     flex: 1;
     resize: none;
@@ -339,6 +348,7 @@ export const widgetStyles = /* css */ `
     border-radius: 0.5rem;
     padding: 0.5rem 0.625rem;
     font: inherit;
+    min-height: 5.5rem;
     max-height: 6rem;
   }
 
@@ -501,16 +511,37 @@ export const widgetStyles = /* css */ `
     white-space: nowrap;
     border: 0;
   }
-  /* 20-07: the module invocation chip - a small affordance in the header, not a second panel. Its
-     only behaviour is inserting and sending a trigger phrase (ui/widget.ts's invokeModule), so it
-     needs no view state of its own beyond disabled/hidden. */
+  /* 20-07: the module invocation chip. Its only behaviour is inserting and sending a trigger phrase
+     (ui/widget.ts's invokeModule), so it needs no view state of its own beyond disabled/hidden.
+
+     25-126: found live, squeezed into the cramped header row and styled as plain, transparent text -
+     a real, already-wired <button> that read as a link. ui/widget.ts's loadBookingModuleChip now
+     inserts it as its own child of .ago-panel (a flex column), directly above the composer, rather
+     than into the header - so this rule now also has to size and place it there, not just paint it.
+     align-self: flex-end overrides .ago-panel's own default align-items: stretch (which would
+     otherwise stretch a plain block-level flex child to the panel's full width, the cross-axis
+     behaviour a column flex container gives every child that does not opt out of it) - the chip
+     should size to its own label, sitting to the right, above the composer, matching the author's own
+     screenshot annotation. margin on three sides only (not top) keeps it clear of .ago-messages
+     above and .ago-composer below without a fourth, redundant gap collapsing against either.
+
+     Painted as the panel's one existing labelled call-to-action already is
+     (.ago-contact-capture-submit/.ago-primitive-form-submit: solid --ago-accent, white text,
+     0.5rem radius) rather than invented fresh - a second, differently-styled "primary button" look
+     in the same panel would read as two different vocabularies for the same kind of control. Padding
+     is a notch more generous than those two (0.5rem 1rem vs 0.375rem 0.75rem) since this chip is
+     the one call-to-action a visitor sees before typing anything, not a small in-thread affordance. */
   .ago-module-chip {
+    align-self: flex-end;
+    margin: 0 0.75rem 0.5rem;
     border: none;
-    background: transparent;
-    color: inherit;
+    border-radius: 0.5rem;
+    background: var(--ago-accent);
+    color: #fff;
     font: inherit;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
     cursor: pointer;
-    padding: 0 0.5rem;
   }
 
   .ago-module-chip:disabled {

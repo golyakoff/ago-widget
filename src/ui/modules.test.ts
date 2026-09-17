@@ -40,7 +40,7 @@ vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 const loadModuleMock = vi.fn((_scriptUrl: string, _fileName: string) => ({
   bookingChipSpec: (locale: string) =>
     locale === "ru"
-      ? { label: "Запись", ariaLabel: "Записаться на приём", triggerText: "/booking" }
+      ? { label: "Записаться", ariaLabel: "Записаться на приём", triggerText: "/booking" }
       : { label: "Book", ariaLabel: "Book an appointment", triggerText: "/booking" },
 }));
 vi.mock("./moduleLoader.js", () => ({
@@ -190,7 +190,7 @@ describe("the module invocation chip", () => {
     await flush();
 
     const chip = root.querySelector<HTMLButtonElement>(".ago-module-chip")!;
-    expect(chip.textContent).toBe("Запись");
+    expect(chip.textContent).toBe("Записаться");
     expect(chip.getAttribute("aria-label")).toBe("Записаться на приём");
   });
 

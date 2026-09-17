@@ -443,6 +443,10 @@ export class VisitorSessionManager {
       widgetAutoOpenEnabled: body.widgetAutoOpenEnabled === true,
       widgetAutoOpenDelaySeconds: body.widgetAutoOpenDelaySeconds ?? 30,
       widgetAutoOpenGreetingText: body.widgetAutoOpenGreetingText ?? null,
+      // `25-129`: the identical "collapse the wire's optional field to this type's own stored shape"
+      // posture `widgetNoticeText` already takes - `null` for a response from before this field
+      // existed or for a site that has never configured one.
+      widgetContactCaptureConfirmationText: body.widgetContactCaptureConfirmationText ?? null,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

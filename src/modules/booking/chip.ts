@@ -33,7 +33,12 @@ export interface ModuleChipSpec {
 
 const COPY: Record<SupportedLocale, ModuleChipSpec> = {
   en: { label: "Book", ariaLabel: "Book an appointment", triggerText: "/booking" },
-  ru: { label: "Запись", ariaLabel: "Записаться на приём", triggerText: "/booking" },
+  // `25-126`: `label` renamed from "Запись" to "Записаться" - the noun read as a plain schedule
+  // entry, not an invitation to act, on a chip that is now a real, prominent button rather than a
+  // header link. `ariaLabel` already said "Записаться на приём" and needs no change; `triggerText`
+  // stays the fixed, unlocalized `/booking` command word this chip and a visitor typing it directly
+  // both rely on meaning the same thing (`ModuleChipSpec`'s own doc comment).
+  ru: { label: "Записаться", ariaLabel: "Записаться на приём", triggerText: "/booking" },
 };
 
 export function bookingChipSpec(locale: SupportedLocale): ModuleChipSpec {

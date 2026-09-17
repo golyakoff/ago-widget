@@ -135,3 +135,23 @@ export function parseAutoOpenGreetingText(value: string | null | undefined): str
 export function parseAutoOpenEnabled(enabled: boolean | null | undefined, greetingText: string | undefined): boolean {
   return enabled === true && greetingText !== undefined;
 }
+
+/**
+ * `25-129`: the tenant's own override for the contact-capture confirmation sentence
+ * (`widgetContactCaptureConfirmationText` - `AuthEndpoints.VisitorSessionResponse`, `ago-chat`). The
+ * identical trim-and-reject-empty shape `parseNoticeText`/`parseAutoOpenGreetingText` both already
+ * use - a missing, whitespace-only, or non-string value means "this tenant has not configured one",
+ * the same as a site that never set it at all. Unlike `parseAutoOpenGreetingText` (whose `undefined`
+ * means "draw nothing at all" - there is no default greeting this widget would supply on the
+ * tenant's behalf), `undefined` here is not the end of the story: `ui/contactCapture.ts`'s own caller
+ * falls back to the widget's own default confirmation sentence, never to silence, since a visitor who
+ * just handed over their contact details must always see *some* confirmation that it landed.
+ */
+export function parseContactCaptureConfirmationText(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}

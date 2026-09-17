@@ -81,6 +81,16 @@ export type ContactCaptureSubmitHandler = (result: ContactCaptureResult) => Prom
  * the whole `WidgetConfig` for the same reason `siteKey` alone rides through `archive.ts`'s params
  * (this file's own sibling module) instead of a config object: the smallest thing the callee actually
  * needs, not everything the caller happens to have.
+ *
+ * `25-129`: `confirmationTemplate` is the fully-resolved sentence to show once the submission
+ * succeeds - the tenant's own configured override (`ui/appearance.ts`'s
+ * `parseContactCaptureConfirmationText`) if the caller found one, or `strings.contactCaptureConfirmation`
+ * (the widget's own default) otherwise. That choice is made by the caller, not here - this function's
+ * only remaining job for the text is the one substitution neither side of the wire can do for itself:
+ * replacing a literal `{name}` with the visitor's own just-submitted name, which only exists once this
+ * form's own submit handler has it in hand. Optional, defaulting to `strings.contactCaptureConfirmation`,
+ * so every call site that predates this item (and every test that does not care about it) keeps
+ * working unchanged.
  */
 export function renderContactCaptureControl(
   strings: WidgetStrings,
@@ -92,7 +102,9 @@ export function renderContactCaptureControl(
   // guessed host. Optional only so every pre-25-27 call site that never renders a checkbox at all
   // (`consent` omitted or `null`) does not have to pass a value that would never be read.
   policyBaseUrl?: string,
+  confirmationTemplate?: string,
 ): HTMLElement {
+  const resolvedConfirmationTemplate = confirmationTemplate ?? strings.contactCaptureConfirmation;
   const container = document.createElement("div");
   container.className = "ago-contact-capture";
 
@@ -229,7 +241,10 @@ export function renderContactCaptureControl(
       .then(() => {
         const confirmation = document.createElement("p");
         confirmation.className = "ago-contact-capture-confirmation";
-        confirmation.textContent = strings.contactCaptureConfirmation;
+        // `25-129`: `{name}` substituted with the name this same submit handler just trimmed and
+        // sent - the one piece of this sentence that can only ever be filled in here, never on the
+        // server (`renderContactCaptureControl`'s own doc comment on why).
+        confirmation.textContent = resolvedConfirmationTemplate.replaceAll("{name}", name);
         container.replaceChildren(confirmation);
       })
       .catch(() => {

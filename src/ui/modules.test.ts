@@ -258,6 +258,12 @@ describe("rendering a step-shaped message from a module", () => {
     const choices = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")];
     expect(choices.map((choice) => choice.textContent)).toEqual(["Haircut (45 min)", "Beard trim (20 min)"]);
 
+    // `25-133`: the prompt shows once, from the rendered primitive, never a second time as the
+    // operator bubble's own plain-`body` text underneath it - the exact bug the item exists to close.
+    const operatorBubbles = [...root.querySelectorAll(".ago-message--operator")];
+    expect(operatorBubbles).toHaveLength(1);
+    expect(operatorBubbles[0]!.textContent).not.toContain("What would you like to book?");
+
     choices[0]!.click();
     await flush();
 
@@ -298,6 +304,70 @@ describe("rendering a step-shaped message from a module", () => {
     expect(root.querySelector(".ago-primitive")).toBeNull();
     const bubbles = [...root.querySelectorAll(".ago-message--operator")];
     expect(bubbles.some((bubble) => bubble.textContent === "Here is a map of available drivers.")).toBe(true);
+  });
+
+  // `25-133`: the backlog item's own named risk - `verified_phone_form`/`escalate` are real,
+  // documented members of `adr/0065`'s vocabulary that `ui/primitives/render.ts`'s own `KNOWN_KINDS`
+  // does not (yet) build a control for, so `renderPrimitiveContent` returns `null` for them exactly
+  // as it would for a kind it has never heard of. Typing into the ordinary composer is the only way a
+  // visitor can currently answer either, so the plain `body` text is not a redundant fallback here -
+  // it is the whole of what the visitor sees, and must keep showing exactly as before this item.
+  it.each(["verified_phone_form", "escalate"])(
+    "still shows the body text bubble for a recognised-but-not-yet-built contentKind (%s)",
+    async (contentKind) => {
+      const root = await mountAndOpen(config);
+
+      currentHub().push({
+        id: "66666666-6666-6666-6666-666666666666",
+        sequence: 2,
+        authorKind: "System",
+        authorId: "system",
+        body: "Please confirm the phone number ending in 1234.",
+        createdAt: "2026-08-29T00:00:00+00:00",
+        contentKind,
+        content: {},
+        actions: [],
+      });
+      await flush();
+
+      expect(root.querySelector(".ago-primitive")).toBeNull();
+      // `.toContain`, not exact equality - this `authorKind: "System"` message with no rendered
+      // primitive is indistinguishable, by this file's own detection rule, from an ordinary
+      // out-of-hours auto-reply, so it also (unchanged, pre-existing behaviour) grows the
+      // out-of-hours contact-capture control as a further child of the same bubble.
+      const bubbles = [...root.querySelectorAll(".ago-message--auto")];
+      expect(
+        bubbles.some((bubble) => bubble.textContent?.includes("Please confirm the phone number ending in 1234.")),
+      ).toBe(true);
+    },
+  );
+
+  it("renders date_time_picker actions as buttons only - no duplicate numbered-list text bubble underneath", async () => {
+    const root = await mountAndOpen(config);
+
+    currentHub().push({
+      id: "77777777-7777-7777-7777-777777777777",
+      sequence: 2,
+      authorKind: "Operator",
+      authorId: "op-1",
+      body: "When would you like to come in?\n1) Tomorrow 10:00\n2) Tomorrow 14:00\nReply with the number.",
+      createdAt: "2026-08-29T00:00:00+00:00",
+      contentKind: "date_time_picker",
+      content: { prompt: "When would you like to come in?" },
+      actions: [
+        { label: "Tomorrow 10:00", value: "slot-1" },
+        { label: "Tomorrow 14:00", value: "slot-2" },
+      ],
+    });
+    await flush();
+
+    const choices = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")];
+    expect(choices.map((choice) => choice.textContent)).toEqual(["Tomorrow 10:00", "Tomorrow 14:00"]);
+
+    const operatorBubbles = [...root.querySelectorAll(".ago-message--operator")];
+    expect(operatorBubbles).toHaveLength(1);
+    expect(operatorBubbles[0]!.textContent).not.toContain("Reply with the number.");
+    expect(operatorBubbles[0]!.textContent).not.toContain("1) Tomorrow 10:00");
   });
 
   it("a numeric-looking form field still submits as free text, not as an action click", async () => {

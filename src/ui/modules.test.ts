@@ -237,6 +237,11 @@ describe("the module invocation chip", () => {
 
 describe("rendering a step-shaped message from a module", () => {
   it("renders choice_list actions as buttons on an operator-authored message, and replies with contentKind/content/no-actions matching the wire contract exactly", async () => {
+    // `25-136`: this visitor already has a contact detail on file, so the module-step gate that item
+    // adds stays out of this test's way entirely - the wire-contract assertions below are exactly
+    // `20-07`'s own original scope, unaffected by that later item. The gate itself has its own
+    // dedicated describe block further down.
+    localStorage.setItem(`ago-chat:${config.siteKey}:has-known-contact-detail`, "true");
     const root = await mountAndOpen(config);
 
     currentHub().push({
@@ -343,6 +348,7 @@ describe("rendering a step-shaped message from a module", () => {
   );
 
   it("renders date_time_picker actions as buttons only - no duplicate numbered-list text bubble underneath", async () => {
+    localStorage.setItem(`ago-chat:${config.siteKey}:has-known-contact-detail`, "true");
     const root = await mountAndOpen(config);
 
     currentHub().push({
@@ -371,6 +377,10 @@ describe("rendering a step-shaped message from a module", () => {
   });
 
   it("a numeric-looking form field still submits as free text, not as an action click", async () => {
+    // `25-136`: irrelevant to what this test actually checks (numeric-vs-text interpretation), so a
+    // known contact detail keeps the module-step gate out of the way rather than relying on the
+    // incidental fact that a raw `dispatchEvent("submit")` bypasses a disabled input/button anyway.
+    localStorage.setItem(`ago-chat:${config.siteKey}:has-known-contact-detail`, "true");
     const root = await mountAndOpen(config);
 
     currentHub().push({
@@ -419,5 +429,141 @@ describe("rendering a step-shaped message from a module", () => {
     await flush();
 
     expect(root.querySelector(".ago-primitive")).toBeNull();
+  });
+});
+
+/**
+ * `25-136`: booking proceeds with no contact details on file. The gate lives in
+ * `ui/widget.ts`'s `appendMessageBubble`, keyed off the identical fact the describe block above
+ * already uses to decide whether a message renders richly at all (`renderPrimitiveContent(...) !==
+ * null`) - a module step. `storage.ts`'s `has-known-contact-detail` flag is what tells the gate
+ * whether this visitor identity has already given a contact detail, once, from any entry point.
+ */
+describe("gating a module step's reply on the contact-capture form (25-136)", () => {
+  function pushServiceChoiceStep(): void {
+    currentHub().push({
+      id: "88888888-8888-8888-8888-888888888888",
+      sequence: 2,
+      authorKind: "Operator",
+      authorId: "op-1",
+      body: "What would you like to book?",
+      createdAt: "2026-08-29T00:00:00+00:00",
+      contentKind: "choice_list",
+      content: { prompt: "What would you like to book?" },
+      actions: [
+        { label: "Haircut (45 min)", value: "svc-1" },
+        { label: "Beard trim (20 min)", value: "svc-2" },
+      ],
+    });
+  }
+
+  it("a visitor with no contact detail on file sees the gate and cannot use the step's own buttons until it is submitted", async () => {
+    const root = await mountAndOpen(config);
+
+    pushServiceChoiceStep();
+    await flush();
+
+    // The step's own buttons render, but locked - `setPrimitiveControlsDisabled` disables every
+    // `button`/`input` inside the rendered primitive the moment this message is recognised as an
+    // active module step with no contact detail on file yet.
+    const choices = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")];
+    expect(choices).toHaveLength(2);
+    expect(choices.every((choice) => choice.disabled)).toBe(true);
+
+    // The gate itself: the identical contact-capture control the out-of-hours path already uses,
+    // reused as-is (required name/phone/email, `ui/contactCapture.ts` untouched by this item).
+    const form = root.querySelector<HTMLFormElement>(".ago-contact-capture-form");
+    expect(form).not.toBeNull();
+
+    // A click while disabled reaches nothing - jsdom, like a real browser, never dispatches `click`
+    // on a disabled button.
+    choices[0]!.click();
+    await flush();
+    expect(currentHub().invocationsOf("SendStructuredMessageAsync")).toHaveLength(0);
+
+    const name = form!.querySelector<HTMLInputElement>('input[type="text"]')!;
+    const phone = form!.querySelector<HTMLInputElement>('input[type="tel"]')!;
+    const email = form!.querySelector<HTMLInputElement>('input[type="email"]')!;
+    name.value = "Ivan";
+    phone.value = "+7 000 000-00-01";
+    email.value = "ivan@example.invalid";
+    form!.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await flush();
+
+    // Submitted: the step's own buttons are unlocked, and only now does a click reach the hub.
+    expect(choices.every((choice) => choice.disabled)).toBe(false);
+    choices[0]!.click();
+    await flush();
+
+    const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
+    expect(invocation.args[4]).toBe("choice_list");
+  });
+
+  it("a visitor who already has a contact detail on file sees the step's controls immediately, no form shown", async () => {
+    // `17-07`/`25-136`: the same stored-identity flag `submitContactCapture` sets once a visitor
+    // successfully submits, from any entry point - simulating "already given it, earlier" without
+    // re-driving that whole flow again here (it has its own coverage above and in `widget.test.ts`).
+    localStorage.setItem(`ago-chat:${config.siteKey}:has-known-contact-detail`, "true");
+    const root = await mountAndOpen(config);
+
+    pushServiceChoiceStep();
+    await flush();
+
+    const choices = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")];
+    expect(choices).toHaveLength(2);
+    expect(choices.every((choice) => choice.disabled)).toBe(false);
+    expect(root.querySelector(".ago-contact-capture-form")).toBeNull();
+
+    choices[0]!.click();
+    await flush();
+
+    const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
+    expect(invocation.args[4]).toBe("choice_list");
+  });
+
+  it("submitting the gate's form actually records the contact detail on the server, exactly as the out-of-hours control does", async () => {
+    const root = await mountAndOpen(config);
+    pushServiceChoiceStep();
+    await flush();
+
+    const form = root.querySelector<HTMLFormElement>(".ago-contact-capture-form")!;
+    form.querySelector<HTMLInputElement>('input[type="text"]')!.value = "Ivan";
+    form.querySelector<HTMLInputElement>('input[type="tel"]')!.value = "+7 000 000-00-01";
+    form.querySelector<HTMLInputElement>('input[type="email"]')!.value = "ivan@example.invalid";
+    form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await flush();
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const contactDetailCalls = fetchMock.mock.calls.filter((call) => urlOf(call[0]).includes("/contact-details"));
+    const sentKinds = contactDetailCalls.map((call) => {
+      const body = (call[1] as RequestInit).body;
+      const parsed = JSON.parse(typeof body === "string" ? body : "") as { kind: string };
+      return parsed.kind;
+    });
+    expect(sentKinds).toEqual(["Phone", "Name", "Email"]);
+
+    // `17-07`: the flag survives a later message in the same conversation - a second module step
+    // never re-shows the gate once this identity has it on file.
+    currentHub().push({
+      id: "99999999-9999-9999-9999-999999999999",
+      sequence: 3,
+      authorKind: "Operator",
+      authorId: "op-1",
+      body: "Which worker would you like?",
+      createdAt: "2026-08-29T00:00:01+00:00",
+      contentKind: "choice_list",
+      content: { prompt: "Which worker would you like?" },
+      actions: [{ label: "Any available", value: "worker-any" }],
+    });
+    await flush();
+
+    // The gate's own form already replaced itself with a confirmation on success (`ui/contactCapture.ts`'s
+    // own `.then()`) - checking there is still exactly one `.ago-contact-capture` container proves no
+    // second gate was ever rendered for the second step.
+    expect(root.querySelectorAll(".ago-contact-capture")).toHaveLength(1);
+    const secondStepButtons = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")].filter(
+      (button) => button.textContent === "Any available",
+    );
+    expect(secondStepButtons.every((button) => !button.disabled)).toBe(true);
   });
 });

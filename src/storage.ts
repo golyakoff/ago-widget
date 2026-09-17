@@ -154,6 +154,14 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "has-known-contact-detail",
+    holds: "Whether this browser has ever successfully submitted the contact-capture form (`ui/contactCapture.ts`) for this visitor identity - a yes/no flag, never the name/phone/e-mail itself, which is recorded server-side and never cached here.",
+    why: "`25-136`: a module task's own reply-capable step (e.g. a booking's service choice) is gated on a contact detail being on file - this is how a later step, or a later conversation under the same stored identity, knows not to show that gate again once an earlier one already cleared it.",
+    lifetime:
+      "Set the moment `submitContactCapture` succeeds, from any of its three entry points (the out-of-hours control, the online «Представиться…» link, or `25-136`'s own module-step gate). Cleared only when the stored visitor identity itself is replaced (`17-07`), the same event `auto-open-greeting-shown` above is cleared on - a new identity has not given anyone their details yet. Otherwise nothing clears it. **A client-only convenience, not the source of truth**: a contact detail the tenant's own operator enters directly in the console for this visitor is real on the server the moment it is written, but this flag only ever changes when *this browser* submits the widget's own form, so it cannot reflect that write - `25-136`'s own scope note names this as an accepted limitation of a client-side-only gate, not an oversight.",
+    survivesTabClose: true,
+  },
+  {
     key: "conversation-id",
     holds: "The id of the conversation this browser last held with the tenant.",
     why: "Lets a reload resume the same conversation instead of starting a new one.",
@@ -450,6 +458,28 @@ export class WidgetStorage {
    * by `ui/widget.ts` when the greeting is actually drawn, so it needs its own explicit clear). */
   clearAutoOpenGreetingShown(): void {
     this.removeSafe("auto-open-greeting-shown");
+  }
+
+  /**
+   * `25-136`: the identical "opening is once" shape `getAutoOpenGreetingShown` already has, for a
+   * different fact - whether this browser's visitor identity has ever successfully submitted the
+   * contact-capture form. `ui/widget.ts`'s `submitContactCapture` is the one place that ever calls
+   * `setHasKnownContactDetail`, regardless of which of its three callers triggered the submission, so
+   * a module step's own gate and the out-of-hours control share one flag rather than each tracking its
+   * own.
+   */
+  getHasKnownContactDetail(): boolean {
+    return this.readSafe("has-known-contact-detail") === "true";
+  }
+
+  setHasKnownContactDetail(): void {
+    this.writeSafe("has-known-contact-detail", "true");
+  }
+
+  /** `17-07`: cleared on the identical event `clearAutoOpenGreetingShown` already is - a freshly
+   * minted identity has not given anyone their details yet, so this flag must not survive onto it. */
+  clearHasKnownContactDetail(): void {
+    this.removeSafe("has-known-contact-detail");
   }
 
   getConversationId(): string | null {

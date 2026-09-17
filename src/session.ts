@@ -214,6 +214,10 @@ export class VisitorSessionManager {
       // shown the auto-open greeting yet, so "opening is once" must reset alongside the conversation
       // cursor, not survive onto an identity that never earned it.
       this.storage.clearAutoOpenGreetingShown();
+      // `25-136`: the identical event and reasoning once more - a freshly minted identity has not
+      // given anyone its contact details yet, so a module step for this new identity must show the
+      // gate again rather than inheriting the old identity's own flag.
+      this.storage.clearHasKnownContactDetail();
       this.expired = false;
       return { session: await this.mint(), restarted: true };
     }

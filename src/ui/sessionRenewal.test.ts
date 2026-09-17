@@ -156,6 +156,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetAutoOpenEnabled: false,
     widgetAutoOpenDelaySeconds: 30,
     widgetAutoOpenGreetingText: null,
+    widgetContactCaptureConfirmationText: null,
   });
   return token;
 }

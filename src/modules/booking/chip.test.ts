@@ -9,6 +9,6 @@ describe("bookingChipSpec", () => {
 
   it("localizes the chip's own label and aria-label", () => {
     expect(bookingChipSpec("en")).toEqual({ label: "Book", ariaLabel: "Book an appointment", triggerText: "/booking" });
-    expect(bookingChipSpec("ru").label).toBe("Запись");
+    expect(bookingChipSpec("ru").label).toBe("Записаться");
   });
 });

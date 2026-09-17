@@ -21,6 +21,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -35,6 +36,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 
@@ -52,6 +54,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -72,6 +75,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -86,6 +90,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 
@@ -105,6 +110,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -119,6 +125,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 
@@ -138,6 +145,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -152,6 +160,43 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
+    });
+  });
+
+  // `25-129`: the tenant's own contact-capture confirmation text, round-tripped the same way
+  // `widgetNoticeText` already is.
+  it("round-trips the widget contact-capture confirmation text alongside the identity, 25-129", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setVisitorSession({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      enabledModules: [],
+      widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
+    });
+    expect(storage.getVisitorSession()).toEqual({
+      token: "t",
+      visitorId: "v",
+      widgetPrimaryColorHex: null,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      enabledModules: [],
+      widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
     });
   });
 
@@ -172,6 +217,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -186,6 +232,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 
@@ -206,6 +253,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -220,6 +268,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 
@@ -238,6 +287,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -252,6 +302,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()?.widgetAttractAttention).toBe(false);
   });
@@ -271,6 +322,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -285,6 +337,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -299,6 +352,7 @@ describe("WidgetStorage", () => {
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
     });
   });
 

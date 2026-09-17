@@ -26,10 +26,10 @@ export interface WidgetStrings {
   readonly send: string;
   readonly attachAFile: string;
   /** `25-120`: the accessible name on the real emoji-picker trigger button that fills the place
-   * `23-61` reserved and deferred - icon-only (a plain 🙂 character, `ui/widget.ts`'s own remarks on
-   * why not an SVG), so this is the whole of its accessible name, the same shape `attachAFile`/
-   * `saveConversation` already use. Replaces `23-61`'s `emojiComingSoon`, whose "(coming soon)"
-   * wording stopped being true the moment this item shipped. */
+   * `23-61` reserved and deferred - icon-only (a real Material Symbols Outlined SVG since `25-127`,
+   * `ui/widget.ts`'s own remarks), so this is the whole of its accessible name, the same shape
+   * `attachAFile`/`saveConversation` already use. Replaces `23-61`'s `emojiComingSoon`, whose
+   * "(coming soon)" wording stopped being true the moment this item shipped. */
   readonly insertEmoji: string;
   /** `25-120`: the accessible name on the picker panel itself (`role="grid"`) - what a screen reader
    * announces on entering the grid `insertEmoji` above opens. */
@@ -114,9 +114,15 @@ export interface WidgetStrings {
   readonly contactCaptureIntroLink: string;
   readonly contactCaptureSubmitButton: string;
   readonly contactCaptureSubmittingButton: string;
-  /** Shown once the phone row (and, if typed, the name row) is recorded - deliberately does not
-   * promise a specific time, only that somebody will follow up, matching `flows.md` 1.2's own "must
-   * never happen: a promise nobody keeps." */
+  /** Shown once the phone row (and, if typed, the name row) is recorded - the widget's own default,
+   * used whenever the tenant has not configured `WidgetConfig.ContactCaptureConfirmationText`
+   * (`25-129`, `ui/appearance.ts`'s `parseContactCaptureConfirmationText`). Carries a `{name}`
+   * placeholder (`ui/contactCapture.ts` substitutes the visitor's own just-submitted name) - the same
+   * placeholder syntax a tenant's own override text uses. `25-129`: before this item this was the
+   * only sentence there was, and it promised a callback ("we'll get back to you") the visitor is
+   * already mid-conversation with nobody about to separately honour - `flows.md` 1.2's own "must
+   * never happen: a promise nobody keeps" is exactly the defect this default replaces, not merely
+   * words this default happens to differ from. */
   readonly contactCaptureConfirmation: string;
   readonly contactCaptureFailedNote: string;
   /** `25-28`: shown in the same `errorNote` element as `contactCaptureFailedNote`, when the typed

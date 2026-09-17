@@ -149,6 +149,15 @@ export interface VisitorSessionResponse {
   widgetAutoOpenEnabled?: boolean;
   widgetAutoOpenDelaySeconds?: number;
   widgetAutoOpenGreetingText?: string | null;
+  /**
+   * `25-129`: one more additive, nullable field, on `widgetNoticeText`'s own terms - the tenant's own
+   * override for the contact-capture control's confirmation sentence (`ui/contactCapture.ts`), `null`/
+   * absent for every site that has not configured one. Carries a `{name}` placeholder the widget
+   * substitutes with the visitor's own just-submitted name (`ui/widget.ts`'s `appendContactCaptureControl`) -
+   * the server never sees which visitor is about to submit before they do, so this substitution can only
+   * ever happen here, never on the wire.
+   */
+  widgetContactCaptureConfirmationText?: string | null;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

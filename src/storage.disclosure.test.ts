@@ -51,6 +51,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetAutoOpenEnabled: true,
       widgetAutoOpenDelaySeconds: 60,
       widgetAutoOpenGreetingText: "Hi, need any help?",
+      widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
@@ -80,6 +81,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetAutoOpenEnabled: true,
       widgetAutoOpenDelaySeconds: 60,
       widgetAutoOpenGreetingText: "Hi, need any help?",
+      widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);

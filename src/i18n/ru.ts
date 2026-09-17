@@ -10,7 +10,7 @@ export const ru: WidgetStrings = {
   openChat: "Открыть чат",
   closeChat: "Закрыть чат",
   chatLabel: "Чат",
-  chatWithUs: "Чат с нами",
+  chatWithUs: "Напишите нам",
   connecting: "Подключение…",
   reconnecting: "Переподключение…",
   disconnectedReconnecting: "Соединение потеряно. Пытаемся переподключиться…",
@@ -56,7 +56,7 @@ export const ru: WidgetStrings = {
   contactCaptureIntroLink: "Представиться…",
   contactCaptureSubmitButton: "Отправить",
   contactCaptureSubmittingButton: "Отправка…",
-  contactCaptureConfirmation: "Спасибо - мы свяжемся с вами.",
+  contactCaptureConfirmation: "Спасибо, {name}, ваши контакты добавлены.",
   contactCaptureFailedNote: "Не удалось отправить. Попробуйте ещё раз.",
   contactCaptureEmailInvalidNote: "Похоже, это не настоящий адрес электронной почты.",
 };

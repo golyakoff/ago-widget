@@ -106,12 +106,33 @@ describe("renderContactCaptureControl", () => {
       acceptMarketing: false,
     });
 
+    // `25-129`: `{name}` in the default template is substituted with the trimmed, just-submitted
+    // name - "Ivan" here, not the raw "  Ivan  " typed into the field.
     await vi.waitFor(() => {
-      expect(control.textContent).toContain(en.contactCaptureConfirmation);
+      expect(control.textContent).toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
     });
     // The form is gone entirely once confirmed, not merely disabled - `renderContactCaptureControl`'s
     // own `container.replaceChildren(confirmation)`.
     expect(control.querySelector("form")).toBeNull();
+  });
+
+  // `25-129`: a tenant's own configured confirmation text - passed as `confirmationTemplate` by
+  // `ui/widget.ts`'s `appendContactCaptureControl` - wins over the widget's own default, and still
+  // gets its own `{name}` substituted the identical way the default does.
+  it("shows the caller's own confirmation template, with {name} substituted, when one is passed", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit, null, undefined, "Спасибо, {name}!");
+    const form = control.querySelector("form")!;
+
+    setValue(nameInput(control), "Ivan");
+    setValue(phoneInput(control), "+7 000 000-00-01");
+    setValue(emailInput(control), "ivan@example.invalid");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+
+    await vi.waitFor(() => {
+      expect(control.textContent).toContain("Спасибо, Ivan!");
+    });
+    expect(control.textContent).not.toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
   });
 
   // `25-28`: the +7 mask, wired via a live `input` listener - `phoneFormat.ts`'s own tests cover the
@@ -180,7 +201,7 @@ describe("renderContactCaptureControl", () => {
 
     resolveSubmit();
     await vi.waitFor(() => {
-      expect(control.textContent).toContain(en.contactCaptureConfirmation);
+      expect(control.textContent).toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
     });
   });
 

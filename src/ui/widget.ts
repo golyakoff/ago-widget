@@ -23,6 +23,7 @@ import {
   parseAutoOpenDelaySeconds,
   parseAutoOpenEnabled,
   parseAutoOpenGreetingText,
+  parseContactCaptureConfirmationText,
   parseNoticeText,
   parseNoticeUrl,
   parseWidgetColor,
@@ -208,13 +209,14 @@ export class ChatWidget {
   /** `25-120`: the real button that fills the place `23-61` reserved and explicitly deferred ("An
    * emoji picker. This reserves its place; choosing and building one is a separate item.") - icon-
    * only, the same "accessible name from `aria-label` alone" shape every other composer-row button
-   * already uses. The glyph itself is a plain 🙂 character, not an SVG: Material Symbols Outlined has
-   * no "emoji" glyph this file could point at honestly (unlike `attachAFile`/`saveConversation`,
-   * which reuse verified icon paths from Google's own source), and inventing one here would be worse
-   * than the character it stands for. Gated on the identical `isConnected || autoOpenedWithoutConnecting`
-   * signal `updateSendButtonEnabled` already uses, not `attachButton`'s stricter `isConnected`-only
-   * one - inserting an emoji is a local textarea edit, not a call to the server the way an upload or
-   * an archive build is, so it should be exactly as available as typing itself already is. */
+   * already uses. `25-127`: the glyph itself is a real `sentiment_satisfied` Material Symbols Outlined
+   * SVG now, via `createSvgIcon`, matching `attachAFile`/`saveConversation`'s own convention exactly -
+   * it used to render a literal 🙂 character on the theory that no honest "emoji" glyph existed in that
+   * source, which was true only until this item went and found the actual "satisfied face" one.
+   * Gated on the identical `isConnected || autoOpenedWithoutConnecting` signal `updateSendButtonEnabled`
+   * already uses, not `attachButton`'s stricter `isConnected`-only one - inserting an emoji is a local
+   * textarea edit, not a call to the server the way an upload or an archive build is, so it should be
+   * exactly as available as typing itself already is. */
   private readonly emojiButton: HTMLButtonElement;
   /** `25-120`: the picker's own popover, hidden by default and toggled by `emojiButton` - a
    * `role="grid"` of `role="gridcell"` buttons (`emojiCells` below), the ARIA Authoring Practices'
@@ -565,7 +567,16 @@ export class ChatWidget {
     this.emojiButton.setAttribute("aria-label", this.strings.insertEmoji);
     this.emojiButton.setAttribute("aria-haspopup", "grid");
     this.emojiButton.setAttribute("aria-expanded", "false");
-    this.emojiButton.textContent = "🙂";
+    // `25-127`: a real Material Symbols Outlined icon now (`sentiment_satisfied`), matching every
+    // other composer-row control's own `createSvgIcon(d)` convention - the literal 🙂 character this
+    // used to render was the one control in this row that did not, found live off a screenshot. Path
+    // data verbatim from Google's own `material-design-icons` source, `-960 0 960 960` viewBox family
+    // (`symbols/web/sentiment_satisfied/materialsymbolsoutlined/sentiment_satisfied_24px.svg`).
+    this.emojiButton.appendChild(
+      createSvgIcon(
+        "M620-520q25 0 42.5-17.5T680-580q0-25-17.5-42.5T620-640q-25 0-42.5 17.5T560-580q0 25 17.5 42.5T620-520Zm-280 0q25 0 42.5-17.5T400-580q0-25-17.5-42.5T340-640q-25 0-42.5 17.5T280-580q0 25 17.5 42.5T340-520Zm140 260q68 0 123.5-38.5T684-400h-66q-22 37-58.5 58.5T480-320q-43 0-79.5-21.5T342-400h-66q25 63 80.5 101.5T480-260Zm0 180q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 320q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Z",
+      ),
+    );
     this.emojiButton.disabled = true;
     this.emojiButton.addEventListener("click", () => this.toggleEmojiPicker());
 
@@ -1088,10 +1099,20 @@ export class ChatWidget {
    * property, just decided from the handshake response now instead of from the script tag.
    *
    * `23-105`: the element itself moved here too, out of the constructor - `moduleChip` is `null`
-   * until this method finds the grant, then built and spliced into the header exactly where the
-   * constructor used to place it (`insertBefore(closeButton)`), before the label is known. It stays
-   * `hidden`/`disabled` at that point, revealed only once the lazy bundle's own copy has arrived, so
-   * "no calendar-flavored copy exists before the fetch resolves" holds exactly as it did before.
+   * until this method finds the grant, then built and spliced into the panel, before the label is
+   * known. It stays `hidden`/`disabled` at that point, revealed only once the lazy bundle's own copy
+   * has arrived, so "no calendar-flavored copy exists before the fetch resolves" holds exactly as it
+   * did before.
+   *
+   * `25-126`: no longer spliced into the header (`insertBefore(closeButton)`) - the author's own
+   * screenshot found it squeezed between the title and the close button there, reading as a plain
+   * link rather than the real, already-wired button it is. It now lands as its own panel-level flex
+   * child, inserted directly before `this.composer` (a real anchor `this.composer.parentElement`
+   * already gives, the identical "insert before a known, stable sibling" shape the old header
+   * insertion already used, just pointed at a different one) - between the scrollable thread and the
+   * fixed composer row, which is safe to do here because this method only ever runs after the
+   * constructor has finished building and appending every one of `this.panel`'s other children. The
+   * header now stays title-and-close only, exactly as the backlog item's own scope asks.
    *
    * A failure here (the lazy bundle 404s, a host page blocks the request) is caught by this method's
    * own `guardAsync` caller and simply leaves the chip absent, never a throw onto the host page.
@@ -1107,7 +1128,7 @@ export class ChatWidget {
     chip.className = "ago-module-chip";
     chip.hidden = true;
     chip.disabled = true;
-    this.closeButton.parentElement?.insertBefore(chip, this.closeButton);
+    this.composer.parentElement?.insertBefore(chip, this.composer);
     this.moduleChip = chip;
 
     const bookingModule = await loadModule<{ bookingChipSpec: (locale: SupportedLocale) => ModuleChipSpec }>(
@@ -1892,11 +1913,17 @@ export class ChatWidget {
     into.appendChild(
       // `25-27`: `this.config.policyBaseUrl` - the one caller in the whole widget that ever needs
       // it, since this is the only place a consent checkbox is ever rendered.
+      //
+      // `25-129`: the tenant's own configured confirmation text, if `this.session` has one - the
+      // one place in the widget that ever resolves this choice, so `renderContactCaptureControl`
+      // itself never has to know whether a template came from a tenant or from this widget's own
+      // default.
       renderContactCaptureControl(
         this.strings,
         (result) => this.submitContactCapture(result),
         consent,
         this.config.policyBaseUrl,
+        parseContactCaptureConfirmationText(this.session?.widgetContactCaptureConfirmationText ?? null),
       ),
     );
   }

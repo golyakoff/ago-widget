@@ -473,7 +473,10 @@ describe("23-58: the online entry point", () => {
     await flush();
     await flush();
 
-    expect(panel.root.textContent).toContain(en.contactCaptureConfirmation);
+    // `25-129`: the widget's own default confirmation now carries a `{name}` placeholder,
+    // substituted with the name just submitted above ("Ivan") - no tenant override is stubbed in
+    // this test's handshake, so this is the fallback path.
+    expect(panel.root.textContent).toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
     expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
     expect(panel.root.querySelectorAll("form.ago-contact-capture-form")).toHaveLength(0);
 
@@ -482,6 +485,49 @@ describe("23-58: the online entry point", () => {
     currentHub().push(message("m2", 2, "Visitor"));
     await flush();
     expect(panel.root.querySelectorAll(".ago-contact-capture-intro-link")).toHaveLength(0);
+  });
+
+  // `25-129`: the tenant's own configured confirmation text wins over the widget's own default -
+  // the end-to-end wiring from the handshake response through to the rendered confirmation.
+  it("shows the tenant's own configured confirmation text, with {name} substituted, when the site has one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              token: "visitor-token",
+              visitorId: "99999999-9999-9999-9999-999999999999",
+              widgetPrimaryColorHex: null,
+              widgetPosition: "BottomRight",
+              enabledModules: [],
+              widgetContactCaptureConfirmationText: "Спасибо, {name}, мы всё записали.",
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+
+    joinQueue.push(joinResult([message("m1", 1, "Visitor")]));
+    const panel = await openWidget();
+    await flush();
+
+    introLink(panel.root).click();
+    await flush();
+    await flush();
+
+    const { name, phone, email } = requiredFieldsOf(panel.root.querySelector(".ago-contact-capture")!);
+    name.value = "Ivan";
+    phone.value = "+7 000 000-00-01";
+    email.value = "ivan@example.invalid";
+    panel.root.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    await flush();
+    await flush();
+
+    expect(panel.root.textContent).toContain("Спасибо, Ivan, мы всё записали.");
+    expect(panel.root.textContent).not.toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
   });
 
   it("both entry points render the identical set of three required fields", async () => {

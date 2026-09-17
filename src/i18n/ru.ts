@@ -18,7 +18,8 @@ export const ru: WidgetStrings = {
   typeAMessage: "Введите сообщение…",
   send: "Отправить",
   attachAFile: "Прикрепить файл",
-  emojiComingSoon: "Эмодзи (скоро)",
+  insertEmoji: "Вставить эмодзи",
+  emojiPickerLabel: "Выбор эмодзи",
   saveConversation: "Сохранить диалог",
   saveConversationFailedNote: "Не удалось сохранить диалог. Попробуйте ещё раз.",
   previousChatExpired:

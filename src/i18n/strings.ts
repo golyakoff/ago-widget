@@ -25,9 +25,15 @@ export interface WidgetStrings {
   readonly typeAMessage: string;
   readonly send: string;
   readonly attachAFile: string;
-  /** `23-61`: the reserved emoji place in the composer's second row - not a picker (out of scope for
-   * that item), so this is a `title` on an inert, unfocusable placeholder, not a control's label. */
-  readonly emojiComingSoon: string;
+  /** `25-120`: the accessible name on the real emoji-picker trigger button that fills the place
+   * `23-61` reserved and deferred - icon-only (a plain 🙂 character, `ui/widget.ts`'s own remarks on
+   * why not an SVG), so this is the whole of its accessible name, the same shape `attachAFile`/
+   * `saveConversation` already use. Replaces `23-61`'s `emojiComingSoon`, whose "(coming soon)"
+   * wording stopped being true the moment this item shipped. */
+  readonly insertEmoji: string;
+  /** `25-120`: the accessible name on the picker panel itself (`role="grid"`) - what a screen reader
+   * announces on entering the grid `insertEmoji` above opens. */
+  readonly emojiPickerLabel: string;
   /** `23-62`: the accessible name (and `title`) on the real «Сохранить диалог» button that fills the
    * place `23-61` reserved - a down-arrow icon carries no text of its own, so this is the whole of its
    * accessible name, the same "icon-only, name from `aria-label` alone" shape `send` already uses. */

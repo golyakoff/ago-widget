@@ -78,6 +78,8 @@ interface Panel {
   send: HTMLButtonElement;
   status: HTMLDivElement;
   attach: HTMLButtonElement;
+  emoji: HTMLButtonElement;
+  emojiPicker: HTMLDivElement;
   bubbleTexts: () => string[];
 }
 
@@ -98,6 +100,8 @@ function panelOf(root: ShadowRoot): Panel {
     send: query<HTMLButtonElement>(".ago-send"),
     status: query<HTMLDivElement>(".ago-status"),
     attach: query<HTMLButtonElement>(".ago-attach"),
+    emoji: query<HTMLButtonElement>(".ago-emoji"),
+    emojiPicker: query<HTMLDivElement>(".ago-emoji-picker"),
     bubbleTexts: () => [...root.querySelectorAll(".ago-message")].map((bubble) => bubble.textContent ?? ""),
   };
 }
@@ -553,30 +557,149 @@ describe("the panel's composer", () => {
   });
 
   /**
-   * `23-61`: the emoji place is still reserved (a picker is its own, not-yet-built item), and must
-   * not be reachable by keyboard as though it were a control. A `<span>` with no `tabindex`
-   * attribute answers `-1` from `.tabIndex` (not part of the tab order) and has no
-   * `href`/`type`/click handler to make it one - the same "inert, not merely disabled" shape `23-31`
-   * used for the console's own reserved nav entries. `aria-disabled="true"` names what is there
-   * without hiding it from assistive tech the way `aria-hidden` would.
-   *
-   * `23-62` fills the other place `23-61` reserved with a real button - covered by the tests below,
-   * not by this one, since a real control is exactly what this test proves the emoji place is not.
+   * `25-120`: the place `23-61` reserved and deferred now holds a real button - icon-only, reachable
+   * and operable like `attachButton`/`saveButton`, tracking the same connection signal
+   * `updateSendButtonEnabled` uses (not `attachButton`'s stricter one - see `emojiButton`'s own doc
+   * comment in `ui/widget.ts` for why).
    */
-  it("renders the reserved emoji place as an inert span, not a control", async () => {
-    joinQueue.push(joinResult([]));
-    const panel = await openWidget();
+  describe("the emoji picker", () => {
+    it("fills the reserved place with a real, icon-only button that tracks the connection", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
 
-    const reserved = [...panel.root.querySelectorAll<HTMLSpanElement>(".ago-composer-reserved")];
-    expect(reserved).toHaveLength(1);
+      expect(panel.emoji.tagName).toBe("BUTTON");
+      expect(panel.emoji.type).toBe("button");
+      expect(panel.emoji.getAttribute("aria-label")).toBe(en.insertEmoji);
+      expect(panel.emoji.disabled).toBe(false);
+      expect(panel.emojiPicker.hidden).toBe(true);
 
-    const [place] = reserved;
-    expect(place!.tagName).toBe("SPAN");
-    expect(place!.getAttribute("aria-disabled")).toBe("true");
-    expect(place!.hasAttribute("tabindex")).toBe(false);
-    expect(place!.tabIndex).toBe(-1);
-    expect(place!.hasAttribute("href")).toBe(false);
-    expect(place!.title).toBe(en.emojiComingSoon);
+      currentHub().dropToReconnecting();
+      await flush();
+      expect(panel.emoji.disabled).toBe(true);
+    });
+
+    it("opens a 40-emoji grid on click, focused on the first cell", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+
+      expect(panel.emojiPicker.hidden).toBe(false);
+      expect(panel.emoji.getAttribute("aria-expanded")).toBe("true");
+      expect(panel.emojiPicker.getAttribute("role")).toBe("grid");
+      expect(panel.emojiPicker.getAttribute("aria-label")).toBe(en.emojiPickerLabel);
+
+      const cells = [...panel.emojiPicker.querySelectorAll<HTMLButtonElement>('[role="gridcell"]')];
+      expect(cells).toHaveLength(40);
+      expect(cells[0]?.textContent).toBe("😀");
+      expect(cells[39]?.textContent).toBe("📎");
+      expect(panel.root.activeElement).toBe(cells[0]);
+    });
+
+    it("toggles closed on a second click of the trigger button", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+      expect(panel.emojiPicker.hidden).toBe(false);
+
+      panel.emoji.click();
+      expect(panel.emojiPicker.hidden).toBe(true);
+      expect(panel.emoji.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    /**
+     * `25-120`'s own concrete case: a visitor who moved the cursor back into text already typed must
+     * get the emoji where the cursor actually is, not appended at the end - a non-empty,
+     * cursor-mid-string case rather than an empty textarea, which an append-only bug would also
+     * pass by accident.
+     */
+    it("inserts the clicked emoji at the cursor position, not at the end", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      type(panel, "Hello  there");
+      panel.input.setSelectionRange(6, 6); // between the two spaces
+      panel.emoji.click();
+
+      const cells = [...panel.emojiPicker.querySelectorAll<HTMLButtonElement>('[role="gridcell"]')];
+      cells[2]!.click(); // 🙂, third glyph in EMOJI_PICKER_GLYPHS
+
+      expect(panel.input.value).toBe("Hello 🙂 there");
+      expect(panel.input.selectionStart).toBe(8); // just after the inserted glyph
+      expect(panel.input.selectionEnd).toBe(8);
+    });
+
+    it("closes and returns focus to the input after an insert, and enables send", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      type(panel, "");
+      panel.emoji.click();
+      const cells = [...panel.emojiPicker.querySelectorAll<HTMLButtonElement>('[role="gridcell"]')];
+      cells[0]!.click();
+
+      expect(panel.emojiPicker.hidden).toBe(true);
+      expect(panel.root.activeElement).toBe(panel.input);
+      expect(panel.send.disabled).toBe(false);
+    });
+
+    it("closes on Escape and returns focus to the trigger button, without closing the whole panel", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+      panel.emojiPicker.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+
+      expect(panel.emojiPicker.hidden).toBe(true);
+      expect(panel.root.activeElement).toBe(panel.emoji);
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+    });
+
+    it("closes on a click outside the picker and the trigger, returning focus to the trigger button", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+      panel.input.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+
+      expect(panel.emojiPicker.hidden).toBe(true);
+      expect(panel.root.activeElement).toBe(panel.emoji);
+    });
+
+    it("does not close when the click lands on the trigger button itself (that toggle is its own job)", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+      expect(panel.emojiPicker.hidden).toBe(false);
+
+      // A real second click on the same button both fires the outside-click listener (registered
+      // while the picker is open) and the button's own toggle handler - this asserts the net effect
+      // is exactly one toggle (closed), not a close-then-reopen race.
+      panel.emoji.click();
+      expect(panel.emojiPicker.hidden).toBe(true);
+    });
+
+    it("moves the roving tabindex with ArrowRight/ArrowDown, keyboard-only", async () => {
+      joinQueue.push(joinResult([]));
+      const panel = await openWidget();
+
+      panel.emoji.click();
+      const cells = [...panel.emojiPicker.querySelectorAll<HTMLButtonElement>('[role="gridcell"]')];
+
+      cells[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      expect(panel.root.activeElement).toBe(cells[1]);
+      expect(cells[0]!.tabIndex).toBe(-1);
+      expect(cells[1]!.tabIndex).toBe(0);
+
+      cells[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      expect(panel.root.activeElement).toBe(cells[9]); // one row down, same column (8 columns wide)
+      expect(cells[1]!.tabIndex).toBe(-1);
+      expect(cells[9]!.tabIndex).toBe(0);
+    });
   });
 
   /**

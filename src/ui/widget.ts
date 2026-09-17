@@ -159,6 +159,20 @@ function createSvgIcon(d: string): SVGSVGElement {
 }
 
 /**
+ * `25-136`: enables or disables every interactive control a rendered primitive holds - the buttons
+ * `appendActionButtons` builds for the three choice-shaped kinds, or the input/submit pair `form`
+ * builds (`ui/primitives/render.ts`). This is the module-step gate's own lock, distinct from
+ * `render.ts`'s own `disableAll` (which freezes a primitive permanently once a visitor has already
+ * replied) - this one is reversible, flipped back on the moment the gating contact-capture form is
+ * submitted successfully.
+ */
+function setPrimitiveControlsDisabled(container: HTMLElement, disabled: boolean): void {
+  container.querySelectorAll("button, input").forEach((element) => {
+    (element as HTMLButtonElement | HTMLInputElement).disabled = disabled;
+  });
+}
+
+/**
  * `25-120`: the fixed, curated 40-emoji set the backlog item names, verbatim and in that exact
  * order - a flat, static list, never a search index or a category tree (`docs/backlog/
  * 25-120-*.md`'s own Scope: "no search, no categories, no recently-used tracking, no skin-tone
@@ -1848,11 +1862,55 @@ export class ChatWidget {
     // `23-58`: if the online link (above) is already showing - unclicked, waiting - this branch is
     // what an out-of-hours reply arriving mid-conversation looks like: the visitor was online, then
     // was not. The link is removed rather than left beside a second, active copy of the same form.
-    if (message.authorKind === "System" && !this.contactCaptureShown) {
+    //
+    // `25-136`: narrowed to `primitive === null` - a module step's own prompt rides this identical
+    // `authorKind === "System"` (since `20-07`, before this branch existed), which is exactly the
+    // coincidence that let this control show up next to a booking prompt with no relationship to
+    // booking at all. A message this build actually turned into a rich control is never "an
+    // out-of-hours auto-reply with nothing else going on" - the dedicated branch below is what a
+    // module step gets instead, now a deliberate condition rather than a side effect of this one.
+    if (message.authorKind === "System" && primitive === null && !this.contactCaptureShown) {
       this.visitorIntroControlEl?.remove();
       this.visitorIntroControlEl = null;
       this.contactCaptureShown = true;
       guardAsync(() => this.appendContactCaptureControl(bubble));
+    }
+
+    // `25-136`: a module task's own first reply-capable step - detected on the identical fact
+    // `25-133` already computed to decide whether to render this message richly at all
+    // (`primitive !== null`), never a second, independent read of `contentKind` against
+    // `KNOWN_KINDS`. Booking is the only module this platform has today, so in practice this is
+    // "the booking task is active," but the check itself stays module-agnostic, matching
+    // `adr/0065`'s own primitive vocabulary being shared by every module rather than owned by one.
+    //
+    // Gated on `!this.storage.getHasKnownContactDetail()`: a visitor with a contact detail already on
+    // file - from earlier in this same conversation, or from a conversation before it, under the same
+    // stored visitor identity - reaches the step's own controls immediately, no form, no lock. A
+    // fresh visitor sees the identical contact-capture control the out-of-hours branch above uses,
+    // and the step's own buttons/inputs (`setPrimitiveControlsDisabled`) stay disabled until it is
+    // submitted - the structural precondition the backlog item names: someone has to be reachable
+    // before a real slot is booked. `contactCaptureShown` is the same "shown once" latch the branch
+    // above already uses, so the two conditions can never both fire for the same message
+    // (`primitive === null` above vs. `primitive !== null` here).
+    //
+    // Client-side only, and known to be exactly that: a visitor could still answer the gated step by
+    // crafting a raw send this widget never offered a control for, and a text-channel (Telegram/MAX)
+    // visitor never reaches this file at all - both accepted, named limitations (`25-138`), not
+    // oversights this branch tries to close.
+    if (
+      message.authorKind !== "Visitor" &&
+      primitive !== null &&
+      !this.contactCaptureShown &&
+      !this.storage.getHasKnownContactDetail()
+    ) {
+      const gatedPrimitive = primitive;
+      this.visitorIntroControlEl?.remove();
+      this.visitorIntroControlEl = null;
+      this.contactCaptureShown = true;
+      setPrimitiveControlsDisabled(gatedPrimitive, true);
+      guardAsync(() =>
+        this.appendContactCaptureControl(bubble, () => setPrimitiveControlsDisabled(gatedPrimitive, false)),
+      );
     }
   }
 
@@ -1909,8 +1967,13 @@ export class ChatWidget {
    * `System` bubble itself (the form nests inside it, as `23-09` always did) or the online link's own
    * now-emptied container (`appendVisitorIntroControl`, the form takes the link's place). One render
    * function, one caller of it, two callers of *that*.
+   *
+   * `25-136`: a third caller now exists - the module-step gate - and it is the one caller that ever
+   * passes `onSuccess`: a callback run once `submitContactCapture` actually resolves, so the gate can
+   * re-enable the primitive's own controls the moment the form is submitted. The two older callers
+   * pass nothing, and nothing about their own behaviour changes.
    */
-  private async appendContactCaptureControl(into: HTMLElement): Promise<void> {
+  private async appendContactCaptureControl(into: HTMLElement, onSuccess?: () => void): Promise<void> {
     let consent: ConsentRequirement | null = null;
     if (this.conversationId) {
       try {
@@ -1926,7 +1989,14 @@ export class ChatWidget {
     // misconfiguration `GetConsentRequirementHandler`'s own remarks name - offering a phone form with
     // no way to satisfy the gate would only produce a confusing server refusal on submit, so this
     // widget declines to offer the control at all rather than guess at a friendlier failure.
+    //
+    // `25-136`: this is also why a gating caller's `onSuccess` is invoked here too, on the way out -
+    // the same "must never be the reason a visitor cannot proceed" principle `24-05`'s own remarks
+    // above already state for a *consent-read* failure applies identically to a misconfiguration that
+    // stops the control from rendering at all: a booking step must not lock forever because this
+    // widget declined to offer the one control that would have unlocked it.
     if (consent?.contactRequired && !consent.contact) {
+      onSuccess?.();
       return;
     }
 
@@ -1940,7 +2010,10 @@ export class ChatWidget {
       // default.
       renderContactCaptureControl(
         this.strings,
-        (result) => this.submitContactCapture(result),
+        // `25-136`: `onSuccess` runs only once `submitContactCapture` itself resolves - a rejected
+        // submission leaves the gate exactly where `renderContactCaptureControl`'s own `.catch`
+        // already leaves the form: re-enabled, waiting for the visitor to try again.
+        (result) => this.submitContactCapture(result).then(() => onSuccess?.()),
         consent,
         this.config.policyBaseUrl,
         parseContactCaptureConfirmationText(this.session?.widgetContactCaptureConfirmationText ?? null),
@@ -1963,6 +2036,11 @@ export class ChatWidget {
    * Ordering matters: if the site requires contact consent, the server's own gate
    * (`RecordVisitorContactDetailHandler`) refuses the phone write until an acceptance already exists,
    * so recording it first is not a style choice, it is what makes the very next call succeed.
+   *
+   * `25-136`: `this.storage.setHasKnownContactDetail()` runs last, only once every write above has
+   * actually succeeded - the one flag every caller of this method shares (the out-of-hours control,
+   * the online link, and the module-step gate), so whichever one a visitor happens to submit through
+   * unlocks every other one for the rest of this stored identity, not just the caller that showed it.
    */
   private async submitContactCapture(result: ContactCaptureResult): Promise<void> {
     if (!this.conversationId) {
@@ -1981,6 +2059,7 @@ export class ChatWidget {
     await recordContactDetail(this.config, token, this.conversationId, "Phone", result.phone);
     await recordContactDetail(this.config, token, this.conversationId, "Name", result.name);
     await recordContactDetail(this.config, token, this.conversationId, "Email", result.email);
+    this.storage.setHasKnownContactDetail();
   }
 
   /**

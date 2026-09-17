@@ -393,6 +393,111 @@ describe("a page reloaded after a conversation was already open", () => {
   });
 });
 
+describe("the delivered-ack the widget owes an operator's message", () => {
+  /**
+   * `25-119`: the widget's own half of the ack round trip - an incoming operator message must call
+   * the new hub method exactly once, with the same conversation and message ids the message itself
+   * carries. `authorKind === "Operator"` is the same gate `ago-console`'s `Thread.tsx` already uses
+   * for the identical channel-kind badge - proven here against the fake hub's own `invocationsOf`,
+   * the same assertion shape this file already uses for `JoinAsync`/`SendMessageAsync`.
+   */
+  it("acks exactly once for a live operator message, and not for the visitor's own echo", async () => {
+    const connection = newConnection();
+    connection.onMessage(() => undefined);
+    joinQueue.push(joinResult([]));
+    await connection.start();
+
+    currentHub().push(message("op-1", 20, "Operator"));
+    currentHub().push(message("visitor-echo", 21, "Visitor"));
+    await Promise.resolve();
+
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync")).toHaveLength(1);
+    expect(currentHub().invocationAt("AcknowledgeDeliveredAsync", 0).args).toEqual([CONVERSATION_ID, "op-1"]);
+  });
+
+  // A system message and an auto-greeting are rendered like an operator's own bubble
+  // (`protocol/types.ts`'s remarks on `"AutoGreeting"`), but neither is what this item calls
+  // "operator-authored" - console's own badge precedent excludes both, and this file matches it.
+  it("does not ack a system message or an auto-greeting", async () => {
+    const connection = newConnection();
+    connection.onMessage(() => undefined);
+    joinQueue.push(joinResult([]));
+    await connection.start();
+
+    currentHub().push({ ...message("sys-1", 20), authorKind: "System" });
+    currentHub().push({ ...message("greet-1", 21), authorKind: "AutoGreeting" });
+    await Promise.resolve();
+
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync")).toHaveLength(0);
+  });
+
+  // Does not block rendering, and does not throw into the caller, if the ack invoke itself rejects -
+  // `guardAsync` (`errors.ts`) is the convention this method matches, the same "never let an internal
+  // failure escape into the host page" rule the rest of this widget already lives by.
+  it("still delivers the message to the listener even if the ack invoke rejects", async () => {
+    const connection = newConnection();
+    const received: string[] = [];
+    connection.onMessage((dto) => received.push(dto.id));
+    joinQueue.push(joinResult([]));
+    await connection.start();
+
+    const originalInvoke = currentHub().invoke.bind(currentHub());
+    currentHub().invoke = (method: string, ...args: unknown[]) =>
+      method === "AcknowledgeDeliveredAsync"
+        ? Promise.reject(new Error("boom"))
+        : originalInvoke(method, ...args);
+
+    currentHub().push(message("op-1", 20, "Operator"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(received).toEqual(["op-1"]);
+  });
+
+  /**
+   * `25-119`'s own reconnect/history-replay question, answered: a resume delta that overlaps a live
+   * push already received (this file's own "does not deliver a message twice when the resume delta
+   * overlaps a live push", just above) must not ack that overlapping message a second time within
+   * this connection's own lifetime - the identical `seenMessageIds` gate that already stops the
+   * duplicate render stops the duplicate ack, for free. The genuinely new message in the same delta
+   * still gets acked.
+   */
+  it("does not re-ack a resume-delta message this connection had already seen live", async () => {
+    const connection = newConnection();
+    connection.onMessage(() => undefined);
+    // Visitor-authored, so the initial history page's own ack pass (`start()`'s loop) contributes
+    // nothing here - this test's count starts clean at the live push below.
+    joinQueue.push(joinResult([message("m1", 11, "Visitor")]));
+    await connection.start();
+    currentHub().push(message("m2", 12, "Operator"));
+    await Promise.resolve();
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync")).toHaveLength(1);
+
+    joinQueue.push(joinResult([message("m2", 12, "Operator"), message("m3", 13, "Operator")]));
+    currentHub().dropToReconnecting();
+    currentHub().completeReconnect();
+    await Promise.resolve();
+
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync")).toHaveLength(2);
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync").map((i) => i.args[1])).toEqual(["m2", "m3"]);
+  });
+
+  // The initial history page a fresh `start()` returns is not routed through `handleIncoming` at all
+  // (it never fires `onMessage`) - a visitor's own browser reopening the widget is itself a
+  // "reconnecting later" moment for a message its previous session never got the chance to ack, so
+  // this connection's own initial join must ack every operator message in that page too, not only
+  // ones seen live afterwards.
+  it("acks every operator message already present in the initial history page", async () => {
+    const connection = newConnection();
+    joinQueue.push(
+      joinResult([message("m1", 11, "Visitor"), message("m2", 12, "Operator"), message("m3", 13, "Operator")]),
+    );
+    await connection.start();
+
+    expect(currentHub().invocationsOf("AcknowledgeDeliveredAsync").map((i) => i.args[1])).toEqual(["m2", "m3"]);
+  });
+});
+
 describe("a send that meets a connection which is not there", () => {
   it("is refused before anything reaches the server, so the caller can retry it safely", async () => {
     const connection = newConnection();

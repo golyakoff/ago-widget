@@ -1769,7 +1769,33 @@ export class ChatWidget {
     // the one fact `saveConversation` needs regardless: "this message was shown to the visitor".
     this.renderedMessages.set(message.id, message);
 
-    const bubble = this.renderBubble(message.authorKind, message.body);
+    // `20-07`/`25-133`: only a message from the *other* side of the conversation is a step to render
+    // richly. A visitor's own message can carry `contentKind`/`content` too - it is the reply this
+    // same widget just sent (`sendStructuredReply`, `{ value }` only, no `actions`) - and re-running
+    // the primitive renderer against it would either render nothing useful (no `prompt`/`title`/
+    // `fieldId` to read) or, worse, a second set of buttons under a bubble that already answered them.
+    //
+    // `25-133`: computed *before* the bubble itself now, not after appending it as `20-07` originally
+    // did - the fix below needs to know whether a rich form exists before deciding whether the plain
+    // `body` bubble should show any text at all. Showing both every time, regardless of whether this
+    // returned something, was the bug: a numbered-list `body` and real buttons for the identical
+    // choice, one under the other.
+    const primitive =
+      message.authorKind !== "Visitor"
+        ? renderPrimitiveContent(message, this.strings, (contentKind, value, displayText) =>
+            this.sendStructuredReply(contentKind, value, displayText),
+          )
+        : null;
+
+    // `25-133`: `body` is the mandatory, every-channel fallback (`adr/0061`) - shown here only when
+    // this build could not (or does not yet) turn this message into a rich control, i.e. exactly when
+    // `primitive` above is `null` (an unrecognised `contentKind`, or a recognised one this build has
+    // no case for, e.g. `verified_phone_form`/`escalate` - `ui/primitives/render.ts`'s own
+    // `KNOWN_KINDS`). When a rich form *did* render, showing the plain-text rendering underneath it is
+    // not a fallback being used, it is a redundant second rendering of the identical choice. The
+    // console and Telegram/MAX are untouched by this: both read the full `Message.Body` over their own
+    // separate paths, never through this function.
+    const bubble = this.renderBubble(message.authorKind, message.body, undefined, primitive === null);
     if (message.attachmentId) {
       this.renderAttachmentInto(bubble, message.attachmentId);
     }
@@ -1795,24 +1821,18 @@ export class ChatWidget {
       }
     }
 
-    // `20-07`: only a message from the *other* side of the conversation is a step to render richly.
-    // A visitor's own message can carry `contentKind`/`content` too - it is the reply this same
-    // widget just sent (`sendStructuredReply`, `{ value }` only, no `actions`) - and re-running the
-    // primitive renderer against it would either render nothing useful (no `prompt`/`title`/`fieldId`
-    // to read) or, worse, a second set of buttons under a bubble that already answered them.
-    if (message.authorKind !== "Visitor") {
-      const primitive = renderPrimitiveContent(message, this.strings, (contentKind, value, displayText) =>
-        this.sendStructuredReply(contentKind, value, displayText),
-      );
-      if (primitive) {
-        bubble.appendChild(primitive);
-      }
+    // `25-133`: `primitive` was computed above, before the bubble existed, so this is simply
+    // attaching it - never a second call to `renderPrimitiveContent` against the same message (that
+    // would risk a second, independent read disagreeing with the first, however unlikely given the
+    // function is pure).
+    if (primitive) {
+      bubble.appendChild(primitive);
     }
 
     // `23-58`: the online entry point - a light, link-like control under the visitor's *own first*
     // message, offered exactly once (`visitorIntroControlOffered`) regardless of how many visitor
     // messages follow. It does not claim `contactCaptureShown` on its own (see that field's own
-    // remarks) - only being clicked, or the out-of-hours branch below pre-empting it, does.
+    // remarks) - only being clicked, or one of the two branches below pre-empting it, does.
     if (message.authorKind === "Visitor" && !this.contactCaptureShown && !this.visitorIntroControlOffered) {
       this.visitorIntroControlOffered = true;
       this.appendVisitorIntroControl(bubble);
@@ -1984,7 +2004,19 @@ export class ChatWidget {
     this.dispatchSend(displayText, undefined, contentKind, JSON.stringify({ value }));
   }
 
-  private renderBubble(authorKind: MessageDto["authorKind"], body: string, state?: "sending"): HTMLDivElement {
+  /**
+   * `25-133`: `showBody` defaults to `true` - every existing caller (a visitor's own optimistic
+   * bubble, the auto-greeting placeholder) keeps setting the text it always did, unchanged. The one
+   * caller that ever passes `false` is `appendMessageBubble`, and only once it already knows
+   * `renderPrimitiveContent` built something for this message - see that method's own remarks for
+   * why showing both is the bug this parameter exists to let it avoid.
+   */
+  private renderBubble(
+    authorKind: MessageDto["authorKind"],
+    body: string,
+    state?: "sending",
+    showBody = true,
+  ): HTMLDivElement {
     const bubble = document.createElement("div");
     // `14-04`: a System message is the shop's own automatic reply, so it gets an incoming-side bubble
     // with a label - deliberately not `.ago-message--system`, which is this widget's *local* status
@@ -2004,9 +2036,12 @@ export class ChatWidget {
       bubble.classList.add("ago-message--pending");
     }
 
-    // textContent, never innerHTML: `body` is untrusted content typed by the other participant
-    // (a visitor's or operator's own keyboard input), never treated as markup.
-    bubble.textContent = body;
+    if (showBody) {
+      // textContent, never innerHTML: `body` is untrusted content typed by the other participant
+      // (a visitor's or operator's own keyboard input), never treated as markup.
+      bubble.textContent = body;
+    }
+
     this.messages.appendChild(bubble);
     this.messages.scrollTop = this.messages.scrollHeight;
     return bubble;

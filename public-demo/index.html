@@ -1,37 +1,47 @@
 <!doctype html>
 <!--
-  8-02's own friendly demo page - NOT demo/index.html, which stays exactly what it is
-  (a deliberately hostile Shadow-DOM-isolation test, 5-09). This page exists for a stranger who
-  was handed only a URL to understand what they're looking at and actually use it, matching
-  roadmap.md's Stage 8 done-when bar ("a stranger with the link can hold a conversation with the
-  operator console").
+  8-02's own demo page - NOT demo/index.html, which stays exactly what it is (a deliberately hostile
+  Shadow-DOM-isolation test, 5-09). This page exists so a stranger handed only a URL can see the
+  widget in the place it actually lives: on a shop's storefront, next to the products, not under
+  three cards of prose explaining what a widget is.
+
+  **It is a shop first and an explanation second, and that is the point.** The page used to open with
+  two paragraphs about WebSocket connections and close with an essay on multi-tenancy; the widget it
+  was demonstrating was the least prominent thing on it. Everything a visitor needs in order to *use*
+  the demo - the shared login, the private-tenant button - is still here, moved into one block at the
+  end and marked as the service area it is.
+
+  The palette is deliberately warm and almost monochrome. The widget's own accent is blue
+  (`--ago-accent`, ui/styles.ts), and a storefront in the same blue would swallow it.
 
   Served from the same nginx container as the built widget bundle (Dockerfile in this repository's
   root) at https://demo-shop1.reserve-me.ru - script and page share one origin deliberately, which is
   exactly what makes an explicit data-api override load-bearing rather than optional (#337, adr/0092):
-  the widget now infers its API origin from wherever its own <script> tag was loaded from, and this
-  page's copy of the bundle is loaded from this page's own origin, not the API's. Left to inference,
-  this page's widget would call itself. demo-boot.js (src/demo/boot.ts's bootWidget) sets data-api on
-  the injected <script> tag explicitly, to the same https://chat-api.reserve-me.ru baked in at build
-  time (AGO_API_BASE_URL, build.mjs) - so the value is unchanged, only who states it.
+  the widget infers its API origin from wherever its own <script> tag was loaded from, and this page's
+  copy of the bundle is loaded from this page's own origin, not the API's. Left to inference, this
+  page's widget would call itself. demo-boot.js (src/demo/boot.ts's bootWidget) sets data-api on the
+  injected <script> tag explicitly, to the same https://chat-api.reserve-me.ru baked in at build time
+  (AGO_API_BASE_URL, build.mjs) - so the value is unchanged, only who states it.
 -->
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AGO Chat — демо вживую</title>
+    <title>Верста — кожаные изделия на заказ</title>
     <style>
       :root {
         color-scheme: light;
-        --ink: #1a1f2b;
-        --muted: #5a6272;
-        --accent: #3457d5;
-        --accent-dark: #24399a;
-        --paper: #ffffff;
-        --canvas: #f4f6fb;
-        --line: #dfe3ee;
-        --warn-bg: #fff7e6;
-        --warn-line: #f0c96a;
+        --ink: #1a1714;
+        --ink-soft: #6b6257;
+        --ink-faint: #9a9186;
+        --paper: #f7f5f1;
+        --card: #ffffff;
+        --line: #e4ded4;
+        --line-soft: #efeae2;
+        --tan: #8a5a2b;
+        --warn-bg: #fdf3dc;
+        --warn-line: #e6c169;
+        --warn-ink: #5c4008;
       }
 
       * {
@@ -40,358 +50,634 @@
 
       body {
         margin: 0;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        color: var(--ink);
-        background: var(--canvas);
-        line-height: 1.55;
-      }
-
-      main {
-        max-width: 720px;
-        margin: 0 auto;
-        padding: 56px 24px 96px;
-      }
-
-      h1 {
-        font-size: 2rem;
-        margin: 0 0 8px;
-      }
-
-      .tag {
-        color: var(--muted);
-        margin: 0 0 40px;
-        font-size: 1.05rem;
-      }
-
-      .card {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background: var(--paper);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 24px 28px;
-        margin-bottom: 24px;
+        color: var(--ink);
+        line-height: 1.55;
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
       }
 
-      .card h2 {
-        margin-top: 0;
-        font-size: 1.15rem;
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px;
       }
 
-      .card ol,
-      .card ul {
-        padding-left: 1.2em;
-      }
-
-      .card li {
-        margin-bottom: 6px;
-      }
-
-      code {
-        background: #eef1f9;
-        border-radius: 4px;
-        padding: 2px 6px;
-        font-size: 0.92em;
-      }
-
-      a {
-        color: var(--accent);
-      }
-
-      /* 8-06. Sits directly under the tagline, above everything explanatory - a visitor who reads
-         only the first screenful still reads this. Left rule and a flat tint rather than a card, so
-         it does not look like one more section to skim past. */
-      .public-notice {
+      /* 8-06/8-11: the safety warning. A strip across the top rather than a card in the flow - the
+         launcher floats over every scroll position, so a visitor can open the panel and type without
+         ever having read the page, and this is the one line that has to survive being skimmed.
+         `id` is what demo-boot.js swaps on a minted `?site=` tenant, where every word of it is
+         false; this makes the warning conditional, never softer. */
+      .notice {
         background: var(--warn-bg);
-        border: 1px solid var(--warn-line);
-        border-left-width: 5px;
-        border-radius: 6px;
-        padding: 14px 18px;
-        margin: 0 0 32px;
+        border-bottom: 1px solid var(--warn-line);
+        color: var(--warn-ink);
+        font-size: 13.5px;
+        line-height: 1.45;
+        padding: 10px 0;
+      }
+
+      header.shop {
+        border-bottom: 1px solid var(--line);
+        background: var(--paper);
+      }
+      .shop-row {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        height: 72px;
+      }
+      .mark {
+        font-size: 19px;
+        font-weight: 800;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: var(--ink);
+      }
+      .shop-nav {
+        display: flex;
+        gap: 22px;
+        margin-left: auto;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+      .shop-nav span {
+        cursor: default;
+      }
+      .cart {
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 14px;
+      }
+      @media (max-width: 720px) {
+        .shop-nav {
+          display: none;
+        }
+        .cart {
+          margin-left: auto;
+        }
+      }
+
+      .hero {
+        padding: 56px 0 40px;
+        display: flex;
+        align-items: flex-end;
+        gap: 40px;
+        flex-wrap: wrap;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(30px, 5vw, 46px);
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+        max-width: 14ch;
+      }
+      .hero p {
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: 42ch;
+        font-size: 16.5px;
+      }
+      .hero .ask {
+        color: var(--tan);
         font-weight: 600;
       }
 
-      .credential-box {
-        background: var(--warn-bg);
-        border: 1px solid var(--warn-line);
-        border-radius: 10px;
-        padding: 18px 22px;
-      }
-
-      .credential-box dl {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 4px 16px;
-        margin: 12px 0 0;
-      }
-
-      .credential-box dt {
-        color: var(--muted);
-      }
-
-      .credential-box dd {
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--line);
         margin: 0;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
+      .section-label {
+        font-size: 11.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        padding: 32px 0 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding-bottom: 56px;
+      }
+      @media (max-width: 860px) {
+        .grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 520px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .item {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      /* Schematic on purpose: line drawings, not photographs. A demo storefront that pretended to
+         have real product photography would be making a claim about a shop that does not exist. */
+      .item .art {
+        background: #efeae2;
+        border-bottom: 1px solid var(--line-soft);
+        aspect-ratio: 4 / 3;
+        display: grid;
+        place-items: center;
+      }
+      .item .art svg {
+        width: 68%;
+        height: auto;
+        display: block;
+      }
+      .item .body {
+        padding: 14px 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .item .name {
+        font-weight: 600;
+        font-size: 15.5px;
+      }
+      .item .meta {
+        font-size: 13px;
+        color: var(--ink-faint);
+      }
+      .item .price {
+        margin-top: 6px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 15px;
+      }
+
+      .facts {
+        display: flex;
+        gap: 40px;
+        flex-wrap: wrap;
+        padding: 26px 0 44px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+      .facts b {
+        display: block;
+        color: var(--ink);
+        font-size: 15px;
+      }
+
+      /* ---- the service area ------------------------------------------------
+         Everything below is about the demo rather than the shop, and is dressed to say so: a
+         dashed frame, a monospace label, no product styling. */
+      .service {
+        border-top: 1px solid var(--line);
+        padding: 44px 0 72px;
+      }
+      .service-label {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin-bottom: 14px;
+      }
+      .service h2 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        letter-spacing: -0.01em;
+      }
+      .service .lede {
+        margin: 0 0 24px;
+        color: var(--ink-soft);
+        max-width: 68ch;
+      }
+      .service-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      @media (max-width: 760px) {
+        .service-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .panel {
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        padding: 20px;
+        background: var(--card);
+      }
+      .panel h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .panel p {
+        margin: 0 0 14px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+      .panel dl {
+        margin: 0 0 14px;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 14px;
+        font-size: 14px;
+      }
+      .panel dt {
+        color: var(--ink-faint);
+      }
+      .panel dd {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      button.mint,
       .console-link {
         display: inline-block;
-        margin-top: 18px;
-        background: var(--accent);
-        color: #fff;
-        padding: 10px 20px;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: 600;
-      }
-
-      .console-link:hover {
-        background: var(--accent-dark);
-      }
-
-      footer {
-        margin-top: 48px;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
-      /* 8-09: the "get your own tenant" card and whatever the mint call renders into it. Uses this
-         page's own palette variables rather than fixed colours, so both demo pages - the light one
-         and the dark one - style it correctly from one block of CSS copied between them. */
-      .own-tenant-box {
-        border-color: var(--accent);
-      }
-      .own-tenant-box button.mint {
         appearance: none;
-        border: 0;
-        border-radius: 0.5rem;
-        background: var(--accent);
-        color: #fff;
+        border: 1px solid var(--ink);
+        border-radius: 6px;
+        background: var(--ink);
+        color: var(--paper);
         font: inherit;
+        font-size: 14px;
         font-weight: 600;
-        padding: 0.7rem 1.15rem;
+        padding: 9px 16px;
         cursor: pointer;
+        text-decoration: none;
       }
-      .own-tenant-box button.mint:disabled {
+      button.mint:disabled {
         opacity: 0.6;
         cursor: default;
       }
+      .console-link {
+        background: transparent;
+        color: var(--ink);
+      }
+      .steps {
+        margin: 22px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+      @media (max-width: 760px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+      }
+      .steps li {
+        border-top: 2px solid var(--ink);
+        padding-top: 10px;
+      }
+      .steps b {
+        display: block;
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        margin-bottom: 4px;
+      }
+      .privacy {
+        margin: 24px 0 0;
+        font-size: 13px;
+        color: var(--ink-faint);
+        max-width: 78ch;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 22px 0 40px;
+        font-size: 13px;
+        color: var(--ink-faint);
+      }
+
+      /* The panel demo-boot.js renders into #ago-demo-mint-output (src/demo/panel.ts builds these
+         class names, so they are a contract with that file, not decoration). */
       .ago-demo-panel {
-        margin-top: 1rem;
-        padding: 1rem;
+        margin-top: 14px;
+        padding: 14px;
         border: 1px solid var(--line);
-        border-radius: 0.6rem;
-        background: var(--canvas);
+        border-radius: 6px;
+        background: var(--paper);
       }
       .ago-demo-panel__title {
-        margin: 0 0 0.5rem;
-        font-size: 1rem;
+        margin: 0 0 6px;
+        font-size: 15px;
       }
       .ago-demo-panel__lifetime {
-        margin: 0 0 0.5rem;
-        color: var(--muted);
+        margin: 0 0 8px;
+        font-size: 13.5px;
+        color: var(--ink-soft);
       }
       /* The one line that has to be read rather than skimmed - the password exists nowhere else. */
       .ago-demo-panel__warning {
-        margin: 0 0 0.9rem;
-        padding: 0.55rem 0.7rem;
+        margin: 0 0 12px;
+        padding: 8px 10px;
         border: 1px solid var(--warn-line);
-        border-radius: 0.45rem;
+        border-radius: 5px;
         background: var(--warn-bg);
+        color: var(--warn-ink);
+        font-size: 13.5px;
         font-weight: 600;
       }
       .ago-demo-field {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
+        gap: 8px;
+        margin-bottom: 8px;
       }
       .ago-demo-field__label {
         flex: 0 0 5.5rem;
-        color: var(--muted);
+        font-size: 13.5px;
+        color: var(--ink-faint);
       }
       .ago-demo-field__value {
         flex: 1 1 auto;
         min-width: 0;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.95rem;
-        padding: 0.45rem 0.55rem;
+        font-size: 13.5px;
+        padding: 7px 9px;
         border: 1px solid var(--line);
-        border-radius: 0.4rem;
-        background: var(--paper);
+        border-radius: 5px;
+        background: var(--card);
         color: var(--ink);
       }
       .ago-demo-field__copy {
         appearance: none;
         border: 1px solid var(--line);
-        border-radius: 0.4rem;
-        background: var(--paper);
+        border-radius: 5px;
+        background: var(--card);
         color: var(--ink);
         font: inherit;
-        padding: 0.45rem 0.7rem;
+        font-size: 13.5px;
+        padding: 7px 11px;
         cursor: pointer;
       }
       .ago-demo-panel__steps {
-        margin: 0.75rem 0 0;
-        padding-left: 1.15rem;
-        color: var(--muted);
+        margin: 12px 0 0;
+        padding-left: 18px;
+        font-size: 13.5px;
+        color: var(--ink-soft);
       }
       .ago-demo-step {
-        margin-bottom: 0.3rem;
+        margin-bottom: 4px;
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>AGO Chat</h1>
-      <p class="tag">
-        Живой, по-настоящему работающий чат поддержки — целиком, без локальной установки.
-      </p>
-
-      <!--
-        8-11: the id is what demo-boot.js swaps this text through on a minted `?site=` tenant, where
-        every word of it is false. The default copy stays exactly 8-06's - this item makes the
-        warning conditional, never softer.
-      -->
-      <p class="public-notice" id="ago-demo-public-notice">
-        Это публичное демо. Логин оператора ниже опубликован на этой странице, так что любой может
-        прочитать каждый разговор, начатый здесь — включая ваш. Не пишите сюда ничего настоящего.
-      </p>
-
-      <div class="card">
-        <h2>Что это за страница</h2>
-        <p>
-          На этой странице встроен настоящий виджет AGO Chat — точно так же, как его встроил бы у
-          себя реальный магазин: один тег <code>&lt;script&gt;</code>, правый нижний угол. Кликните,
-          отправьте сообщение — оно уйдёт на настоящий бэкенд на настоящем сервере.
-        </p>
-        <p>
-          Из второй вкладки или с другого устройства войдите в консоль оператора (ниже) и ответьте
-          как оператор поддержки — обе стороны говорят по настоящему WebSocket-соединению в реальном
-          времени, ровно так же, как это было бы для настоящего магазина и настоящего покупателя.
-        </p>
-      </div>
-
-      <div class="card">
-        <h2>Попробуйте</h2>
-        <p>
-          Ниже предложены два логина оператора — один общий для всех посетителей страницы, второй —
-          ваш собственный приватный тенант. Выберите любой, затем:
-        </p>
-        <ol>
-          <li>Откройте пузырь чата в правом нижнем углу этой страницы и отправьте сообщение.</li>
-          <li>
-            Откройте консоль оператора в новой вкладке:
-            <a href="https://office.reserve-me.ru" target="_blank" rel="noopener">
-              office.reserve-me.ru</a
-            >
-            — войдите под тем логином, который выбрали.
-          </li>
-          <li>Найдите своё сообщение в очереди, откройте его и ответьте. Ответ прилетит сюда вживую.</li>
-        </ol>
-      </div>
-
-      <!--
-        8-09: the half of 8-07 a stranger can actually reach. The endpoint has existed since 8-07 and
-        nothing called it; this card is what calls it. Placed above the shared login below on purpose -
-        a viewer should meet the private option first, and the shared one is kept because it is what
-        demonstrates tenant isolation live (two seeded tenants, neither able to see the other).
-      -->
-      <div class="card own-tenant-box">
-        <h2>Получите свой приватный тенант</h2>
-        <p>
-          Логин ниже общий для всех посетителей этой страницы. Нажмите эту кнопку вместо этого — и
-          получите свой собственный тенант, со своим аккаунтом оператора и своими разговорами,
-          которые никто больше не увидит. Он удаляет себя сам примерно через сутки, вместе со всем,
-          что в нём есть.
-        </p>
-        <button type="button" class="mint" id="ago-demo-mint-button">Получить свой тенант</button>
-        <div id="ago-demo-mint-output"></div>
-      </div>
-
-      <div class="card credential-box">
-        <h2>Или общий логин — Demo Shop One</h2>
+    <div class="notice">
+      <div class="wrap">
         <!--
-          8-11: named rather than "this tenant". The same markup renders on a minted `?site=` page,
-          where "this tenant" would point at the visitor's own one - which this credential cannot
-          reach at all.
+          8-11: the id is what demo-boot.js swaps this text through on a minted `?site=` tenant,
+          where every word of it is false. The default copy stays exactly 8-06's.
         -->
-        <p>
-          Это настоящий, рабочий логин в консоль выше — намеренно публичный, а не утёкший. Он даёт
-          доступ только к тенанту Demo Shop One: никогда — к данным настоящего магазина, и никогда —
-          к тенанту, созданному кнопкой выше.
-        </p>
-        <dl>
-          <dt>Логин</dt>
-          <dd>demo-operator</dd>
-          <dt>Пароль</dt>
-          <dd>demo-operator-password</dd>
-        </dl>
-        <a class="console-link" href="https://office.reserve-me.ru" target="_blank" rel="noopener"
-          >Открыть консоль оператора</a
+        <span id="ago-demo-public-notice"
+          >Это публичное демо. Логин оператора опубликован на этой странице, так что любой может
+          прочитать каждый разговор, начатый здесь — включая ваш. Не пишите сюда ничего
+          настоящего.</span
         >
       </div>
+    </div>
 
-      <div class="card">
-        <h2>Это безопасно — потыкать?</h2>
-        <!--
-          8-11: this card used to argue from a count - "exactly one tenant" - which 8-05's second
-          seeded shop and 8-07's minted ones falsified. The reassurance it was reaching for is still
-          true, so it now rests on that instead: every tenant here is a demo tenant, and no real
-          customer was ever onboarded. That claim survives the next minted tenant; a number does not.
-        -->
-        <p>
-          Да. Каждый тенант на этом деплое — демо-тенант: заранее засеянные магазины, которые
-          встраивают эти страницы, плюс одноразовые, созданные кнопкой выше. Ни один настоящий клиент
-          сюда никогда не заводился, так что за любым логином на этом сервере не стоит промышленных
-          данных. AGO Chat мультитенантен по конструкции (каждая строка, которую может достать
-          посетитель или оператор, привязана к одному <em>site</em>), и это можно наблюдать вживую
-          между двумя страницами магазинов — но ничто из отправленного здесь не промышленные данные, и
-          ничто из сделанного здесь не может дотянуться до того, чем они были бы.
-        </p>
-        <!--
-          8-11: swapped by demo-boot.js on a minted `?site=` tenant, like the banner above. Found by
-          walking the built page in a browser rather than by reading it: the banner and the widget
-          were both conditional and this paragraph still told a visitor on their own tenant that any
-          stranger could read what they typed. Same bug, third place.
-        -->
-        <p id="ago-demo-privacy-note">
-          Безопасно для деплоя — не то же самое, что приватно для вас, и эта карточка вводила бы в
-          заблуждение, не сказав об этом: логин выше опубликован, так что всё, что вы напишете в
-          виджет <em>именно этой страницы</em>, сможет прочитать любой незнакомец, вошедший под ним.
-          Считайте этот чат публичным — либо нажмите «Получить свой тенант» выше и используйте
-          приватный, который он вам выдаст и который этот логин достать не может.
-        </p>
+    <header class="shop">
+      <div class="wrap shop-row">
+        <a class="mark" href="#">Верста</a>
+        <nav class="shop-nav">
+          <span>Каталог</span>
+          <span>Доставка</span>
+          <span>О мастерской</span>
+        </nav>
+        <span class="cart">Корзина · 0</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <section class="hero">
+          <h1>Кожаные изделия на заказ</h1>
+          <p>
+            Шьём вручную, под размер, из растительного дубления. Срок — три рабочих дня.
+            <br />
+            <span class="ask">Вопрос по размеру или сроку — напишите в чат, он в правом нижнем углу.</span>
+          </p>
+        </section>
+
+        <hr class="rule" />
+
+        <div class="section-label">Каталог · 6 позиций</div>
+        <section class="grid">
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <rect x="14" y="52" width="104" height="16" rx="4" />
+                <rect x="118" y="46" width="28" height="28" rx="3" />
+                <circle cx="132" cy="60" r="4" />
+                <path d="M30 52v16M46 52v16M62 52v16" stroke-width="1" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Ремень «Классик»</span>
+              <span class="meta">35 мм · латунная пряжка</span>
+              <span class="price">4 200 ₽</span>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <path d="M38 48h84l-8 48H46z" />
+                <path d="M58 48V36a22 22 0 0 1 44 0v12" />
+                <path d="M46 62h68" stroke-width="1" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Сумка «Почтальон»</span>
+              <span class="meta">на ремне, А4</span>
+              <span class="price">11 900 ₽</span>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <rect x="32" y="38" width="96" height="46" rx="4" />
+                <path d="M80 38v46" stroke-width="1" />
+                <path d="M96 56h20" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Портмоне «Фолд»</span>
+              <span class="meta">6 карт, купюрное отделение</span>
+              <span class="price">5 400 ₽</span>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <rect x="46" y="34" width="48" height="56" rx="4" />
+                <circle cx="104" cy="44" r="10" />
+                <path d="M104 54v22" stroke-width="1" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Ключница «Скоба»</span>
+              <span class="meta">кольцо, 6 карабинов</span>
+              <span class="price">2 300 ₽</span>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <rect x="36" y="26" width="88" height="68" rx="4" />
+                <path d="M52 26v68" stroke-width="1" />
+                <path d="M68 46h40M68 58h40M68 70h26" stroke-width="1" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Обложка для паспорта</span>
+              <span class="meta">тиснение инициалов</span>
+              <span class="price">1 900 ₽</span>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art">
+              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
+                <circle cx="80" cy="60" r="30" />
+                <rect x="70" y="26" width="20" height="14" rx="3" />
+                <path d="M62 60h36" stroke-width="1" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Браслет «Кольцо»</span>
+              <span class="meta">двойной, под размер</span>
+              <span class="price">1 400 ₽</span>
+            </div>
+          </article>
+        </section>
+
+        <hr class="rule" />
+
+        <div class="facts">
+          <div><b>3 рабочих дня</b>обычный срок пошива</div>
+          <div><b>Бесплатно от 5 000 ₽</b>доставка по городу</div>
+          <div><b>Год</b>гарантия на швы и фурнитуру</div>
+        </div>
       </div>
 
-      <footer>
-        AGO Chat — портфолио-проект, демонстрирующий конкурентность на бэкенде, обмен сообщениями в
-        реальном времени и Clean Architecture целиком, от начала до конца — исходный код открыт. Эта
-        страница и виджет, который она встраивает, собраны и задеплоены как есть из того же кода, а
-        не макет.
-      </footer>
+      <!-- ------------------------------------------------------------------ -->
+      <section class="service">
+        <div class="wrap">
+          <div class="service-label">Служебный блок · это демонстрация AGO Chat</div>
+          <h2>Магазина «Верста» не существует</h2>
+          <p class="lede">
+            Витрина выше — декорация. Настоящий здесь только чат в правом нижнем углу: тот же виджет,
+            тот же сервер и та же консоль оператора, которые получает реальный магазин. Напишите в
+            него, потом откройте консоль во второй вкладке и ответьте себе же.
+          </p>
+
+          <div class="service-grid">
+            <!--
+              8-09: the half of 8-07 a stranger can actually reach. Placed before the shared login on
+              purpose - a viewer should meet the private option first, and the shared one is kept
+              because it is what demonstrates tenant isolation live.
+            -->
+            <div class="panel">
+              <h3>Свой приватный тенант</h3>
+              <p>
+                Свой магазин, свой оператор, свои разговоры — их не увидит никто. Удаляется сам
+                примерно через сутки вместе со всем, что в нём есть.
+              </p>
+              <button type="button" class="mint" id="ago-demo-mint-button">Получить свой тенант</button>
+              <div id="ago-demo-mint-output"></div>
+            </div>
+
+            <div class="panel">
+              <h3>Или общий логин — Demo Shop One</h3>
+              <!--
+                8-11: named rather than "this tenant". The same markup renders on a minted `?site=`
+                page, where "this tenant" would point at the visitor's own one - which this
+                credential cannot reach at all.
+              -->
+              <p>
+                Настоящий рабочий логин, намеренно публичный. Даёт доступ только к тенанту Demo Shop
+                One — никогда к данным настоящего магазина и никогда к тенанту из кнопки слева.
+              </p>
+              <dl>
+                <dt>Логин</dt>
+                <dd>demo-operator</dd>
+                <dt>Пароль</dt>
+                <dd>demo-operator-password</dd>
+              </dl>
+              <a
+                class="console-link"
+                href="https://office.reserve-me.ru"
+                target="_blank"
+                rel="noopener"
+                >Открыть консоль оператора ↗</a
+              >
+            </div>
+          </div>
+
+          <ol class="steps">
+            <li><b>Шаг 1</b>Откройте чат в правом нижнем углу и отправьте сообщение.</li>
+            <li><b>Шаг 2</b>Во второй вкладке войдите в консоль под выбранным логином.</li>
+            <li><b>Шаг 3</b>Найдите сообщение в очереди и ответьте — ответ придёт сюда вживую.</li>
+          </ol>
+
+          <!--
+            8-11: swapped by demo-boot.js on a minted `?site=` tenant, like the banner at the top.
+            Found by walking the built page in a browser rather than by reading it: the banner and
+            the widget were both conditional and this paragraph still told a visitor on their own
+            tenant that any stranger could read what they typed.
+          -->
+          <p class="privacy" id="ago-demo-privacy-note">
+            Безопасно для сервера — не то же самое, что приватно для вас. Логин выше опубликован, так
+            что всё, написанное в виджет именно этой страницы, сможет прочитать любой, кто им
+            воспользуется. Считайте этот чат публичным — или возьмите приватный тенант кнопкой выше,
+            до которого этот логин не дотягивается.
+          </p>
+        </div>
+      </section>
     </main>
+
+    <footer>
+      <div class="wrap">
+        AGO Chat — встраиваемый чат поддержки. Эта страница и виджет на ней собраны и развёрнуты из
+        того же исходного кода, что получает реальный магазин, а не сверстаны как макет.
+      </div>
+    </footer>
 
     <!--
       8-06: data-demo-notice turns on the widget's own line inside the panel itself (`8-11` renamed
-      the attribute when one boolean stopped being enough for two kinds of tenant). The page copy above is not enough on its own - the launcher floats over every scroll
-      position, so a visitor can open the panel and type without ever having read the page.
-    -->
-    <!--
+      the attribute when one boolean stopped being enough for two kinds of tenant).
+
       8-09: the widget is no longer embedded by a literal tag here. demo-boot.js reads `?site=`,
       falls back to this page's own key (demo_site) when it is absent - which is every link that
       exists today - and then injects the widget's own <script data-site> tag with the answer.
 
-      **The query parameter belongs to this page, not to the widget** (ago-root adr/0058). A
-      widget that read it from its host page's URL could be repointed at another tenant by any
-      page it is embedded on, which is a tenant-isolation hole rather than a convenience. The
-      two ship as separate bundles so that stays true by construction.
+      **The query parameter belongs to this page, not to the widget** (ago-root adr/0058). A widget
+      that read it from its host page's URL could be repointed at another tenant by any page it is
+      embedded on, which is a tenant-isolation hole rather than a convenience. The two ship as
+      separate bundles so that stays true by construction.
 
-      8-11: demo-boot.js decides *which* notice, from the tenant rather than the page. The sentence
-      above and the one inside the widget both used to be unconditional, and this comment used to
-      defend that ("the page stays public even when the tenant is private"). The page being public is
-      true; what the sentences claim is that the published demo-operator login can read the
-      conversation, and on a minted tenant it cannot - adr/0058 gives that visitor a site, roles and
-      an operator of their own. On the shared shops nothing changed at all.
+      8-11: demo-boot.js decides *which* notice, from the tenant rather than the page.
     -->
     <script src="./demo-boot.js" data-fallback-site="demo_site" defer></script>
   </body>

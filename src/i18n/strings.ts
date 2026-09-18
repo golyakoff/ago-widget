@@ -147,4 +147,16 @@ export interface WidgetStrings {
    * surfaces to the visitor rather than just refusing to submit, because unlike a merely-empty
    * required field a visitor who typed *something* has no other way to notice it was rejected. */
   readonly contactCaptureEmailInvalidNote: string;
+
+  // `8-13`: `demo/boot.ts`'s `applyOwnTenantPageCopy` - the two sentences a minted tenant's own demo
+  // page swaps into its static markup, replacing text that would otherwise tell that visitor a
+  // stranger can read what they type. These lived as English literals in `boot.ts` itself until
+  // `8-13`; that file has no `WidgetLocale` to resolve against (it runs standalone, before the widget
+  // it injects ever calls home), so it resolves these two against the page's own `<html lang>`
+  // instead (`boot.ts`'s own `resolveDemoPageLocale`) - the same table, a different locale signal.
+  /** The page's own top banner - was `ago-demo-public-notice`'s public-demo wording, false the moment
+   * the tenant stops being shared. */
+  readonly demoOwnTenantBannerNotice: string;
+  /** The safety card's privacy paragraph - `ago-demo-privacy-note`, present only on `demo-shop1`. */
+  readonly demoOwnTenantPrivacyNote: string;
 }

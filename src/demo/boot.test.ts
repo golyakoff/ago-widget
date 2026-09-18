@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyOwnTenantPageCopy, bootWidget, demoNoticeFor, wireMintButton } from "./boot.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  applyOwnTenantPageCopy,
+  bootWidget,
+  demoNoticeFor,
+  resolveDemoPageLocale,
+  wireMintButton,
+} from "./boot.js";
 
 describe("bootWidget", () => {
   beforeEach(() => {
@@ -73,9 +79,47 @@ describe("demoNoticeFor", () => {
   });
 });
 
+/**
+ * `8-13`: the one function that decides which of the two locale tables `applyOwnTenantPageCopy`
+ * reaches for. Extracted and tested on its own for the same reason `demoNoticeFor` is - a page's
+ * `<html lang>` is the one input a future third locale would have to be recognised from, and a
+ * regression here would be silent (both demo pages currently declare a value this function
+ * recognises, so nothing downstream would fail loudly).
+ */
+describe("resolveDemoPageLocale", () => {
+  afterEach(() => {
+    document.documentElement.lang = "";
+  });
+
+  it("resolves demo-shop1's own declared locale to ru", () => {
+    document.documentElement.lang = "ru";
+    expect(resolveDemoPageLocale(document)).toBe("ru");
+  });
+
+  it("resolves demo-shop2's own declared locale to en", () => {
+    document.documentElement.lang = "en";
+    expect(resolveDemoPageLocale(document)).toBe("en");
+  });
+
+  it("falls back to en for a page that never set lang, rather than throwing or guessing ru", () => {
+    document.documentElement.lang = "";
+    expect(resolveDemoPageLocale(document)).toBe("en");
+  });
+
+  it("is case-insensitive, since <html lang> is not guaranteed lower-case", () => {
+    document.documentElement.lang = "RU";
+    expect(resolveDemoPageLocale(document)).toBe("ru");
+  });
+});
+
 describe("applyOwnTenantPageCopy", () => {
   beforeEach(() => {
     document.body.replaceChildren();
+    document.documentElement.lang = "";
+  });
+
+  afterEach(() => {
+    document.documentElement.lang = "";
   });
 
   /**
@@ -111,6 +155,24 @@ describe("applyOwnTenantPageCopy", () => {
     // The claim this item exists to remove, in the two shapes the original copy used.
     expect(replaced).not.toContain("anyone can read");
     expect(replaced).not.toContain("including yours");
+  });
+
+  /**
+   * `8-13`: the bug, reproduced. Before this item both sentences were English literals, swapped into
+   * `demo-shop1` - a page declared `lang="ru"` - unconditionally. This asserts the replacement text
+   * itself is Russian on a Russian-declared page, not merely that a swap happened.
+   */
+  it("replaces both blocks with the Russian sentences on a page declared lang=\"ru\"", () => {
+    document.documentElement.lang = "ru";
+    const { banner, privacyNote } = seedSharedPageCopy();
+
+    expect(applyOwnTenantPageCopy(document)).toEqual({ banner: true, privacyNote: true });
+
+    expect(banner.textContent).toContain("собственный тенант");
+    expect(privacyNote.textContent).toContain("тенанту, на котором вы находитесь");
+    // The English literals this item removed must not survive as a fallback.
+    expect(banner.textContent).not.toContain("tenant of your own");
+    expect(privacyNote.textContent).not.toContain("never the tenant you are on");
   });
 
   /**

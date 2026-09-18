@@ -52,7 +52,10 @@ export interface MessageDto {
   contentKind?: string | null;
   /** Opaque to this file and to every renderer except the one for `contentKind`'s own value - the
    * server's `JsonElement?`, read here as `unknown` because this widget must never assume a shape
-   * before checking `contentKind` first (`ui/primitives/render.ts` is the one place that does). */
+   * before checking `contentKind` first (`ui/primitives/render.ts` is the one place that does).
+   * `25-146`: `ui/widget.ts`'s own `readFormFieldId` is the one other reader - narrowly, for the
+   * single `fieldId` field its phone-collection gate needs, the identical "check `contentKind` first,
+   * degrade rather than throw on anything else" discipline `render.ts` already follows. */
   content?: unknown;
   /** The choices for a choice-shaped `contentKind`, empty for `"form"`. Chat never opens `content`,
    * so this travels as its own first-class field rather than living inside it - `adr/0061`'s "an

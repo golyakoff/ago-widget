@@ -174,6 +174,25 @@ function setPrimitiveControlsDisabled(container: HTMLElement, disabled: boolean)
 }
 
 /**
+ * `25-146`: the one additional place besides `ui/primitives/render.ts` that ever looks inside a
+ * message's own `content` before checking `contentKind` first (`MessageDto.content`'s own doc
+ * comment) - narrowly, for exactly the one field `appendMessageBubble`'s own phone-collection gate
+ * needs, never a second, independent assumption about a `form` step's whole shape. Malformed or
+ * missing `content` degrades to `null` rather than throwing, the identical posture `render.ts`'s own
+ * `asRecord`/optional-chaining reads already take for the same reason: Chat itself never opens this
+ * payload (`adr/0065` §1), so nothing downstream of the wire can assume a module got its own shape
+ * right.
+ */
+function readFormFieldId(content: unknown): string | null {
+  if (typeof content !== "object" || content === null) {
+    return null;
+  }
+
+  const fieldId = (content as { fieldId?: unknown }).fieldId;
+  return typeof fieldId === "string" ? fieldId : null;
+}
+
+/**
  * `25-120`: the fixed, curated 40-emoji set the backlog item names, verbatim and in that exact
  * order - a flat, static list, never a search index or a category tree (`docs/backlog/
  * 25-120-*.md`'s own Scope: "no search, no categories, no recently-used tracking, no skin-tone
@@ -1964,15 +1983,37 @@ export class ChatWidget {
           )
         : null;
 
+    // `25-146`: the module task's own phone-collection step - a `form`-kind step whose own
+    // `content.fieldId === "phone"`, with no contact detail already known. `primitive !== null` is
+    // part of this condition (rather than checked separately at the one place below that needs it)
+    // purely so TypeScript narrows `primitive` there too - `contentKind === "form"` is always one of
+    // `render.ts`'s own `KNOWN_KINDS`, so `primitive` is never actually `null` when this is otherwise
+    // true. Gated on `contentKind`/`fieldId` alone, never a module name: `adr/0065`'s closed
+    // vocabulary is what any future module sending a `phone` field would produce too, and
+    // `loadBookingModuleChip` below stays the one place in this file allowed to name `"calendar"`
+    // explicitly - this is not that place, and must not become a second one.
+    const isPhoneCollectionStep =
+      message.authorKind !== "Visitor" &&
+      primitive !== null &&
+      message.contentKind === "form" &&
+      readFormFieldId(message.content) === "phone" &&
+      !this.contactCaptureShown &&
+      !this.storage.getHasKnownContactDetail();
+
     // `25-133`: `body` is the mandatory, every-channel fallback (`adr/0061`) - shown here only when
     // this build could not (or does not yet) turn this message into a rich control, i.e. exactly when
     // `primitive` above is `null` (an unrecognised `contentKind`, or a recognised one this build has
     // no case for, e.g. `verified_phone_form`/`escalate` - `ui/primitives/render.ts`'s own
-    // `KNOWN_KINDS`). When a rich form *did* render, showing the plain-text rendering underneath it is
-    // not a fallback being used, it is a redundant second rendering of the identical choice. The
-    // console and Telegram/MAX are untouched by this: both read the full `Message.Body` over their own
-    // separate paths, never through this function.
-    const bubble = this.renderBubble(message.authorKind, message.body, undefined, primitive === null);
+    // `KNOWN_KINDS`) - or, `25-146`, `isPhoneCollectionStep`: the module's own prompt still deserves
+    // showing (it is the only sentence that says *why* the rich contact form below is asking), even
+    // though `primitive` itself is non-null there too. When a rich form *did* render (and this is not
+    // that case), showing the plain-text rendering underneath it is not a fallback being used, it is a
+    // redundant second rendering of the identical choice. The console and Telegram/MAX are untouched
+    // by this: both read the full `Message.Body` over their own separate paths, never through this
+    // function.
+    const bubble = this.renderBubble(
+      message.authorKind, message.body, undefined, primitive === null || isPhoneCollectionStep,
+    );
     if (message.attachmentId) {
       this.renderAttachmentInto(bubble, message.attachmentId);
     }
@@ -2002,7 +2043,15 @@ export class ChatWidget {
     // attaching it - never a second call to `renderPrimitiveContent` against the same message (that
     // would risk a second, independent read disagreeing with the first, however unlikely given the
     // function is pure).
-    if (primitive) {
+    //
+    // `25-146`: never attached for the phone-collection step - the generic bare-input form
+    // `isPhoneCollectionStep` detected must never reach the DOM at all, "in place of, not alongside"
+    // the rich contact-capture control this method appends for it below (the backlog item's own
+    // words) - not merely present-but-disabled the way `25-136`'s own first-step gate left its own
+    // gated primitive visible. The built-but-never-inserted element still exists in memory purely so
+    // the disable/re-enable calls below can reuse `setPrimitiveControlsDisabled` in the identical
+    // shape `25-136` already built, on a node that is already, structurally, never alongside anything.
+    if (primitive && !isPhoneCollectionStep) {
       bubble.appendChild(primitive);
     }
 
@@ -2039,40 +2088,45 @@ export class ChatWidget {
       guardAsync(() => this.appendContactCaptureControl(bubble));
     }
 
-    // `25-136`: a module task's own first reply-capable step - detected on the identical fact
-    // `25-133` already computed to decide whether to render this message richly at all
-    // (`primitive !== null`), never a second, independent read of `contentKind` against
-    // `KNOWN_KINDS`. Booking is the only module this platform has today, so in practice this is
-    // "the booking task is active," but the check itself stays module-agnostic, matching
-    // `adr/0065`'s own primitive vocabulary being shared by every module rather than owned by one.
+    // `25-146`: the module task's own phone-collection step, answered with the rich contact-capture
+    // control instead of the generic bare-input form `isPhoneCollectionStep`'s own remarks (above)
+    // already keep out of the DOM. This replaces `25-136`'s own "gate the *first* step" branch, which
+    // used to fire on any module step at all (service-choice, for booking) the moment `primitive` was
+    // non-null and no contact detail was known - glued onto whatever question happened to be first.
+    // The author's own reasoning for moving it here (this item's own "What is actually true today"
+    // section): a visitor who has already picked a service, a worker, a date and a time has invested
+    // real effort, and asking for contact details *there*, immediately before confirmation, reads as
+    // a deliberate step of its own rather than a wall going up front.
     //
-    // Gated on `!this.storage.getHasKnownContactDetail()`: a visitor with a contact detail already on
-    // file - from earlier in this same conversation, or from a conversation before it, under the same
-    // stored visitor identity - reaches the step's own controls immediately, no form, no lock. A
-    // fresh visitor sees the identical contact-capture control the out-of-hours branch above uses,
-    // and the step's own buttons/inputs (`setPrimitiveControlsDisabled`) stay disabled until it is
-    // submitted - the structural precondition the backlog item names: someone has to be reachable
-    // before a real slot is booked. `contactCaptureShown` is the same "shown once" latch the branch
-    // above already uses, so the two conditions can never both fire for the same message
-    // (`primitive === null` above vs. `primitive !== null` here).
+    // Gated on `!this.storage.getHasKnownContactDetail()` (part of `isPhoneCollectionStep`): a
+    // visitor with a contact detail already on file reaches this step's controls immediately - in the
+    // common configuration (`25-137`'s own live setup), `ago-calendar` already skips sending this step
+    // at all in that case, so this check is this widget's own defensive second line, not the only one.
+    // `contactCaptureShown` is the same "shown once" latch `23-09`'s out-of-hours branch above already
+    // uses, so the two can never both fire for the same conversation turn.
     //
-    // Client-side only, and known to be exactly that: a visitor could still answer the gated step by
+    // Client-side only, and known to be exactly that: a visitor could still answer this step by
     // crafting a raw send this widget never offered a control for, and a text-channel (Telegram/MAX)
     // visitor never reaches this file at all - both accepted, named limitations (`25-138`), not
     // oversights this branch tries to close.
-    if (
-      message.authorKind !== "Visitor" &&
-      primitive !== null &&
-      !this.contactCaptureShown &&
-      !this.storage.getHasKnownContactDetail()
-    ) {
+    if (isPhoneCollectionStep && primitive !== null) {
       const gatedPrimitive = primitive;
       this.visitorIntroControlEl?.remove();
       this.visitorIntroControlEl = null;
       this.contactCaptureShown = true;
       setPrimitiveControlsDisabled(gatedPrimitive, true);
       guardAsync(() =>
-        this.appendContactCaptureControl(bubble, () => setPrimitiveControlsDisabled(gatedPrimitive, false)),
+        this.appendContactCaptureControl(
+          bubble,
+          () => setPrimitiveControlsDisabled(gatedPrimitive, false),
+          // `25-146`: the one thing this call site needs that the other two never did - answering the
+          // step itself once the contact detail is recorded, the same reply mechanism a plain `form`
+          // step's own submit already uses (`sendStructuredReply`, matching `render.ts`'s own `form`
+          // case byte-for-byte: `contentKind` echoed back, the typed value as both `value` and
+          // `displayText`), so `ReplyToModuleTaskHandler.HandlePhoneProvidedAsync` proceeds exactly as
+          // it does today for an ordinary typed phone reply.
+          (result) => this.sendStructuredReply("form", result.phone, result.phone),
+        ),
       );
     }
   }
@@ -2135,8 +2189,19 @@ export class ChatWidget {
    * passes `onSuccess`: a callback run once `submitContactCapture` actually resolves, so the gate can
    * re-enable the primitive's own controls the moment the form is submitted. The two older callers
    * pass nothing, and nothing about their own behaviour changes.
+   *
+   * `25-146`: `onSubmitted` is the one thing the module-step gate's own caller needs that no other
+   * caller does - a chance to see the just-recorded `ContactCaptureResult` itself, called after
+   * `submitContactCapture` resolves and before `onSuccess`, so it can answer the module step's own
+   * reply (`sendStructuredReply`) with the phone number that same submission just recorded. The two
+   * older callers, and 25-136's own module-gate caller before this item moved it, have no step to
+   * answer and pass nothing.
    */
-  private async appendContactCaptureControl(into: HTMLElement, onSuccess?: () => void): Promise<void> {
+  private async appendContactCaptureControl(
+    into: HTMLElement,
+    onSuccess?: () => void,
+    onSubmitted?: (result: ContactCaptureResult) => void,
+  ): Promise<void> {
     let consent: ConsentRequirement | null = null;
     if (this.conversationId) {
       try {
@@ -2176,7 +2241,12 @@ export class ChatWidget {
         // `25-136`: `onSuccess` runs only once `submitContactCapture` itself resolves - a rejected
         // submission leaves the gate exactly where `renderContactCaptureControl`'s own `.catch`
         // already leaves the form: re-enabled, waiting for the visitor to try again.
-        (result) => this.submitContactCapture(result).then(() => onSuccess?.()),
+        // `25-146`: `onSubmitted` runs first, with the same resolved `result` - see this method's own
+        // doc comment for why the module-step gate is the only caller that ever passes it.
+        (result) => this.submitContactCapture(result).then(() => {
+          onSubmitted?.(result);
+          onSuccess?.();
+        }),
         consent,
         this.config.policyBaseUrl,
         parseContactCaptureConfirmationText(this.session?.widgetContactCaptureConfirmationText ?? null),

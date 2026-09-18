@@ -54,6 +54,8 @@ export const ru: WidgetStrings = {
     "Это ваш собственный демо-тенант. Прочитать этот диалог может только тот, у кого есть выданный вам логин оператора, а сам тенант удалится примерно через сутки.",
   autoReplyLabel: "Автоматический ответ",
   processingNoticeLinkText: "Подробнее",
+  channelSwitcherGroupLabel: "Другие способы связаться с нами",
+  channelSwitcherWriteInChat: "Написать в чат",
 
   unsupportedFileTypeSuffix: "не поддерживается. Попробуйте изображение или PDF.",
   unknownFileType: "неизвестный тип",

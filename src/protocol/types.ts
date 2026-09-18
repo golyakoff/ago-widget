@@ -175,6 +175,32 @@ export interface VisitorSessionResponse {
    * ever happen here, never on the wire.
    */
   widgetContactCaptureConfirmationText?: string | null;
+  /**
+   * `25-148`/`25-149`: one more additive field, on `enabledModules`'s own terms - `[]`, never absent
+   * or `null`, for a site with nothing connected (`AuthEndpoints.GetChannelLinksAsync`, `ago-chat`,
+   * never returns anything else), and optional here only for a session cached before this field
+   * existed. `ui/widget.ts`'s channel-switcher card is what actually reads it.
+   */
+  channelLinks?: ChannelLinkDto[];
+}
+
+/**
+ * `25-148`/`25-149`: one of the tenant's own connected, linkable channels -
+ * `AuthEndpoints.ChannelLinkResponse` (`ago-chat`)'s own wire shape verbatim. `kind` carries
+ * `Domain.ChannelKind`'s own CLR member name (`"Telegram"`, `"Max"`, `"Vk"`, `"WhatsApp"` today -
+ * `ChannelLinkUrlBuilder`'s own remarks in `ago-chat` list these as the only four kinds this response
+ * can actually carry, Avito never among them per `25-147`'s own scope), the identical "PascalCase enum
+ * member, not lowercased" convention `widgetPosition`/`widgetLocale` already use on this same response
+ * - never assumed to be one of those four, though: `ui/widget.ts`'s channel-switcher card falls back to
+ * a neutral icon and the raw `kind` string itself for anything this widget does not yet recognise,
+ * rather than dropping the row or throwing (`25-149`'s own explicit Done-when). `url` is a full,
+ * absolute `https` address built server-side (`ChannelLinkUrlBuilder`, `ago-chat`) - never a bare
+ * handle this widget would have to template into a provider-specific URL itself; a future channel
+ * needs one new server-side arm and zero changes here.
+ */
+export interface ChannelLinkDto {
+  kind: string;
+  url: string;
 }
 
 /** RFC 7807 problem details (api-design.md) - the shape every error response from the API takes. */

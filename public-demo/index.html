@@ -1,18 +1,17 @@
 <!doctype html>
 <!--
   8-02's own demo page - NOT demo/index.html, which stays exactly what it is (a deliberately hostile
-  Shadow-DOM-isolation test, 5-09). This page exists so a stranger handed only a URL can see the
-  widget in the place it actually lives: on a shop's storefront, next to the products, not under
-  three cards of prose explaining what a widget is.
+  Shadow-DOM-isolation test, 5-09). This page exists so a stranger handed only a URL sees the widget
+  in the place it actually lives: on a shop's storefront, next to the products.
 
-  **It is a shop first and an explanation second, and that is the point.** The page used to open with
-  two paragraphs about WebSocket connections and close with an essay on multi-tenancy; the widget it
-  was demonstrating was the least prominent thing on it. Everything a visitor needs in order to *use*
-  the demo - the shared login, the private-tenant button - is still here, moved into one block at the
-  end and marked as the service area it is.
+  **Two things it has to do at once, and the order matters.** It has to look like a shop somebody
+  might really run - a flat wireframe makes the widget look like a wireframe too - and it has to say
+  in the first screenful that the shop is not real and the chat is. Both live in the strip above the
+  header: the shop disclaimer first, then `8-06`'s public-demo warning, which `demo-boot.js` rewrites
+  on a minted tenant and which therefore has to stay its own element with nothing else inside it.
 
-  The palette is deliberately warm and almost monochrome. The widget's own accent is blue
-  (`--ago-accent`, ui/styles.ts), and a storefront in the same blue would swallow it.
+  The palette is deliberately green and warm. The widget's own accent is blue (`--ago-accent`,
+  ui/styles.ts), and a storefront in the same blue would swallow it.
 
   Served from the same nginx container as the built widget bundle (Dockerfile in this repository's
   root) at https://demo-shop1.reserve-me.ru - script and page share one origin deliberately, which is
@@ -27,21 +26,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Верста — кожаные изделия на заказ</title>
+    <title>Подоконник — растения для дома</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
         color-scheme: light;
-        --ink: #1a1714;
-        --ink-soft: #6b6257;
-        --ink-faint: #9a9186;
-        --paper: #f7f5f1;
+        --ink: #17201a;
+        --ink-soft: #5c6b60;
+        --ink-faint: #8b9990;
+        --paper: #faf8f3;
         --card: #ffffff;
-        --line: #e4ded4;
-        --line-soft: #efeae2;
-        --tan: #8a5a2b;
+        --line: #e3e0d6;
+        --line-soft: #efece4;
+        --leaf: #2f6b4f;
+        --leaf-deep: #235239;
+        --clay: #c87a4e;
         --warn-bg: #fdf3dc;
         --warn-line: #e6c169;
         --warn-ink: #5c4008;
+        --shadow: 0 1px 2px rgba(23, 32, 26, 0.04), 0 18px 34px -24px rgba(23, 32, 26, 0.45);
       }
 
       * {
@@ -58,64 +66,122 @@
         -webkit-font-smoothing: antialiased;
       }
 
+      h1,
+      h2,
+      h3 {
+        font-family: "Onest", system-ui, sans-serif;
+        margin: 0;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+
       .wrap {
-        max-width: 1000px;
+        max-width: 1020px;
         margin: 0 auto;
         padding: 0 24px;
       }
 
-      /* 8-06/8-11: the safety warning. A strip across the top rather than a card in the flow - the
-         launcher floats over every scroll position, so a visitor can open the panel and type without
-         ever having read the page, and this is the one line that has to survive being skimmed.
-         `id` is what demo-boot.js swaps on a minted `?site=` tenant, where every word of it is
-         false; this makes the warning conditional, never softer. */
+      /* ---- the two lines that have to be read before anything else ------------------------ */
+      .disclaimer {
+        background: var(--leaf-deep);
+        color: #e9f3ec;
+        font-size: 14px;
+        line-height: 1.45;
+        padding: 12px 0;
+      }
+      .disclaimer b {
+        color: #fff;
+      }
+      .disclaimer .tag {
+        display: inline-block;
+        font-family: "Onest", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        background: rgba(255, 255, 255, 0.16);
+        border-radius: 999px;
+        padding: 3px 10px;
+        margin-right: 10px;
+        vertical-align: 1px;
+      }
+      /* 8-06/8-11: the safety warning, and the reason it is a separate element from the line above:
+         `demo-boot.js` replaces this element's whole text on a minted `?site=` tenant, where every
+         word of the default copy is false. Anything else sharing the element would be wiped with it. */
       .notice {
         background: var(--warn-bg);
         border-bottom: 1px solid var(--warn-line);
         color: var(--warn-ink);
         font-size: 13.5px;
         line-height: 1.45;
-        padding: 10px 0;
+        padding: 9px 0;
       }
 
+      /* ---- the shop ---------------------------------------------------------------------- */
       header.shop {
         border-bottom: 1px solid var(--line);
-        background: var(--paper);
+        background: color-mix(in srgb, var(--paper) 90%, transparent);
+        backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
       }
       .shop-row {
         display: flex;
         align-items: center;
-        gap: 28px;
-        height: 72px;
+        gap: 26px;
+        height: 70px;
       }
       .mark {
-        font-size: 19px;
-        font-weight: 800;
-        letter-spacing: 0.26em;
-        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 10px;
         text-decoration: none;
         color: var(--ink);
+        font-family: "Onest", sans-serif;
+        font-weight: 800;
+        font-size: 19px;
+        letter-spacing: -0.01em;
+      }
+      .mark .leafmark {
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        background: var(--leaf);
+        display: grid;
+        place-items: center;
       }
       .shop-nav {
         display: flex;
         gap: 22px;
         margin-left: auto;
-        font-size: 14px;
+        font-size: 14.5px;
         color: var(--ink-soft);
       }
-      .shop-nav span {
-        cursor: default;
-      }
       .cart {
-        font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--ink-faint);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
         border: 1px solid var(--line);
         border-radius: 999px;
-        padding: 7px 14px;
+        padding: 8px 15px;
+        background: var(--card);
       }
-      @media (max-width: 720px) {
+      .cart .dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--clay);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+      @media (max-width: 760px) {
         .shop-nav {
           display: none;
         }
@@ -125,48 +191,81 @@
       }
 
       .hero {
-        padding: 56px 0 40px;
-        display: flex;
-        align-items: flex-end;
-        gap: 40px;
-        flex-wrap: wrap;
+        padding: 52px 0 38px;
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 36px;
+        align-items: end;
+      }
+      @media (max-width: 800px) {
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 22px;
+        }
       }
       .hero h1 {
-        margin: 0;
-        font-size: clamp(30px, 5vw, 46px);
-        line-height: 1.08;
-        letter-spacing: -0.02em;
-        max-width: 14ch;
+        font-size: clamp(32px, 5.4vw, 52px);
+        max-width: 13ch;
+      }
+      .hero h1 em {
+        font-style: normal;
+        color: var(--leaf);
       }
       .hero p {
         margin: 0;
         color: var(--ink-soft);
-        max-width: 42ch;
         font-size: 16.5px;
+        max-width: 40ch;
       }
-      .hero .ask {
-        color: var(--tan);
+      .hero .hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 16px;
+        font-size: 14.5px;
         font-weight: 600;
+        color: var(--leaf-deep);
+        background: #e8f1ea;
+        border-radius: 999px;
+        padding: 8px 15px;
+      }
+      .hero .hint svg {
+        flex: 0 0 auto;
       }
 
-      .rule {
-        border: 0;
-        border-top: 1px solid var(--line);
-        margin: 0;
+      .strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding-bottom: 34px;
+      }
+      .strip span {
+        font-size: 13.5px;
+        color: var(--ink-soft);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 14px;
       }
 
-      .section-label {
-        font-size: 11.5px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        padding-bottom: 18px;
+      }
+      .section-head h2 {
+        font-size: 22px;
+      }
+      .section-head span {
+        font-size: 13.5px;
         color: var(--ink-faint);
-        padding: 32px 0 18px;
       }
 
       .grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
+        gap: 18px;
         padding-bottom: 56px;
       }
       @media (max-width: 860px) {
@@ -183,84 +282,128 @@
       .item {
         background: var(--card);
         border: 1px solid var(--line);
-        border-radius: 4px;
+        border-radius: 16px;
         overflow: hidden;
         display: flex;
         flex-direction: column;
+        transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
       }
-      /* Schematic on purpose: line drawings, not photographs. A demo storefront that pretended to
-         have real product photography would be making a claim about a shop that does not exist. */
+      .item:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow);
+        border-color: #d6d2c6;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .item {
+          transition: none;
+        }
+        .item:hover {
+          transform: none;
+        }
+      }
       .item .art {
-        background: #efeae2;
-        border-bottom: 1px solid var(--line-soft);
+        position: relative;
         aspect-ratio: 4 / 3;
         display: grid;
         place-items: center;
+        border-bottom: 1px solid var(--line-soft);
       }
       .item .art svg {
-        width: 68%;
+        width: 74%;
         height: auto;
         display: block;
       }
+      .badge {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        font-family: "Onest", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: #fff;
+        color: var(--leaf-deep);
+        box-shadow: 0 1px 2px rgba(23, 32, 26, 0.12);
+      }
+      .badge.warm {
+        color: #8a4f22;
+      }
       .item .body {
-        padding: 14px 16px 16px;
+        padding: 15px 17px 17px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
+        flex: 1;
       }
       .item .name {
-        font-weight: 600;
-        font-size: 15.5px;
+        font-family: "Onest", sans-serif;
+        font-weight: 700;
+        font-size: 16.5px;
       }
       .item .meta {
-        font-size: 13px;
+        font-size: 13.5px;
         color: var(--ink-faint);
+      }
+      .item .row {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-top: 10px;
       }
       .item .price {
-        margin-top: 6px;
+        font-family: "Onest", sans-serif;
+        font-weight: 800;
+        font-size: 18px;
         font-variant-numeric: tabular-nums;
-        font-weight: 700;
-        font-size: 15px;
+      }
+      .item .was {
+        font-size: 13.5px;
+        color: var(--ink-faint);
+        text-decoration: line-through;
+      }
+      .item .buy {
+        margin-left: auto;
+        border: 1px solid var(--leaf);
+        color: var(--leaf-deep);
+        background: transparent;
+        border-radius: 999px;
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 600;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      .item .buy:hover {
+        background: var(--leaf);
+        color: #fff;
       }
 
-      .facts {
-        display: flex;
-        gap: 40px;
-        flex-wrap: wrap;
-        padding: 26px 0 44px;
-        font-size: 14px;
-        color: var(--ink-soft);
-      }
-      .facts b {
-        display: block;
-        color: var(--ink);
-        font-size: 15px;
-      }
-
-      /* ---- the service area ------------------------------------------------
-         Everything below is about the demo rather than the shop, and is dressed to say so: a
-         dashed frame, a monospace label, no product styling. */
+      /* ---- the service area ---------------------------------------------------------------
+         About the demo rather than the shop, and dressed to say so. */
       .service {
         border-top: 1px solid var(--line);
-        padding: 44px 0 72px;
+        background: #f3f1ea;
+        padding: 46px 0 64px;
       }
       .service-label {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: "Onest", sans-serif;
         font-size: 11.5px;
-        letter-spacing: 0.14em;
+        font-weight: 700;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ink-faint);
-        margin-bottom: 14px;
+        color: var(--leaf);
+        margin-bottom: 12px;
       }
       .service h2 {
-        margin: 0 0 8px;
-        font-size: 22px;
-        letter-spacing: -0.01em;
+        font-size: 24px;
+        margin-bottom: 8px;
       }
       .service .lede {
-        margin: 0 0 24px;
+        margin: 0 0 26px;
         color: var(--ink-soft);
-        max-width: 68ch;
+        max-width: 66ch;
       }
       .service-grid {
         display: grid;
@@ -273,14 +416,14 @@
         }
       }
       .panel {
-        border: 1px dashed var(--line);
-        border-radius: 8px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
         padding: 20px;
         background: var(--card);
       }
       .panel h3 {
-        margin: 0 0 8px;
-        font-size: 16px;
+        font-size: 17px;
+        margin-bottom: 8px;
       }
       .panel p {
         margin: 0 0 14px;
@@ -291,7 +434,7 @@
         margin: 0 0 14px;
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 4px 14px;
+        gap: 5px 14px;
         font-size: 14px;
       }
       .panel dt {
@@ -305,16 +448,21 @@
       .console-link {
         display: inline-block;
         appearance: none;
-        border: 1px solid var(--ink);
-        border-radius: 6px;
-        background: var(--ink);
-        color: var(--paper);
+        border: 1px solid var(--leaf);
+        border-radius: 8px;
+        background: var(--leaf);
+        color: #fff;
         font: inherit;
-        font-size: 14px;
-        font-weight: 600;
-        padding: 9px 16px;
+        font-family: "Onest", sans-serif;
+        font-size: 14.5px;
+        font-weight: 700;
+        padding: 10px 18px;
         cursor: pointer;
         text-decoration: none;
+      }
+      button.mint:hover,
+      .console-link:hover {
+        background: var(--leaf-deep);
       }
       button.mint:disabled {
         opacity: 0.6;
@@ -322,15 +470,18 @@
       }
       .console-link {
         background: transparent;
-        color: var(--ink);
+        color: var(--leaf-deep);
+      }
+      .console-link:hover {
+        background: #e8f1ea;
       }
       .steps {
-        margin: 22px 0 0;
+        margin: 24px 0 0;
         padding: 0;
         list-style: none;
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
+        gap: 18px;
         font-size: 14px;
         color: var(--ink-soft);
       }
@@ -340,27 +491,27 @@
         }
       }
       .steps li {
-        border-top: 2px solid var(--ink);
-        padding-top: 10px;
+        border-top: 2px solid var(--leaf);
+        padding-top: 11px;
       }
       .steps b {
         display: block;
+        font-family: "Onest", sans-serif;
         color: var(--ink);
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 12px;
-        letter-spacing: 0.1em;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
         margin-bottom: 4px;
       }
       .privacy {
-        margin: 24px 0 0;
+        margin: 26px 0 0;
         font-size: 13px;
         color: var(--ink-faint);
         max-width: 78ch;
       }
 
       footer {
-        border-top: 1px solid var(--line);
-        padding: 22px 0 40px;
+        padding: 24px 0 40px;
         font-size: 13px;
         color: var(--ink-faint);
       }
@@ -371,12 +522,14 @@
         margin-top: 14px;
         padding: 14px;
         border: 1px solid var(--line);
-        border-radius: 6px;
+        border-radius: 10px;
         background: var(--paper);
       }
       .ago-demo-panel__title {
         margin: 0 0 6px;
         font-size: 15px;
+        font-family: "Onest", sans-serif;
+        font-weight: 700;
       }
       .ago-demo-panel__lifetime {
         margin: 0 0 8px;
@@ -388,7 +541,7 @@
         margin: 0 0 12px;
         padding: 8px 10px;
         border: 1px solid var(--warn-line);
-        border-radius: 5px;
+        border-radius: 7px;
         background: var(--warn-bg);
         color: var(--warn-ink);
         font-size: 13.5px;
@@ -412,14 +565,14 @@
         font-size: 13.5px;
         padding: 7px 9px;
         border: 1px solid var(--line);
-        border-radius: 5px;
+        border-radius: 7px;
         background: var(--card);
         color: var(--ink);
       }
       .ago-demo-field__copy {
         appearance: none;
         border: 1px solid var(--line);
-        border-radius: 5px;
+        border-radius: 7px;
         background: var(--card);
         color: var(--ink);
         font: inherit;
@@ -439,6 +592,16 @@
     </style>
   </head>
   <body>
+    <!-- First thing on the page, deliberately: what this is, before what it sells. -->
+    <div class="disclaimer">
+      <div class="wrap">
+        <span class="tag">Демо</span>
+        <b>Магазина «Подоконник» не существует.</b> Витрина ниже — декорация. Настоящий здесь только
+        чат в правом нижнем углу: тот же виджет, тот же сервер и та же консоль оператора, которые
+        получает реальный магазин.
+      </div>
+    </div>
+
     <div class="notice">
       <div class="wrap">
         <!--
@@ -446,150 +609,270 @@
           where every word of it is false. The default copy stays exactly 8-06's.
         -->
         <span id="ago-demo-public-notice"
-          >Это публичное демо. Логин оператора опубликован на этой странице, так что любой может
-          прочитать каждый разговор, начатый здесь — включая ваш. Не пишите сюда ничего
-          настоящего.</span
+          >Логин оператора опубликован на этой странице, так что любой может прочитать каждый
+          разговор, начатый здесь — включая ваш. Не пишите сюда ничего настоящего.</span
         >
       </div>
     </div>
 
     <header class="shop">
       <div class="wrap shop-row">
-        <a class="mark" href="#">Верста</a>
+        <a class="mark" href="#">
+          <span class="leafmark">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path d="M20 4c0 9-5 14-12 14 0-9 5-14 12-14z" fill="#fff" />
+              <path d="M5 20c2-5 5-8 9-10" stroke="#fff" stroke-width="1.6" fill="none" />
+            </svg>
+          </span>
+          Подоконник
+        </a>
         <nav class="shop-nav">
-          <span>Каталог</span>
+          <span>Растения</span>
+          <span>Горшки</span>
+          <span>Уход</span>
           <span>Доставка</span>
-          <span>О мастерской</span>
         </nav>
-        <span class="cart">Корзина · 0</span>
+        <span class="cart">Корзина <span class="dot">0</span></span>
       </div>
     </header>
 
     <main>
       <div class="wrap">
         <section class="hero">
-          <h1>Кожаные изделия на заказ</h1>
-          <p>
-            Шьём вручную, под размер, из растительного дубления. Срок — три рабочих дня.
-            <br />
-            <span class="ask">Вопрос по размеру или сроку — напишите в чат, он в правом нижнем углу.</span>
-          </p>
+          <h1>Зелень, которая <em>переживёт</em> вашу командировку</h1>
+          <div>
+            <p>
+              Привозим подрощенные растения в день заказа, вместе с горшком и грунтом. Сорок видов, из
+              них половина — для тех, кто забывает поливать.
+            </p>
+            <span class="hint">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M12 3c-4.97 0-9 3.58-9 8 0 2.4 1.2 4.55 3.1 6.01V21l3.02-1.66c.93.21 1.9.33 2.88.33 4.97 0 9-3.58 9-8s-4.03-8-9-8z"
+                />
+              </svg>
+              Не знаете, что выживет у вас на северном окне? Спросите в чате
+            </span>
+          </div>
         </section>
 
-        <hr class="rule" />
-
-        <div class="section-label">Каталог · 6 позиций</div>
-        <section class="grid">
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <rect x="14" y="52" width="104" height="16" rx="4" />
-                <rect x="118" y="46" width="28" height="28" rx="3" />
-                <circle cx="132" cy="60" r="4" />
-                <path d="M30 52v16M46 52v16M62 52v16" stroke-width="1" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Ремень «Классик»</span>
-              <span class="meta">35 мм · латунная пряжка</span>
-              <span class="price">4 200 ₽</span>
-            </div>
-          </article>
-
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <path d="M38 48h84l-8 48H46z" />
-                <path d="M58 48V36a22 22 0 0 1 44 0v12" />
-                <path d="M46 62h68" stroke-width="1" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Сумка «Почтальон»</span>
-              <span class="meta">на ремне, А4</span>
-              <span class="price">11 900 ₽</span>
-            </div>
-          </article>
-
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <rect x="32" y="38" width="96" height="46" rx="4" />
-                <path d="M80 38v46" stroke-width="1" />
-                <path d="M96 56h20" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Портмоне «Фолд»</span>
-              <span class="meta">6 карт, купюрное отделение</span>
-              <span class="price">5 400 ₽</span>
-            </div>
-          </article>
-
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <rect x="46" y="34" width="48" height="56" rx="4" />
-                <circle cx="104" cy="44" r="10" />
-                <path d="M104 54v22" stroke-width="1" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Ключница «Скоба»</span>
-              <span class="meta">кольцо, 6 карабинов</span>
-              <span class="price">2 300 ₽</span>
-            </div>
-          </article>
-
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <rect x="36" y="26" width="88" height="68" rx="4" />
-                <path d="M52 26v68" stroke-width="1" />
-                <path d="M68 46h40M68 58h40M68 70h26" stroke-width="1" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Обложка для паспорта</span>
-              <span class="meta">тиснение инициалов</span>
-              <span class="price">1 900 ₽</span>
-            </div>
-          </article>
-
-          <article class="item">
-            <div class="art">
-              <svg viewBox="0 0 160 120" fill="none" stroke="#8a8073" stroke-width="2" aria-hidden="true">
-                <circle cx="80" cy="60" r="30" />
-                <rect x="70" y="26" width="20" height="14" rx="3" />
-                <path d="M62 60h36" stroke-width="1" />
-              </svg>
-            </div>
-            <div class="body">
-              <span class="name">Браслет «Кольцо»</span>
-              <span class="meta">двойной, под размер</span>
-              <span class="price">1 400 ₽</span>
-            </div>
-          </article>
-        </section>
-
-        <hr class="rule" />
-
-        <div class="facts">
-          <div><b>3 рабочих дня</b>обычный срок пошива</div>
-          <div><b>Бесплатно от 5 000 ₽</b>доставка по городу</div>
-          <div><b>Год</b>гарантия на швы и фурнитуру</div>
+        <div class="strip">
+          <span>Доставка сегодня — до 21:00</span>
+          <span>Горшок и грунт в цене</span>
+          <span>Приживаемость 14 дней</span>
+          <span>Самовывоз у метро</span>
         </div>
+
+        <div class="section-head">
+          <h2>Хиты недели</h2>
+          <span>6 из 40 позиций</span>
+        </div>
+
+        <section class="grid">
+          <!-- The plants are drawn, not photographed: a demo storefront with real product
+               photography would be making a claim about a shop that does not exist. -->
+          <article class="item">
+            <div class="art" style="background: #e9f1e7">
+              <span class="badge">Хит</span>
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <!-- Each leaf keeps its splits in its own rotated frame, so the wedges are cut from
+                     the leaf edge inwards rather than floating in the middle of it. -->
+                <g transform="rotate(-20 70 50)">
+                  <ellipse cx="70" cy="50" rx="30" ry="21" fill="#2f6b4f" />
+                  <g fill="#e9f1e7">
+                    <path d="M100 42h-26l26 5z" />
+                    <path d="M100 58h-26l26-5z" />
+                    <path d="M40 44h24l-24 5z" />
+                    <path d="M40 58h24l-24-5z" />
+                  </g>
+                </g>
+                <g transform="rotate(18 130 46)">
+                  <ellipse cx="130" cy="46" rx="29" ry="20" fill="#2f6b4f" />
+                  <g fill="#e9f1e7">
+                    <path d="M159 39h-25l25 5z" />
+                    <path d="M159 54h-25l25-5z" />
+                    <path d="M101 40h23l-23 5z" />
+                    <path d="M101 54h23l-23-5z" />
+                  </g>
+                </g>
+                <g>
+                  <ellipse cx="100" cy="84" rx="31" ry="21" fill="#235239" />
+                  <g fill="#e9f1e7">
+                    <path d="M131 76h-26l26 5z" />
+                    <path d="M131 92h-26l26-5z" />
+                    <path d="M69 76h26l-26 5z" />
+                    <path d="M69 92h26l-26-5z" />
+                  </g>
+                </g>
+                <path d="M100 96v18" stroke="#235239" stroke-width="5" fill="none" />
+                <path d="M62 112h76l-8 30a6 6 0 0 1-6 5H76a6 6 0 0 1-6-5z" fill="#c87a4e" />
+                <rect x="58" y="104" width="84" height="12" rx="4" fill="#b56b41" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Монстера</span>
+              <span class="meta">высота 70 см · горшок Ø19</span>
+              <div class="row">
+                <span class="price">3 400 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art" style="background: #eef0e6">
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <path d="M100 104V36" stroke="#3f6b3a" stroke-width="5" fill="none" />
+                <g fill="#4a7d45">
+                  <ellipse cx="72" cy="48" rx="24" ry="15" transform="rotate(-24 72 48)" />
+                  <ellipse cx="130" cy="60" rx="24" ry="15" transform="rotate(22 130 60)" />
+                  <ellipse cx="74" cy="80" rx="22" ry="14" transform="rotate(-16 74 80)" />
+                  <ellipse cx="128" cy="34" rx="21" ry="13" transform="rotate(26 128 34)" />
+                </g>
+                <path d="M62 104h76l-8 30a6 6 0 0 1-6 5H76a6 6 0 0 1-6-5z" fill="#d9d3c4" />
+                <rect x="58" y="96" width="84" height="12" rx="4" fill="#c8c1b0" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Фикус лирата</span>
+              <span class="meta">высота 110 см · кашпо в цене</span>
+              <div class="row">
+                <span class="price">5 900 ₽</span>
+                <span class="was">6 800 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art" style="background: #e6efea">
+              <span class="badge">Для тени</span>
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <!-- Three arching stems, each carrying paired leaflets that touch it. Drawn in the
+                     stem's own rotated frame so a leaflet sits on the stem instead of beside it. -->
+                <g stroke="#235239" stroke-width="5" fill="none" stroke-linecap="round">
+                  <path d="M100 104C94 80 88 56 82 30" />
+                  <path d="M100 104c6-24 12-48 18-74" />
+                  <path d="M100 104V30" />
+                </g>
+                <g fill="#3a8a61">
+                  <g transform="rotate(-14 90 62)">
+                    <ellipse cx="78" cy="62" rx="13" ry="8" />
+                    <ellipse cx="104" cy="62" rx="13" ry="8" />
+                    <ellipse cx="80" cy="42" rx="11" ry="7" />
+                    <ellipse cx="102" cy="42" rx="11" ry="7" />
+                  </g>
+                  <g transform="rotate(14 112 62)">
+                    <ellipse cx="100" cy="62" rx="13" ry="8" />
+                    <ellipse cx="126" cy="62" rx="13" ry="8" />
+                    <ellipse cx="102" cy="42" rx="11" ry="7" />
+                    <ellipse cx="124" cy="42" rx="11" ry="7" />
+                  </g>
+                  <ellipse cx="86" cy="80" rx="13" ry="8" />
+                  <ellipse cx="114" cy="80" rx="13" ry="8" />
+                  <ellipse cx="100" cy="30" rx="10" ry="7" />
+                </g>
+                <path d="M66 104h68l-7 32a6 6 0 0 1-6 5H79a6 6 0 0 1-6-5z" fill="#8a9a92" />
+                <rect x="62" y="96" width="76" height="12" rx="4" fill="#78877f" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Замиокулькас</span>
+              <span class="meta">полив раз в две недели</span>
+              <div class="row">
+                <span class="price">2 700 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art" style="background: #f2ece2">
+              <span class="badge warm">Осталось 3</span>
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <g>
+                  <ellipse cx="74" cy="60" rx="26" ry="17" transform="rotate(-26 74 60)" fill="#35735a" />
+                  <ellipse cx="74" cy="60" rx="17" ry="4" transform="rotate(-26 74 60)" fill="#8fd0ab" />
+                  <ellipse cx="126" cy="56" rx="26" ry="17" transform="rotate(24 126 56)" fill="#35735a" />
+                  <ellipse cx="126" cy="56" rx="17" ry="4" transform="rotate(24 126 56)" fill="#8fd0ab" />
+                  <ellipse cx="100" cy="38" rx="24" ry="16" fill="#2c6b4c" />
+                  <ellipse cx="100" cy="38" rx="16" ry="4" fill="#8fd0ab" />
+                </g>
+                <path d="M100 104V52" stroke="#2c6b4c" stroke-width="4" fill="none" />
+                <path d="M68 104h64l-7 30a6 6 0 0 1-6 5H81a6 6 0 0 1-6-5z" fill="#c87a4e" />
+                <rect x="64" y="96" width="72" height="12" rx="4" fill="#b56b41" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Калатея</span>
+              <span class="meta">любит влажность и рассеянный свет</span>
+              <div class="row">
+                <span class="price">1 950 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art" style="background: #eaf1ec">
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <g stroke="#4c9b6f" stroke-width="5" fill="none" stroke-linecap="round">
+                  <path d="M100 100C80 92 62 72 54 44" />
+                  <path d="M100 100c20-8 38-28 46-56" />
+                  <path d="M100 100C88 84 80 60 78 32" />
+                  <path d="M100 100c12-16 20-40 22-68" />
+                  <path d="M100 100c-16-4-32-10-46-20" />
+                  <path d="M100 100c16-4 32-10 46-20" />
+                </g>
+                <path d="M70 100h60l-7 32a6 6 0 0 1-6 5H83a6 6 0 0 1-6-5z" fill="#d9d3c4" />
+                <rect x="66" y="92" width="68" height="12" rx="4" fill="#c8c1b0" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Хлорофитум</span>
+              <span class="meta">прощает всё · в подвесном кашпо</span>
+              <div class="row">
+                <span class="price">890 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="item">
+            <div class="art" style="background: #e8eee7">
+              <span class="badge">Новинка</span>
+              <svg viewBox="0 0 200 150" aria-hidden="true">
+                <g>
+                  <rect x="78" y="22" width="14" height="82" rx="7" fill="#2f6b4f" transform="rotate(-8 85 63)" />
+                  <rect x="94" y="14" width="14" height="90" rx="7" fill="#3a8a61" />
+                  <rect x="110" y="26" width="14" height="78" rx="7" fill="#2f6b4f" transform="rotate(9 117 65)" />
+                  <rect x="64" y="40" width="12" height="64" rx="6" fill="#3a8a61" transform="rotate(-16 70 72)" />
+                </g>
+                <path d="M68 104h64l-7 30a6 6 0 0 1-6 5H81a6 6 0 0 1-6-5z" fill="#8a9a92" />
+                <rect x="64" y="96" width="72" height="12" rx="4" fill="#78877f" />
+              </svg>
+            </div>
+            <div class="body">
+              <span class="name">Сансевиерия</span>
+              <span class="meta">для тёмного коридора</span>
+              <div class="row">
+                <span class="price">1 400 ₽</span>
+                <button class="buy" type="button">В корзину</button>
+              </div>
+            </div>
+          </article>
+        </section>
       </div>
 
       <!-- ------------------------------------------------------------------ -->
       <section class="service">
         <div class="wrap">
-          <div class="service-label">Служебный блок · это демонстрация AGO Chat</div>
-          <h2>Магазина «Верста» не существует</h2>
+          <div class="service-label">Попробовать вживую</div>
+          <h2>Побудьте и покупателем, и оператором</h2>
           <p class="lede">
-            Витрина выше — декорация. Настоящий здесь только чат в правом нижнем углу: тот же виджет,
-            тот же сервер и та же консоль оператора, которые получает реальный магазин. Напишите в
-            него, потом откройте консоль во второй вкладке и ответьте себе же.
+            Напишите в чат как покупатель, потом откройте консоль оператора во второй вкладке и
+            ответьте себе же. Обе стороны разговаривают по-настоящему, через тот же сервер, что и
+            реальные магазины.
           </p>
 
           <div class="service-grid">
@@ -660,7 +943,7 @@
     <footer>
       <div class="wrap">
         AGO Chat — встраиваемый чат поддержки. Эта страница и виджет на ней собраны и развёрнуты из
-        того же исходного кода, что получает реальный магазин, а не сверстаны как макет.
+        того же исходного кода, что получает реальный магазин, а не свёрстаны как макет.
       </div>
     </footer>
 

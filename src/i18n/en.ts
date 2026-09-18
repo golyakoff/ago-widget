@@ -50,7 +50,6 @@ export const en: WidgetStrings = {
   // here could disagree with `8-09`'s panel, which renders it exactly.
   privateDemoNotice:
     "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.",
-  autoReplyLabel: "Automatic reply",
   processingNoticeLinkText: "Read more",
   channelSwitcherGroupLabel: "Other ways to reach us",
   channelSwitcherWriteInChat: "Message here instead",

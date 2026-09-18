@@ -275,30 +275,18 @@ export const widgetStyles = /* css */ `
   }
 
   /* 14-04: an automatic reply. Same incoming-side shape as an operator bubble, because that is what
-     it is - a message from the shop - with a label so a visitor is never misled into thinking a
-     person answered. The label is a CSS content string rather than a DOM node so that textContent
-     stays exactly the message body: a test, a copy-paste or a screen reader reading the bubble gets
-     the reply, and the label is announced separately as decoration. */
+     it is - a message from the shop - with a left-border accent distinguishing it from an operator's
+     own reply. 14-04 also gave this bubble a visible "automatic reply" label so a visitor was never
+     misled into thinking a person answered; 25-154 removed that label entirely (the author's own
+     explicit decision, not an oversight) - this base shape is unrelated to the label and is unchanged
+     by that removal. A reader of 14-04 should not conclude the label still exists from this rule's
+     survival. */
   .ago-message--auto {
     align-self: flex-start;
     background: #f0f1f4;
     color: #1a1a1a;
     border-bottom-left-radius: 0.125rem;
     border-left: 2px solid #c7c9d1;
-  }
-
-  .ago-message--auto::before {
-    /* 11-10: threaded through as a CSS custom property, the same mechanism --ago-accent already uses
-       for the site's color - a content: pseudo-element string is not a DOM text node, so the widget's
-       ordinary string-table lookup (ui/widget.ts's applyStrings) cannot reach it any other way. Set at
-       the same point locale is resolved, defaulting to the English default until then. */
-    content: var(--ago-auto-reply-label, "Automatic reply");
-    display: block;
-    font-size: 0.6875rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #6b7280;
-    margin-bottom: 0.25rem;
   }
 
   .ago-message--system {

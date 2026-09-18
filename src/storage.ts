@@ -184,6 +184,14 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
       "One entry per conversation the browser has ever resumed. The entry for whichever conversation id was current is removed when the stored identity itself is replaced (`17-07`); an entry for an earlier, already-superseded conversation is not otherwise cleared.",
     survivesTabClose: true,
   },
+  {
+    key: "last-read-sequence:<conversationId>",
+    holds: "The highest message sequence number this browser had actually seen the moment the visitor last opened the panel - a read watermark, never message text. Distinct from `last-sequence:<conversationId>` above, which advances on every message this browser receives whether or not the panel is open.",
+    why: "`25-143`: lets the next page load ask the server how many messages have arrived since this visitor last looked, so the closed launcher's own unread badge (`25-141`) starts at the true count instead of zero on every reload.",
+    lifetime:
+      "Set every time `open()`/`openForAutoGreeting()` clear the in-memory unread count, to whatever `last-sequence:<conversationId>` holds at that moment. The entry for whichever conversation id was current is removed when the stored identity itself is replaced (`17-07`), the same event `last-sequence:<conversationId>` above is cleared on; an entry for an earlier, already-superseded conversation is not otherwise cleared.",
+    survivesTabClose: true,
+  },
 ];
 
 export interface VisitorSession {
@@ -495,6 +503,36 @@ export class WidgetStorage {
   }
 
   /**
+   * `25-143`: the read watermark the reload-time unread-count seed reads back on the *next* page load
+   * - `null` for a conversation this browser has never opened the panel on (a first-ever visit, or a
+   * conversation resumed from an even earlier one whose own watermark this method's own key namespace
+   * never carried over), which is exactly the "omit `afterSequence` entirely" case the new endpoint's
+   * own contract asks for.
+   */
+  getLastReadSequence(conversationId: string): number | null {
+    const raw = this.readSafe(`last-read-sequence:${conversationId}`);
+    if (raw === null) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  /** Called only from `open()`/`openForAutoGreeting()` (`ui/widget.ts`), the same two places that
+   * reset the in-memory `unreadCount` to zero - `sequence` is the latest sequence this browser has
+   * actually seen at that exact moment, read from `getLastKnownSequence` above rather than tracked a
+   * second time: `connection.ts`'s `rememberSequence` already writes that key through to storage,
+   * synchronously, every time `VisitorConnection`'s own `SequenceTracker` advances (on the initial
+   * history page, a live push, or a reconnect's delta alike), so it is current before, during and
+   * after this page load's own hub connection ever exists - unlike a value read off the connection
+   * object itself, which would answer "nothing yet" for the entire window before `open()`'s own lazy
+   * `connect()` call has resolved. */
+  setLastReadSequence(conversationId: string, sequence: number): void {
+    this.writeSafe(`last-read-sequence:${conversationId}`, String(sequence));
+  }
+
+  /**
    * `23-64`/`adr/0148`: «Opening is once» - the backlog item's own scope, and the visitor's stored
    * identity is "the visitor's own session" this item asks to reuse rather than inventing a second
    * lifetime (its own words: "the visitor's own session already has a lifetime and reusing it is the
@@ -561,11 +599,16 @@ export class WidgetStorage {
    * watches their own messages fail to appear.
    *
    * Removes the cursor before the id, because the cursor's key is derived from the id.
+   *
+   * `25-143`: `last-read-sequence:<conversationId>` is removed alongside `last-sequence:<conversationId>`
+   * for the identical reason - a new `VisitorId` has not opened this conversation's panel either, so a
+   * watermark from the conversation the old identity owned must not seed the new identity's own badge.
    */
   clearConversation(): void {
     const conversationId = this.getConversationId();
     if (conversationId !== null) {
       this.removeSafe(`last-sequence:${conversationId}`);
+      this.removeSafe(`last-read-sequence:${conversationId}`);
     }
 
     this.removeSafe("conversation-id");

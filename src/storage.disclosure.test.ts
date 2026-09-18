@@ -23,11 +23,17 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     return Object.keys(localStorage).filter((k) => k.startsWith(PREFIX)).map((k) => k.slice(PREFIX.length));
   }
 
-  /** `last-sequence:<conversationId>` is templated in the document - one physical key per
-   * conversation, not the literal string `last-sequence:<conversationId>`. Collapse every
-   * `last-sequence:...` key actually written down to that one documented shape before comparing. */
+  /** `last-sequence:<conversationId>`/`last-read-sequence:<conversationId>` are templated in the
+   * document - one physical key per conversation, not the literal template string. Collapse every
+   * `last-sequence:...`/`last-read-sequence:...` key actually written down to its own documented shape
+   * before comparing. The two prefixes never collide (`last-read-sequence:` does not start with
+   * `last-sequence:`), so the order the two checks run in does not matter. */
   function normalise(suffixes: string[]): string[] {
-    return suffixes.map((s) => (s.startsWith("last-sequence:") ? "last-sequence:<conversationId>" : s));
+    return suffixes.map((s) =>
+      s.startsWith("last-read-sequence:") ? "last-read-sequence:<conversationId>"
+      : s.startsWith("last-sequence:") ? "last-sequence:<conversationId>"
+      : s,
+    );
   }
 
   it("writes exactly the keys the document lists, once every write path has run", () => {
@@ -36,8 +42,8 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     // Every documented key with a value, at least once: the identity plus every cached config field
     // (`visitor-token`, `visitor-id`, `widget-color`, `widget-position`, `widget-locale`,
     // `widget-notice-text`, `widget-notice-url`, `enabled-modules`, `widget-attract-attention`), the
-    // conversation cursor
-    // (`conversation-id`, `last-sequence:<conversationId>`).
+    // conversation cursor and its read watermark
+    // (`conversation-id`, `last-sequence:<conversationId>`, `last-read-sequence:<conversationId>`).
     storage.setVisitorSession({
       token: "t",
       visitorId: "v",
@@ -56,6 +62,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
+    storage.setLastReadSequence("conv-1", 2);
     storage.setAutoOpenGreetingShown();
     storage.setHasKnownContactDetail();
 
@@ -88,6 +95,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
+    storage.setLastReadSequence("conv-1", 2);
     storage.setAutoOpenGreetingShown();
     storage.setHasKnownContactDetail();
 

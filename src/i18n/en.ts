@@ -71,4 +71,17 @@ export const en: WidgetStrings = {
   contactCaptureConfirmation: "Thanks, {name} - your details have been added.",
   contactCaptureFailedNote: "Couldn't send that. Please try again.",
   contactCaptureEmailInvalidNote: "That doesn't look like a valid email address.",
+
+  // `8-13`: `demo/boot.ts`'s two swapped sentences, moved here from being literals in that file - see
+  // this table's own doc comment on `demoOwnTenantBannerNotice` for why `boot.ts` resolves these
+  // against the page's `<html lang>` rather than a `WidgetLocale`.
+  demoOwnTenantBannerNotice:
+    "You are on a tenant of your own. The operator login published below belongs to the shared demo "
+    + "shops, not to this tenant - nobody but you can read what you type here. This tenant and "
+    + "everything in it delete themselves after about a day.",
+  demoOwnTenantPrivacyNote:
+    "Safe for the deployment, and private for you on this page: the login above is published, but "
+    + "it only reaches the shared demo shops - never the tenant you are on. Only the operator "
+    + "account you were handed can read this conversation, and it is deleted with the tenant after "
+    + "about a day.",
 };

@@ -13,6 +13,7 @@
  * `src/demo/` is imported by `src/index.ts`, and nothing here imports the widget.
  */
 import type { DemoNotice } from "../config.js";
+import { getStrings, type SupportedLocale } from "../i18n/resolve.js";
 import { mintDemoTenant } from "./mint.js";
 import { renderOutcome } from "./panel.js";
 import { resolveDemoSiteKey } from "./siteKey.js";
@@ -83,6 +84,23 @@ export function demoNoticeFor(siteKey: string, fallbackSiteKey: string): DemoNot
 }
 
 /**
+ * `8-13`: the one locale signal this script has. `boot.ts` runs standalone, before the widget bundle
+ * it injects ever calls home - there is no `session.widgetLocale` yet, which is what
+ * `ui/widget.ts`'s `parseWidgetLocale` resolves (and that function's input is the server's own `"Ru"`
+ * enum spelling, not a `lang` attribute, so it is the wrong function to reach for here even though
+ * its output type matches). The one locale fact already sitting on the document is the `<html lang>`
+ * both demo pages already declare for every other reason a browser or a screen reader cares about
+ * (`public-demo/index.html` is `lang="ru"`, `public-demo-2/index.html` is `lang="en"`) - so this reads
+ * that instead of adding a second, boot-script-only locale attribute nobody else would ever set.
+ * Anything other than `"ru"` resolves to English, the same "unrecognised -> en" default
+ * `parseWidgetLocale` uses one layer up, for the same reason: a locale this function has never heard
+ * of must still render in the widget's original language rather than fail to render at all.
+ */
+export function resolveDemoPageLocale(doc: Document): SupportedLocale {
+  return doc.documentElement.lang.toLowerCase() === "ru" ? "ru" : "en";
+}
+
+/**
  * `8-11`: the page's own top banner, which has the same problem one layer up.
  *
  * `demo-boot.js` swaps the widget's tenant and hides the mint button when `?site=` is present, but
@@ -102,26 +120,21 @@ export function demoNoticeFor(siteKey: string, fallbackSiteKey: string): DemoNot
  * Guarded per element like the mint button, and each result reported separately - `demo-shop2` has no
  * safety card at all, so a missing element is the ordinary case rather than a fault, and a single
  * boolean would have made "not there" and "not swapped" the same answer.
+ *
+ * `8-13`: the replacement text used to be two English literals right here - the one place in this
+ * repository display text bypassed `i18n/en.ts`/`ru.ts` entirely, which is both why it was
+ * untranslated and why nobody noticed. It now comes from `WidgetStrings`
+ * (`demoOwnTenantBannerNotice`/`demoOwnTenantPrivacyNote`), resolved against the page's own locale
+ * (`resolveDemoPageLocale`, above) the same way every other visitor-facing string in this widget is
+ * resolved - `i18n/resolve.ts`'s `getStrings` - rather than a language chosen once for both pages.
  */
 export function applyOwnTenantPageCopy(doc: Document): { banner: boolean; privacyNote: boolean } {
+  const strings = getStrings(resolveDemoPageLocale(doc));
   return {
-    banner: swap(
-      doc,
-      "ago-demo-public-notice",
-      "You are on a tenant of your own. The operator login published below belongs to the shared demo "
-      + "shops, not to this tenant - nobody but you can read what you type here. This tenant and "
-      + "everything in it delete themselves after about a day.",
-    ),
+    banner: swap(doc, "ago-demo-public-notice", strings.demoOwnTenantBannerNotice),
     // The safety card's second paragraph. Only demo-shop1's page carries the card, so this is
     // routinely false on demo-shop2 and that is not a failure - see this function's own remarks.
-    privacyNote: swap(
-      doc,
-      "ago-demo-privacy-note",
-      "Safe for the deployment, and private for you on this page: the login above is published, but "
-      + "it only reaches the shared demo shops - never the tenant you are on. Only the operator "
-      + "account you were handed can read this conversation, and it is deleted with the tenant after "
-      + "about a day.",
-    ),
+    privacyNote: swap(doc, "ago-demo-privacy-note", strings.demoOwnTenantPrivacyNote),
   };
 }
 

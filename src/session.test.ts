@@ -58,6 +58,7 @@ function sessionResponse(token: string, status: number, body: Partial<Record<str
       widgetLocale: "En",
       enabledModules: [],
       enabledModuleTriggerWords: {},
+      channelLinks: [],
       ...body,
     }),
     { status, headers: { "Content-Type": "application/json" } },
@@ -94,6 +95,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeUrl: null,
     enabledModules: [],
     enabledModuleTriggerWords: {},
+    channelLinks: [],
     widgetAttractAttention: false,
     widgetAutoOpenEnabled: false,
     widgetAutoOpenDelaySeconds: 30,
@@ -395,6 +397,22 @@ describe("a token the server will not renew", () => {
     expect(storage.getLastKnownSequence("dddddddd-dddd-dddd-dddd-dddddddddddd")).toBeNull();
   });
 
+  // `25-149`: the identical event and reasoning `clearAutoOpenGreetingShown`/`clearHasKnownContactDetail`
+  // already have their own - a freshly minted identity must not be silently born "already dismissed."
+  it("at page load, forgets that the previous identity had dismissed the channel-switcher card", async () => {
+    storeSessionMintedAt(T0 - LIFETIME_MS - DAY_MS);
+    storage.setChannelSwitcherDismissed();
+    fetchImpl.mockImplementation((url: string | URL | Request) =>
+      Promise.resolve(
+        urlOf(url).endsWith("/renew") ? new Response("", { status: 401 }) : sessionResponse(tokenMintedAt(now), 201),
+      ),
+    );
+
+    await manager().start();
+
+    expect(storage.getChannelSwitcherDismissed()).toBe(false);
+  });
+
   it("mid-session, ends the session instead of quietly becoming a different visitor", async () => {
     storeSessionMintedAt(T0);
     const sessionManager = manager();
@@ -446,6 +464,7 @@ describe("a stored token this widget cannot read", () => {
       widgetNoticeUrl: null,
       enabledModules: [],
       enabledModuleTriggerWords: {},
+      channelLinks: [],
       widgetAttractAttention: false,
       widgetAutoOpenEnabled: false,
       widgetAutoOpenDelaySeconds: 30,

@@ -110,6 +110,7 @@ function sessionBody(token: string, visitorId: string): string {
     widgetPosition: "BottomRight",
     enabledModules: [],
     enabledModuleTriggerWords: {},
+    channelLinks: [],
   });
 }
 
@@ -154,6 +155,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetNoticeUrl: null,
     enabledModules: [],
     enabledModuleTriggerWords: {},
+    channelLinks: [],
     widgetAttractAttention: false,
     widgetAutoOpenEnabled: false,
     widgetAutoOpenDelaySeconds: 30,

@@ -160,6 +160,74 @@ function createSvgIcon(d: string): SVGSVGElement {
 }
 
 /**
+ * `25-149`: one icon per `ChannelKind` this item covers - `AuthEndpoints.ChannelLinkResponse.Kind`
+ * (`ago-chat`)'s own exact PascalCase wire string as the key (`ChannelLinkUrlBuilder`'s own remarks:
+ * MAX, Telegram, VK, WhatsApp are the only four this response can ever actually carry - Avito never
+ * among them, `25-147`'s own scope). Every path stays inside `createSvgIcon`'s existing
+ * `0 -960 960 960` viewBox convention rather than each brand's own native asset coordinate space.
+ *
+ * `Telegram` reuses `sendButton`'s own verified "send" glyph above verbatim - a paper aeroplane, which
+ * is also literally Telegram's own logo concept. `Max`/`Vk`/`WhatsApp` are this widget's own simplified
+ * placeholder glyphs, **not a verified, pixel-accurate reproduction of any provider's real trademarked
+ * mark** - this task had no licensed copy of any of the three to trace from, and guessing at one and
+ * presenting it as "official" would be worse than an honestly-approximate placeholder. A later design
+ * pass with the real brand assets in hand only ever needs to replace the three strings below; nothing
+ * that reads this map needs to change.
+ */
+const CHANNEL_ICON_PATHS: Record<string, string> = {
+  Telegram: "M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z",
+  WhatsApp: "M160-760H800V-360H320L200-240V-360H160Z",
+  Vk: "M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z",
+  Max: "M480-120 120-480l360-360 360 360-360 360Z",
+};
+
+/** `25-149`: an unrecognised `kind` on the wire (a future channel this build has not shipped an icon
+ * for yet) still gets a real, working row - never dropped, never a crash. The plain outer circle
+ * `sentiment_satisfied`'s own glyph above already draws for its face, reused here as a neutral "channel
+ * exists, no icon yet" mark rather than a second, invented shape. */
+const CHANNEL_FALLBACK_ICON_PATH =
+  "M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z";
+
+/**
+ * `25-149`: every colour here is a small, widget-local constant, deliberately independent of
+ * `--ago-accent` - the identical "must read against whatever a tenant configured" reasoning
+ * `--ago-unread-badge-bg` already states for itself (`ui/styles.ts`). `Telegram`'s is its own
+ * well-known public brand blue; `Max`/`Vk`/`WhatsApp` are, like the placeholder paths above, this
+ * widget's own stand-in pending the real brand guideline for each - a later design pass replaces these
+ * three strings alongside the icon paths they sit next to.
+ *
+ * VK ships in this first version despite `25-147`'s own note that its whole integration has never
+ * been exercised against a real token - the author's own explicit decision, 2026-09-18: a wrong URL
+ * there is `25-147`'s own bug to fix, not a reason to withhold VK's row here.
+ */
+const CHANNEL_BRAND_COLORS: Record<string, string> = {
+  Telegram: "#2AABEE",
+  WhatsApp: "#25D366",
+  Vk: "#0077FF",
+  Max: "#6E56CF",
+};
+
+/** `25-149`: the neutral fallback colour, for the identical unrecognised-`kind` case
+ * `CHANNEL_FALLBACK_ICON_PATH` covers - `#6b7280`, the same grey `.ago-status`/`.ago-message--system`
+ * already use in `ui/styles.ts`, not a new literal invented for this one case. */
+const CHANNEL_FALLBACK_COLOR = "#6b7280";
+
+/**
+ * `25-149`: the proper noun a visitor actually reads - never run through `WidgetStrings`, never
+ * translated, the same "the widget owns the frame, not the content" split this file's own remarks on
+ * `channelSwitcherGroupLabel` already draw for a brand name rather than a tenant's own words. An
+ * unrecognised `kind` falls back to the raw wire string itself, verbatim - never a generic "channel"
+ * placeholder that would be a worse label than the one the server already sent, and never a dropped
+ * row (`25-149`'s own explicit Done-when).
+ */
+const CHANNEL_DISPLAY_NAMES: Record<string, string> = {
+  Telegram: "Telegram",
+  WhatsApp: "WhatsApp",
+  Vk: "VK",
+  Max: "MAX",
+};
+
+/**
  * `25-136`: enables or disables every interactive control a rendered primitive holds - the buttons
  * `appendActionButtons` builds for the three choice-shaped kinds, or the input/submit pair `form`
  * builds (`ui/primitives/render.ts`). This is the module-step gate's own lock, distinct from
@@ -295,6 +363,14 @@ export class ChatWidget {
    * stays `readonly` in spirit (`loadBookingModuleChip` is the one place that ever assigns it, at
    * most once, mirroring how the constructor used to be the one place that did). */
   private moduleChip: HTMLButtonElement | null = null;
+  /** `25-149`: `null` until `loadChannelSwitcherCard` has decided the card should exist at all
+   * (`session.channelLinks` non-empty and not already dismissed for this visitor identity) - a site
+   * with nothing connected, or a returning visitor who already dismissed it, builds no element here,
+   * the identical "pays nothing" property `moduleChip` above already gives its own feature. Once built
+   * it is never removed, only ever hidden (`dismissChannelSwitcher`) - `open()`/`openForAutoGreeting()`
+   * need no reveal logic of their own for it, since it is an ordinary child of `this.panel` on the
+   * identical footing `this.messages`/`composer` already are. */
+  private channelSwitcherCard: HTMLDivElement | null = null;
   private readonly composer: HTMLFormElement;
   /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
    * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
@@ -724,6 +800,12 @@ export class ChatWidget {
     // `src/modules/` statically - that method's own doc comment explains why the base bundle stays
     // unaffected either way, whether or not the lazy chunk is ever actually fetched.
     guardAsync(() => this.loadBookingModuleChip());
+
+    // `25-149`: the identical "kicked off here, not on first open" shape `loadBookingModuleChip`
+    // just above already has, for the identical reason - the fact that decides whether this card
+    // exists at all (`session.channelLinks`) is not knowable until the handshake resolves, and this
+    // method's own `await this.sessionPromise` is what lets an auto-opened panel get the card too.
+    guardAsync(() => this.loadChannelSwitcherCard());
   }
 
   /**
@@ -1330,6 +1412,110 @@ export class ChatWidget {
   }
 
   /**
+   * `25-149`: a Jivo-style card offering the tenant's own connected channels, built once the
+   * handshake resolves `session.channelLinks` - the identical timing `loadBookingModuleChip` above
+   * already established (`await this.sessionPromise`, so an auto-opened panel gets it too) and the
+   * identical anchor (`this.composer.parentElement`, `insertBefore(..., this.composer)`) - "directly
+   * above the composer," the item's own words, not a second floating surface the panel's own focus
+   * trap and Escape handler would each need teaching about a second time.
+   *
+   * A site with nothing connected (`channelLinks.length === 0`) never builds this element at all -
+   * "a session with an empty `channelLinks` shows no card at all, never an empty or single-row husk"
+   * (the item's own Scope), the identical "pays nothing" property `loadBookingModuleChip` already
+   * gives a shop with no grant. Nor does a returning visitor who already dismissed the card for this
+   * identity: `storage.getChannelSwitcherDismissed()` is read here, once, so a dismissed identity gets
+   * no channel-switcher DOM at all on a later page load, rather than a card built and immediately kept
+   * hidden.
+   *
+   * The item's own cadence, "shows on every panel open until dismissed," needs no per-open reveal of
+   * its own: this card sets `hidden = false` exactly once, right here, and is never re-hidden except by
+   * `dismissChannelSwitcher`. It is an ordinary child of `this.panel` on the identical footing
+   * `this.messages`/`composer` already are, so `open()`/`openForAutoGreeting()` revealing the whole
+   * panel is what makes it visible again on every later open, for free - the same reason neither method
+   * has to remember to re-reveal the transcript or the composer either.
+   */
+  private async loadChannelSwitcherCard(): Promise<void> {
+    const session = await this.sessionPromise;
+    if (session.channelLinks.length === 0 || this.storage.getChannelSwitcherDismissed()) {
+      return;
+    }
+
+    const card = document.createElement("div");
+    card.className = "ago-channel-switcher";
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
+
+    for (const link of session.channelLinks) {
+      card.append(this.buildChannelSwitcherRow(link));
+    }
+
+    const writeInChatRow = document.createElement("button");
+    writeInChatRow.type = "button";
+    writeInChatRow.className = "ago-channel-switcher-row ago-channel-switcher-row--dismiss";
+    writeInChatRow.textContent = this.strings.channelSwitcherWriteInChat;
+    // `adr/0148`: hides the card, marks it dismissed and focuses the composer - never `connect()`.
+    // `completeSend`'s own lazy connect-on-first-send is what actually opens the hub; a control that
+    // sends nothing itself must not undo that laziness, which is exactly the regression the backlog
+    // item names by pointing at `adr/0148` here.
+    writeInChatRow.addEventListener("click", () => {
+      this.dismissChannelSwitcher();
+      this.input.focus();
+    });
+    card.append(writeInChatRow);
+
+    this.composer.parentElement?.insertBefore(card, this.composer);
+    this.channelSwitcherCard = card;
+  }
+
+  /**
+   * `25-149`: one tappable row per connected channel - a real `<a target="_blank"
+   * rel="noopener noreferrer">`, never a JS-driven navigation, so long-press/copy/open-in-app keep
+   * working on a host page this widget does not control (the item's own reasoning). The accessible
+   * name is the visible label alone - a plain text node beside an `aria-hidden` icon, so a screen
+   * reader announces the channel's own name exactly once rather than the glyph a second time as
+   * meaningless "image" content. An unrecognised `kind` still gets a real, working row: the neutral
+   * fallback icon and colour, and the raw wire string itself as its label - never dropped, never a
+   * throw (`25-149`'s own explicit Done-when).
+   */
+  private buildChannelSwitcherRow(link: { kind: string; url: string }): HTMLAnchorElement {
+    const row = document.createElement("a");
+    row.className = "ago-channel-switcher-row";
+    row.href = link.url;
+    row.target = "_blank";
+    row.rel = "noopener noreferrer";
+    row.style.color = CHANNEL_BRAND_COLORS[link.kind] ?? CHANNEL_FALLBACK_COLOR;
+
+    const icon = createSvgIcon(CHANNEL_ICON_PATHS[link.kind] ?? CHANNEL_FALLBACK_ICON_PATH);
+    icon.setAttribute("aria-hidden", "true");
+    row.append(icon);
+
+    const label = document.createElement("span");
+    label.textContent = CHANNEL_DISPLAY_NAMES[link.kind] ?? link.kind;
+    row.append(label);
+
+    return row;
+  }
+
+  /**
+   * `25-149`: the one place both dismissal paths converge - the «Написать в чат» row's own click,
+   * and `dispatchSend`'s own call below for the item's second, independent trigger, "the visitor's
+   * first sent message." Idempotent by construction: a second call (a second message sent, or a click
+   * once the card is already hidden) writes the identical stored value and hides an already-hidden or
+   * already-absent element, never a throw.
+   *
+   * Reuses `WidgetStorage`'s own per-identity clearing (`VisitorSessionManager.start`'s `17-07`
+   * branch, alongside `clearAutoOpenGreetingShown`/`clearHasKnownContactDetail`) rather than a second,
+   * parallel mechanism - the item's own explicit "Where this is likely to go wrong" - so a freshly
+   * minted visitor identity is never silently born "already dismissed."
+   */
+  private dismissChannelSwitcher(): void {
+    this.storage.setChannelSwitcherDismissed();
+    if (this.channelSwitcherCard) {
+      this.channelSwitcherCard.hidden = true;
+    }
+  }
+
+  /**
    * `18-03`'s own interaction shape (`ago-console`'s `Composer.tsx`), read as a UX convention rather
    * than shared code: inserting the trigger phrase and sending it is **structurally identical to the
    * visitor typing it themselves**, not a second code path into the module - `sendCurrentMessage`
@@ -1739,6 +1925,13 @@ export class ChatWidget {
    * arguments to the one function every visitor-authored message already goes through.
    */
   private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: string): void {
+    // `25-149`: "the visitor's first sent message" is the card's own second, independent dismissal
+    // trigger, alongside the «Написать в чат» row's own click - every visitor-authored send, typed or
+    // a module's own trigger phrase (`invokeModule`), goes through this one function, which is what
+    // makes this the single place to observe that fact rather than a second copy of the check at each
+    // of this method's own callers.
+    this.dismissChannelSwitcher();
+
     // `23-64`/`adr/0148`: the optimistic bubble still renders synchronously, before any connection
     // exists or not - a visitor typing into an auto-opened panel gets the identical instant feedback
     // an already-connected one already gives, and `completeSend` below is where the one thing that

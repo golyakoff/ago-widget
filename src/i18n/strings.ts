@@ -88,6 +88,17 @@ export interface WidgetStrings {
    * notice text itself is never a key in this table - it is per-site data from `WidgetConfig`, not a
    * fixed sentence this widget authors, so it is never translated (`ui/notice.ts`'s own remarks). */
   readonly processingNoticeLinkText: string;
+  /** `25-149`: the accessible name on the channel-switcher card's own `role="group"` region - what a
+   * screen reader announces on entering the group of channel rows plus the "stay here" row beside
+   * them. The individual channel names inside it (`Telegram`, `MAX`, `VK`, `WhatsApp`) are never a key
+   * in this table - they are proper nouns, the identical "the widget owns the frame, not the content"
+   * split `processingNoticeLinkText` already draws for a tenant's own URL, just for a brand name
+   * instead of a tenant's own words. */
+  readonly channelSwitcherGroupLabel: string;
+  /** `25-149`: the card's own final row, visually distinct from the channel rows above it (no brand
+   * colour) - falls through to the ordinary in-page conversation. Hides the card, marks it dismissed
+   * and focuses the composer; sends nothing and never forces a connection (`adr/0148`). */
+  readonly channelSwitcherWriteInChat: string;
 
   // attachments.ts - the courtesy upload checks.
   /** Appended after the quoted, untranslated MIME type: `` `"${type}" ${unsupportedFileTypeSuffix}` ``. */

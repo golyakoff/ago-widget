@@ -1,3 +1,5 @@
+import type { ChannelLinkDto } from "./protocol/types.js";
+
 /**
  * `localStorage` under a namespaced key, scoped to one site (embeddable-widget skill: "No cookies
  * on the host domain, no fingerprinting, no reading anything the host page put in storage"). Every
@@ -119,6 +121,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "channel-links",
+    holds: "The tenant's own connected messaging channels (for example, Telegram or WhatsApp) and the public link to each - not a secret: the same links the channel-switcher card (`25-149`) offers a visitor to tap, cached alongside the rest of the site's config. Telegram's own link may carry a one-time linking code, minted for this specific visitor.",
+    why: "Lets the widget show the channel-switcher card without a second round trip once the session is cached, the same purpose the add-on list above already serves.",
+    lifetime: "Refreshed at least once a day for a returning visitor, and sooner if the identity token above is itself due for renewal (`25-05`); removed entirely once the tenant has no channel connected.",
+    survivesTabClose: true,
+  },
+  {
     key: "widget-attract-attention",
     holds: "Whether the tenant turned on «Привлекать внимание» - the launcher drawing attention to itself while closed (`23-63`).",
     why: "Same purpose as the colour above - a cached rendering preference, refreshed with the session.",
@@ -166,6 +175,14 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     why: "`25-136`: a module task's own reply-capable step (e.g. a booking's service choice) is gated on a contact detail being on file - this is how a later step, or a later conversation under the same stored identity, knows not to show that gate again once an earlier one already cleared it.",
     lifetime:
       "Set the moment `submitContactCapture` succeeds, from any of its three entry points (the out-of-hours control, the online «Представиться…» link, or `25-136`'s own module-step gate). Cleared only when the stored visitor identity itself is replaced (`17-07`), the same event `auto-open-greeting-shown` above is cleared on - a new identity has not given anyone their details yet. Otherwise nothing clears it. **A client-only convenience, not the source of truth**: a contact detail the tenant's own operator enters directly in the console for this visitor is real on the server the moment it is written, but this flag only ever changes when *this browser* submits the widget's own form, so it cannot reflect that write - `25-136`'s own scope note names this as an accepted limitation of a client-side-only gate, not an oversight.",
+    survivesTabClose: true,
+  },
+  {
+    key: "channel-switcher-dismissed",
+    holds: "Whether this browser has dismissed the channel-switcher card (`25-149`) for this visitor identity - a yes/no flag, never which channel (if any) it tapped.",
+    why: "The card's own cadence, the author's own decision: it shows on every panel open until dismissed, never a one-time-per-visit reveal - this flag is what makes a dismissal stick past the page load it happened on, and past every later one, rather than reappearing on the visitor's very next open.",
+    lifetime:
+      "Set the moment the visitor taps «Написать в чат», or sends their first message through the ordinary composer - either counts as \"this visitor chose the in-page chat.\" Cleared only when the stored visitor identity itself is replaced (`17-07`), the same event `has-known-contact-detail` above is cleared on - a new identity has not dismissed anything yet. Otherwise nothing clears it.",
     survivesTabClose: true,
   },
   {
@@ -253,6 +270,15 @@ export interface VisitorSession {
    * remarks give for its own boolean.
    */
   enabledModuleTriggerWords: Record<string, string[]>;
+  /**
+   * `25-148`/`25-149`: cached alongside the rest on the identical terms - the raw
+   * `AuthEndpoints.VisitorSessionResponse.ChannelLinks` (`ago-chat`) carried on the response that
+   * minted or last renewed this session, refreshed on the identical schedule (`25-05`). `[]`, never
+   * absent, for a session written before this field existed or for a site with nothing connected - the
+   * same "no card is the honest default, not a guess" property `enabledModules` already gives its own
+   * feature. `ui/widget.ts`'s channel-switcher card is the one reader.
+   */
+  channelLinks: ChannelLinkDto[];
   /** `23-63`: cached alongside the rest on the identical terms - whether the tenant turned
    * «Привлекать внимание» on, refreshed on the identical schedule (`25-05`). Unlike the string fields
    * above, this one is a plain `boolean` rather than `T | null`: `session.ts`'s `store` already
@@ -328,6 +354,7 @@ export class WidgetStorage {
       widgetNoticeUrl: this.readSafe("widget-notice-url"),
       enabledModules: this.readEnabledModulesSafe(),
       enabledModuleTriggerWords: this.readEnabledModuleTriggerWordsSafe(),
+      channelLinks: this.readChannelLinksSafe(),
       widgetAttractAttention: this.readSafe("widget-attract-attention") === "true",
       widgetAutoOpenEnabled: this.readSafe("widget-auto-open-enabled") === "true",
       widgetAutoOpenDelaySeconds: this.readAutoOpenDelaySecondsSafe(),
@@ -403,6 +430,37 @@ export class WidgetStorage {
     }
   }
 
+  /**
+   * `25-148`/`25-149`: the identical "corrupted or unparsable degrades to the honest empty default"
+   * posture `readEnabledModulesSafe`/`readEnabledModuleTriggerWordsSafe` above already take - a
+   * malformed value here must never surface as a channel link the tenant did not actually connect.
+   * Each entry is re-validated on its own shape (`{kind: string, url: string}`); one malformed entry
+   * is dropped without discarding every other, perfectly good one.
+   */
+  private readChannelLinksSafe(): ChannelLinkDto[] {
+    const raw = this.readSafe("channel-links");
+    if (raw === null) {
+      return [];
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter(
+        (entry): entry is ChannelLinkDto =>
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as ChannelLinkDto).kind === "string" &&
+          typeof (entry as ChannelLinkDto).url === "string",
+      );
+    } catch {
+      return [];
+    }
+  }
+
   setVisitorSession(session: VisitorSession): void {
     this.writeSafe("visitor-token", session.token);
     this.writeSafe("visitor-id", session.visitorId);
@@ -460,6 +518,14 @@ export class WidgetStorage {
       this.writeSafe("enabled-module-trigger-words", JSON.stringify(session.enabledModuleTriggerWords));
     } else {
       this.removeSafe("enabled-module-trigger-words");
+    }
+
+    // `25-148`/`25-149`: the identical "written only when non-empty" shape immediately above - a site
+    // with nothing connected leaves no trace of this key either.
+    if (session.channelLinks.length > 0) {
+      this.writeSafe("channel-links", JSON.stringify(session.channelLinks));
+    } else {
+      this.removeSafe("channel-links");
     }
 
     // `23-63`: only written when `true`, matching every other field above - a tenant who has never
@@ -577,6 +643,29 @@ export class WidgetStorage {
    * minted identity has not given anyone their details yet, so this flag must not survive onto it. */
   clearHasKnownContactDetail(): void {
     this.removeSafe("has-known-contact-detail");
+  }
+
+  /**
+   * `25-149`: the identical "opening is once - unless it's this instead" shape `getHasKnownContactDetail`
+   * already has, for a different fact - whether this browser's visitor identity has already dismissed
+   * the channel-switcher card. `ui/widget.ts`'s `dismissChannelSwitcher` is the one place that ever
+   * calls `setChannelSwitcherDismissed`, regardless of which of its two callers (the card's own
+   * «Написать в чат» row, or the visitor's first sent message) triggered it - both count as "chose the
+   * in-page chat," so neither tracks its own separate flag.
+   */
+  getChannelSwitcherDismissed(): boolean {
+    return this.readSafe("channel-switcher-dismissed") === "true";
+  }
+
+  setChannelSwitcherDismissed(): void {
+    this.writeSafe("channel-switcher-dismissed", "true");
+  }
+
+  /** `17-07`: cleared on the identical event `clearAutoOpenGreetingShown`/`clearHasKnownContactDetail`
+   * already are - a freshly minted identity has not dismissed anything yet, so this flag must not
+   * survive onto it. */
+  clearChannelSwitcherDismissed(): void {
+    this.removeSafe("channel-switcher-dismissed");
   }
 
   getConversationId(): string | null {

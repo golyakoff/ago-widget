@@ -87,6 +87,7 @@ function storeValidSession(): string {
     widgetNoticeUrl: null,
     enabledModules: [],
     enabledModuleTriggerWords: {},
+    channelLinks: [],
     widgetAttractAttention: false,
     widgetAutoOpenEnabled: false,
     widgetAutoOpenDelaySeconds: 30,

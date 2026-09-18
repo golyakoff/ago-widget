@@ -87,7 +87,8 @@ export const widgetStyles = /* css */ `
   .ago-close:focus-visible,
   .ago-input:focus-visible,
   .ago-emoji:focus-visible,
-  .ago-emoji-cell:focus-visible {
+  .ago-emoji-cell:focus-visible,
+  .ago-channel-switcher-row:focus-visible {
     outline: 0.1875rem solid var(--ago-accent);
     outline-offset: 0.125rem;
   }
@@ -579,6 +580,52 @@ export const widgetStyles = /* css */ `
   .ago-module-chip:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* 25-149: the channel-switcher card - "directly above the composer," the item's own words, the
+     identical anchor .ago-module-chip above already uses (this file's own remarks up there). Reuses
+     existing tokens only, nothing parallel: background/radius are .ago-panel's own literal values
+     (#fff, 0.75rem) rather than a second surface colour, and the three-sided margin is
+     .ago-module-chip's own (0 0.75rem 0.5rem) - the identical clearance from .ago-messages above and
+     .ago-composer below. A role="group" region (ui/widget.ts), not a list - the rows read as one
+     group of alternatives, not an enumerated sequence. */
+  .ago-channel-switcher {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 0.75rem;
+    margin: 0 0.75rem 0.5rem;
+  }
+
+  /* 25-149: one row, whether a real anchor (a connected channel) or a button (the "stay here" row
+     below) - both need the identical layout, so this rule targets the shared class rather than each
+     element type. No brand colour here: ui/widget.ts sets color per row inline, a small,
+     widget-local per-kind constant deliberately independent of --ago-accent (this file's own remarks
+     on --ago-unread-badge-bg already give the identical "must read against whatever a tenant
+     configured" reasoning) - .ago-channel-switcher-row itself stays colour-neutral so the "stay here"
+     row (which never gets that inline colour) reads in the panel's own ordinary text colour instead. */
+  .ago-channel-switcher-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  /* 25-149: "visually distinct (no brand colour)" - the item's own words for the final row. The
+     divider is .ago-composer's own border-top literal (0.0625rem solid #e5e7eb), reused rather than a
+     second rule invented for one more horizontal line - and a lighter weight than the channel rows
+     above it, since it is the fallback action, not one more channel to pick. */
+  .ago-channel-switcher-row--dismiss {
+    border-top: 0.0625rem solid #e5e7eb;
+    font-weight: 500;
   }
 
   /* 20-07: the closed primitive vocabulary's own rendering (ui/primitives/render.ts), appended

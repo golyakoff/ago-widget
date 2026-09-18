@@ -54,6 +54,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: ["calendar"],
       enabledModuleTriggerWords: { calendar: ["/booking"] },
+      channelLinks: [{ kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" }],
       widgetAttractAttention: true,
       widgetAutoOpenEnabled: true,
       widgetAutoOpenDelaySeconds: 60,
@@ -65,6 +66,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     storage.setLastReadSequence("conv-1", 2);
     storage.setAutoOpenGreetingShown();
     storage.setHasKnownContactDetail();
+    storage.setChannelSwitcherDismissed();
 
     const actual = new Set(normalise(actualKeySuffixes()));
     const documented = new Set(WIDGET_STORAGE_DISCLOSURE.map((entry) => entry.key));
@@ -87,6 +89,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetNoticeUrl: "https://tenant.example/privacy",
       enabledModules: ["calendar"],
       enabledModuleTriggerWords: { calendar: ["/booking"] },
+      channelLinks: [{ kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" }],
       widgetAttractAttention: true,
       widgetAutoOpenEnabled: true,
       widgetAutoOpenDelaySeconds: 60,
@@ -98,6 +101,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
     storage.setLastReadSequence("conv-1", 2);
     storage.setAutoOpenGreetingShown();
     storage.setHasKnownContactDetail();
+    storage.setChannelSwitcherDismissed();
 
     const actual = new Set(normalise(actualKeySuffixes()));
     for (const entry of WIDGET_STORAGE_DISCLOSURE) {

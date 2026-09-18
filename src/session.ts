@@ -218,6 +218,11 @@ export class VisitorSessionManager {
       // given anyone its contact details yet, so a module step for this new identity must show the
       // gate again rather than inheriting the old identity's own flag.
       this.storage.clearHasKnownContactDetail();
+      // `25-149`: the identical event and reasoning once more - a freshly minted identity has not
+      // dismissed the channel-switcher card, so it must not be silently born "already dismissed"
+      // (this item's own "Where this is likely to go wrong": reuse the existing per-identity
+      // clearing rather than a second, parallel mechanism).
+      this.storage.clearChannelSwitcherDismissed();
       this.expired = false;
       return { session: await this.mint(), restarted: true };
     }
@@ -438,6 +443,10 @@ export class VisitorSessionManager {
       // response from before this field existed, never `undefined` threaded one layer further into
       // `VisitorSession`/`WidgetStorage` for no caller that needs it.
       enabledModuleTriggerWords: body.enabledModuleTriggerWords ?? {},
+      // `25-148`/`25-149`: the identical "collapse the wire's optional field to this type's own
+      // stored shape, right here" posture every other optional field on this response already gets -
+      // `[]` for a response from before this field existed or for a site with nothing connected.
+      channelLinks: body.channelLinks ?? [],
       // `23-63`: cached as a plain `boolean`, not the wire's optional field - `undefined` (a response
       // from before this setting existed) collapses to `false` right here, the same point every other
       // field on this response is normalised to its stored shape, rather than threading "maybe absent"

@@ -52,6 +52,8 @@ export const en: WidgetStrings = {
     "This is your own demo tenant. Only the operator login you were given can read this conversation, and the tenant deletes itself after about a day.",
   autoReplyLabel: "Automatic reply",
   processingNoticeLinkText: "Read more",
+  channelSwitcherGroupLabel: "Other ways to reach us",
+  channelSwitcherWriteInChat: "Message here instead",
 
   unsupportedFileTypeSuffix: "isn't supported. Try an image or a PDF.",
   unknownFileType: "unknown type",

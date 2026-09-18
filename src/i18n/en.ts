@@ -8,6 +8,7 @@ import type { WidgetStrings } from "./strings.js";
  */
 export const en: WidgetStrings = {
   openChat: "Open chat",
+  openChatWithUnreadCount: (count) => `Open chat (${count} unread message${count === 1 ? "" : "s"})`,
   closeChat: "Close chat",
   chatLabel: "Chat",
   chatWithUs: "Chat with us",

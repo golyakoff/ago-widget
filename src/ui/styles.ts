@@ -12,6 +12,12 @@ export const widgetStyles = /* css */ `
        properties are explicitly excluded from the "all" shorthand, so inheritance from the host
        element into this shadow tree still works. */
     --ago-accent: #2f6fed;
+    /* 25-141: the unread badge's own colour, deliberately independent of --ago-accent above - the
+       badge has to read as "something new happened" against whatever brand colour a tenant's site
+       configured for the launcher itself (ui/appearance.ts's parseWidgetColor can set --ago-accent
+       to anything), so unlike every other custom property in this file this one is never
+       overridden per-site. */
+    --ago-unread-badge-bg: #e5372e;
   }
 
   * {
@@ -48,6 +54,32 @@ export const widgetStyles = /* css */ `
     font-size: 1.5rem;
     cursor: pointer;
     box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
+    /* 25-141: the unread badge (.ago-unread-badge below) is positioned relative to this button. */
+    position: relative;
+  }
+
+  /* 25-141: the closed launcher's own unread-count badge (ui/widget.ts's renderUnreadBadge is the
+     only thing that ever shows or sizes it - this rule only ever draws it when the JS has already
+     decided it should be visible, via the plain hidden attribute rather than a class). Pinned to
+     the button's own top-right corner rather than laid out beside the icon, the common "notification
+     badge on an icon button" placement. The white ring (box-shadow) keeps it visually separate from
+     the launcher's own background at any --ago-accent a tenant has configured, so the two never
+     merge into one blob at the corner they share. */
+  .ago-unread-badge {
+    position: absolute;
+    top: -0.1875rem;
+    right: -0.1875rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    background: var(--ago-unread-badge-bg);
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    text-align: center;
+    box-shadow: 0 0 0 0.125rem #fff;
   }
 
   .ago-toggle:focus-visible,

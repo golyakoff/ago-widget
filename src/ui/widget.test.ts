@@ -283,6 +283,111 @@ describe("25-140: connecting text only where a connection is actually happening"
 });
 
 /**
+ * `25-141`: the closed launcher's own unread-count badge. `openWidget()` (this file's own helper)
+ * already opens the panel once to build the connection - every test below closes it again first, the
+ * same "opened, sent a message, closed it, then the operator replies" shape the backlog item's own
+ * report used.
+ */
+describe("25-141: unread count on the closed launcher", () => {
+  function badgeOf(panel: Panel): HTMLElement {
+    const badge = panel.toggle.querySelector<HTMLElement>(".ago-unread-badge");
+    if (badge === null) {
+      throw new Error("the toggle has no .ago-unread-badge");
+    }
+
+    return badge;
+  }
+
+  it("shows the count of two operator messages that arrive while the panel is closed", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    panel.toggle.click(); // close
+    await flush();
+
+    currentHub().push(message("op-1", 1, "Operator"));
+    currentHub().push(message("op-2", 2, "Operator"));
+    await flush();
+
+    const badge = badgeOf(panel);
+    expect(badge.textContent).toBe("2");
+    expect(badge.hidden).toBe(false);
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.openChatWithUnreadCount(2));
+  });
+
+  it("does not narrow to Operator alone - a System prompt and a materialised AutoGreeting count too", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    panel.toggle.click(); // close
+    await flush();
+
+    currentHub().push(message("sys-1", 1, "System"));
+    currentHub().push(message("greet-1", 2, "AutoGreeting"));
+    await flush();
+
+    expect(badgeOf(panel).textContent).toBe("2");
+  });
+
+  it("never counts the visitor's own message, and never counts one that arrives while the panel is open", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    type(panel, "hello");
+    pressEnter(panel);
+    await flush();
+
+    const clientMessageId = currentHub().invocationAt("SendMessageAsync", 0).args[3] as string;
+    currentHub().push({ ...message("echo", 1, "Visitor"), body: "hello", clientMessageId }); // the sender's own echo
+    currentHub().push(message("op-1", 2, "Operator")); // arrives while still open
+    await flush();
+
+    const badge = badgeOf(panel);
+    expect(badge.hidden).toBe(true);
+    expect(badge.textContent).toBe("");
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.closeChat);
+  });
+
+  it("clears the count and hides the badge the moment the panel is reopened", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    panel.toggle.click(); // close
+    await flush();
+    currentHub().push(message("op-1", 1, "Operator"));
+    await flush();
+    expect(badgeOf(panel).hidden).toBe(false);
+
+    panel.toggle.click(); // reopen
+    await flush();
+
+    const badge = badgeOf(panel);
+    expect(badge.hidden).toBe(true);
+    // Never a visible "0" - absent, not a visible zero, per this item's own Done-when.
+    expect(badge.textContent).toBe("");
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.closeChat);
+  });
+
+  it("reverts the toggle's accessible name to the plain label once closed again with nothing new", async () => {
+    joinQueue.push(joinResult([]));
+    const panel = await openWidget();
+
+    panel.toggle.click(); // close
+    await flush();
+    currentHub().push(message("op-1", 1, "Operator"));
+    await flush();
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.openChatWithUnreadCount(1));
+
+    panel.toggle.click(); // reopen - clears it
+    await flush();
+    panel.toggle.click(); // close again, nothing new arrived since
+    await flush();
+
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.openChat);
+  });
+});
+
+/**
  * `25-61`: the hub-refusal half of `completeSend`'s `.catch` - the socket stays up and
  * `SendMessageAsync` itself rejects (`fakeSignalR`'s `failNextSend` with `leavingState:
  * HubConnectionState.Connected`, the same shape `connection.test.ts`'s "is reported as itself when
@@ -1669,6 +1774,21 @@ describe("the widget auto-open panel", () => {
     await flush();
 
     expect(panel.status.textContent).toBe("");
+  });
+
+  it("25-141: the auto-open reveal counts as read too, same as the ordinary open() path", async () => {
+    stubHandshake();
+    const panel = await mountWidget();
+
+    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+    const badge = panel.root.querySelector<HTMLElement>(".ago-unread-badge");
+    if (badge === null) {
+      throw new Error("the toggle has no .ago-unread-badge");
+    }
+
+    expect(badge.hidden).toBe(true);
+    expect(panel.toggle.getAttribute("aria-label")).toBe(en.closeChat);
   });
 
   /**

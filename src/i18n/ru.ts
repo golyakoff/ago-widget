@@ -8,6 +8,18 @@ import type { WidgetStrings } from "./strings.js";
  */
 export const ru: WidgetStrings = {
   openChat: "Открыть чат",
+  // `25-141`: Russian's own count-agreement rule (1 -> singular, 2-4 -> "few" genitive singular, 5+
+  // and every teen -> genitive plural) - `count` is never itself translated (`Out of scope`, this
+  // table's own doc comment), only the noun ending it forces.
+  openChatWithUnreadCount: (count) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    const noun =
+      mod10 === 1 && mod100 !== 11 ? "непрочитанное сообщение"
+      : mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14) ? "непрочитанных сообщения"
+      : "непрочитанных сообщений";
+    return `Открыть чат (${count} ${noun})`;
+  },
   closeChat: "Закрыть чат",
   chatLabel: "Чат",
   chatWithUs: "Напишите нам",

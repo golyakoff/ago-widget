@@ -14,6 +14,7 @@ import {
   AttachmentRejectedError,
 } from "../attachments.js";
 import { recordContactDetail } from "../contactDetails.js";
+import { getUnreadCount } from "../unreadCount.js";
 import { getConsentRequirement, recordConsent, type ConsentRequirement } from "../consent.js";
 import { createShadowHost } from "./shadow-root.js";
 import { FocusTrap } from "./focus-trap.js";
@@ -302,12 +303,18 @@ export class ChatWidget {
    * `25-141`: how many messages from "the other side of the conversation" (`appendMessageBubble`'s
    * own `authorKind !== "Visitor"` test, reused rather than narrowed to `Operator` alone - a `System`
    * module prompt or a materialised `AutoGreeting` arriving while the panel is closed is just as
-   * unread) have arrived since the panel was last opened. In-memory only, for this page load - the
-   * backlog item's own explicit scope, deferring "survives a reload" to `25-142` as a materially
-   * different mechanism (deriving the count from the reconciliation cursor against the server's
-   * latest sequence, on reconnect). Reset to zero by `open()` and `openForAutoGreeting()` alike, since
-   * both put the transcript in front of the visitor - never read directly outside `renderUnreadBadge`,
-   * which is the one place that turns this number into what the visitor (and a screen reader) sees.
+   * unread) have arrived since the panel was last opened. `25-141`'s own scope kept this in-memory
+   * only, for one page load, deferring "survives a reload" to `25-143` as a materially different
+   * mechanism - `bootstrapSession` now seeds this field from `GET .../unread-count` (a plain HTTP
+   * read against the last position `WidgetStorage.getLastReadSequence` remembers) before this widget
+   * ever renders a bubble, so a reload no longer starts back at zero regardless of what arrived while
+   * the tab was closed. Live increments while the panel stays closed this same page load
+   * (`handleIncoming` below) still add to whatever the seed produced, rather than replacing it - the
+   * two mechanisms answer the same question for two non-overlapping windows (before this page load
+   * existed, and during it) and are simply summed. Reset to zero by `open()` and `openForAutoGreeting()`
+   * alike, since both put the transcript in front of the visitor - never read directly outside
+   * `renderUnreadBadge`, which is the one place that turns this number into what the visitor (and a
+   * screen reader) sees.
    */
   private unreadCount = 0;
   /** `23-07`: at most one `open` beacon per session (this widget instance's own lifetime), never one
@@ -738,10 +745,27 @@ export class ChatWidget {
    * itself already renders in the resolved language rather than this widget's built-in default. There
    * is no reason to delay it: `session.widgetLocale` is already in hand at this point, the same way
    * `session.widgetPosition`/`widgetPrimaryColorHex` are already in hand for the two lines below it.
+   *
+   * `25-143`: also where the closed launcher's own unread badge (`25-141`) is seeded for a reload -
+   * before `applyStrings` right below, which already reads `unreadCount` to set the closed toggle's
+   * own accessible name, so the very first render must not still be looking at the in-memory default
+   * of zero. A brand-new visitor - `WidgetStorage.getConversationId()` returns `null` here, including
+   * right after a `restarted` identity replacement above, since `VisitorSessionManager.start` clears
+   * the stored conversation before minting the new identity - makes no call at all: this item's own
+   * Done-when ("a brand-new visitor... makes no extra call and shows no badge"), and there is no
+   * conversation for the server to answer about regardless.
    */
   private async bootstrapSession(): Promise<VisitorSession> {
     const { session, restarted } = await this.sessionManager.start();
     this.session = session;
+
+    const storedConversationId = this.storage.getConversationId();
+    if (storedConversationId !== null) {
+      const afterSequence = this.storage.getLastReadSequence(storedConversationId);
+      this.unreadCount = await getUnreadCount(this.config, session.token, storedConversationId, afterSequence);
+      this.renderUnreadBadge();
+    }
+
     const locale = parseWidgetLocale(session.widgetLocale);
     this.locale = locale;
     this.applyStrings(locale);
@@ -920,6 +944,10 @@ export class ChatWidget {
     // own reveal.
     this.unreadCount = 0;
     this.renderUnreadBadge();
+    // `25-143`: advances the on-disk read watermark on the identical event - see
+    // `seedLastReadSequence`'s own remarks for why this is a storage-to-storage copy, not a live
+    // connection read.
+    this.seedLastReadSequence();
     this.focusTrap.activate();
     this.closeButton.focus();
 
@@ -968,6 +996,27 @@ export class ChatWidget {
         "aria-label",
         this.unreadCount > 0 ? this.strings.openChatWithUnreadCount(this.unreadCount) : this.strings.openChat,
       );
+    }
+  }
+
+  /**
+   * `25-143`: advances `WidgetStorage`'s own read watermark to "the latest sequence this browser has
+   * actually seen" - `getLastKnownSequence`, not a live connection read: see that storage method's own
+   * remarks for why the persisted `last-sequence:<conversationId>` key is already current at every
+   * point this could possibly run, including before this page load's own hub connection exists yet,
+   * unlike a value read off `VisitorConnection` itself. No-op for a conversation that has never been
+   * minted (`WidgetStorage.getConversationId()` returns `null`) or has never received a single message
+   * (`getLastKnownSequence` returns `null`) - there is nothing to attribute a read position to yet.
+   */
+  private seedLastReadSequence(): void {
+    const conversationId = this.storage.getConversationId();
+    if (conversationId === null) {
+      return;
+    }
+
+    const sequence = this.storage.getLastKnownSequence(conversationId);
+    if (sequence !== null) {
+      this.storage.setLastReadSequence(conversationId, sequence);
     }
   }
 
@@ -1124,6 +1173,12 @@ export class ChatWidget {
     // closes.
     this.unreadCount = 0;
     this.renderUnreadBadge();
+    // `25-143`: the identical write-back `open()` performs on the same event - a no-op in practice on
+    // this particular reveal (no conversation has been minted yet, `adr/0148`'s "nothing reaches the
+    // server until the visitor writes"), kept here for the same reason the comment above already gives
+    // for this method's own redundant reset: a future caller of this method must not have to remember
+    // to add it.
+    this.seedLastReadSequence();
 
     this.storage.setAutoOpenGreetingShown();
     this.autoOpenedWithoutConnecting = true;

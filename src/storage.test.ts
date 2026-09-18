@@ -425,4 +425,31 @@ describe("WidgetStorage", () => {
     storage.setLastKnownSequence("conv-1", 7);
     expect(storage.getLastKnownSequence("conv-1")).toBe(7);
   });
+
+  it("returns null for a read watermark that was never stored, 25-143", () => {
+    const storage = new WidgetStorage("site_a");
+    expect(storage.getLastReadSequence("conv-1")).toBeNull();
+  });
+
+  it("round-trips a read watermark per conversation, distinct from the last-known sequence, 25-143", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setLastKnownSequence("conv-1", 7);
+    storage.setLastReadSequence("conv-1", 4);
+
+    expect(storage.getLastReadSequence("conv-1")).toBe(4);
+    expect(storage.getLastKnownSequence("conv-1")).toBe(7);
+  });
+
+  it("clears both the last-known sequence and the read watermark for the current conversation, 25-143", () => {
+    const storage = new WidgetStorage("site_a");
+    storage.setConversationId("conv-1");
+    storage.setLastKnownSequence("conv-1", 7);
+    storage.setLastReadSequence("conv-1", 4);
+
+    storage.clearConversation();
+
+    expect(storage.getConversationId()).toBeNull();
+    expect(storage.getLastKnownSequence("conv-1")).toBeNull();
+    expect(storage.getLastReadSequence("conv-1")).toBeNull();
+  });
 });

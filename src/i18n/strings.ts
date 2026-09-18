@@ -77,11 +77,6 @@ export interface WidgetStrings {
   readonly attachmentAlt: string;
   readonly publicDemoNotice: string;
   readonly privateDemoNotice: string;
-  /** `14-04`'s label on an automatic reply bubble. Threaded through as a CSS custom property
-   * (`--ago-auto-reply-label`), not a DOM text node - `ui/styles.ts`'s own remarks explain why: the
-   * label is a `content:` pseudo-element string, the same mechanism `--ago-accent` already uses for
-   * the site's color. */
-  readonly autoReplyLabel: string;
   /** `16-04`: the link text next to the tenant's own processing-notice sentence - the widget's own
    * frame around a tenant-authored URL, the same "the widget owns the frame, the tenant owns the
    * content" split `downloadAttachment`'s own icon-plus-frame text already draws. The tenant's own

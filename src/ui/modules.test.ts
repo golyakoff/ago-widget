@@ -330,11 +330,17 @@ describe("rendering a step-shaped message from a module", () => {
     const choices = [...root.querySelectorAll<HTMLButtonElement>(".ago-primitive-choice")];
     expect(choices.map((choice) => choice.textContent)).toEqual(["Haircut (45 min)", "Beard trim (20 min)"]);
 
-    // `25-133`: the prompt shows once, from the rendered primitive, never a second time as the
-    // operator bubble's own plain-`body` text underneath it - the exact bug the item exists to close.
+    // `25-133`/`25-154`: the prompt shows exactly once, from the rendered primitive's own title
+    // (`.ago-primitive-title`, mirroring `confirmation_card`'s title) - never a second time as the
+    // operator bubble's own plain-`body` text underneath it. Before `25-154`, `choice_list`'s
+    // bare-buttons rendering never read `content.prompt` at all, so `25-133`'s body-suppression left
+    // this step with no text whatsoever - the real bug this item closes, not merely a duplicate.
     const operatorBubbles = [...root.querySelectorAll(".ago-message--operator")];
     expect(operatorBubbles).toHaveLength(1);
-    expect(operatorBubbles[0]!.textContent).not.toContain("What would you like to book?");
+    expect(operatorBubbles[0]!.querySelector(".ago-primitive-title")?.textContent).toBe(
+      "What would you like to book?",
+    );
+    expect(operatorBubbles[0]!.textContent?.match(/What would you like to book\?/g)).toHaveLength(1);
 
     choices[0]!.click();
     await flush();

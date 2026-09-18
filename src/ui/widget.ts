@@ -1001,12 +1001,6 @@ export class ChatWidget {
     this.emojiPicker.setAttribute("aria-label", strings.emojiPickerLabel);
     this.saveButton.setAttribute("aria-label", strings.saveConversation);
     this.saveButton.title = strings.saveConversation;
-
-    // `ui/styles.ts`'s own remarks: a CSS `content:` pseudo-element string cannot be reached by
-    // rewriting a DOM text node, so it is threaded through as a custom property instead, the same
-    // mechanism `--ago-accent` already uses for the site's color. `JSON.stringify` produces a
-    // correctly quoted-and-escaped CSS string literal for any text, not just the two this item ships.
-    this.host.style.setProperty("--ago-auto-reply-label", JSON.stringify(strings.autoReplyLabel));
   }
 
   private toggleOpen(): void {

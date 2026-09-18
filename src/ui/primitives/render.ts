@@ -86,15 +86,30 @@ export function renderPrimitiveContent(
 
   switch (kind) {
     case "choice_list":
-    case "date_time_picker":
+    case "date_time_picker": {
       // `date_time_picker`'s `slots`/`startsAt` enrichment is deliberately unused here - the backlog
       // item's own instruction is that rendering `actions` as a flat button list is a correct,
       // acceptable slice, and a calendar-grid using `startsAt` is a bonus rather than a requirement.
+      //
+      // `25-154`: this step's own question text lives in `content.prompt` - the same field
+      // `Ago.Chat.Domain.PrimitiveTextRenderer.TryReadPrompt` reads server-side - and it is the
+      // *only* text a `choice_list`/`date_time_picker` step ever carries, since `25-133` suppresses
+      // the plain-text `Message.Body` fallback whenever a rich primitive renders. Render it the same
+      // way `confirmation_card` renders `card.title`, before the buttons.
+      const prompt = (content as { prompt?: unknown }).prompt;
+      if (typeof prompt === "string" && prompt.length > 0) {
+        const title = document.createElement("div");
+        title.className = "ago-primitive-title";
+        title.textContent = prompt;
+        container.appendChild(title);
+      }
+
       appendActionButtons(container, actions, (action) => {
         disableAll();
         onReply(kind, action.value, action.label);
       });
       return container;
+    }
 
     case "confirmation_card": {
       const card = content as ConfirmationCardContent;

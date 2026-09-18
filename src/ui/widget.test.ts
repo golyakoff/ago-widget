@@ -475,7 +475,7 @@ describe("reopening the widget on a fresh page load", () => {
  * a message at all - and the only thing this side has to get right is not passing it off as a person.
  */
 describe("an automatic reply", () => {
-  it("renders on the incoming side, labelled, with the reply itself as the bubble's text", async () => {
+  it("renders on the incoming side, with the reply itself as the bubble's text", async () => {
     // `23-53`: `joinResult.history` is `GetHistoryAsync`'s "most recent page" shape - newest first
     // (`IConversationReadStore.GetHistoryAsync`'s own remarks) - so the fixture is listed newest to
     // oldest, the same order the real server returns; `connect()`'s own reversal is what puts m1
@@ -490,10 +490,13 @@ describe("an automatic reply", () => {
     ]);
     // Not `.ago-message--system`, which is this widget's own local status note - see renderBubble.
     expect(panel.root.querySelectorAll(".ago-message--system")).toHaveLength(0);
-    // The label is CSS `content`, never a DOM text node - `renderBubble`'s own `bubble.textContent =
-    // body` line still writes exactly what the shop scripted and nothing else, proven here against
-    // the bubble's own direct text rather than `bubbleTexts()`'s full `textContent`, which now also
-    // picks up `23-09`'s contact-capture control appended as a child (see the next test).
+    // `25-154` removed `14-04`'s own visible "automatic reply" label (the author's explicit decision,
+    // stated plainly so a reader of `14-04` does not conclude it still exists) - `.ago-message--auto`
+    // now carries only the border-left accent `ui/styles.ts` still gives this class, no CSS `content`
+    // pseudo-element. `renderBubble`'s own `bubble.textContent = body` line still writes exactly what
+    // the shop scripted and nothing else, proven here against the bubble's own direct text rather than
+    // `bubbleTexts()`'s full `textContent`, which now also picks up `23-09`'s contact-capture control
+    // appended as a child (see the next test).
     expect(bubbles[1]!.firstChild?.textContent).toBe("message m2");
   });
 

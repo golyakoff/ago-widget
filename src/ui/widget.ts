@@ -214,6 +214,11 @@ export class ChatWidget {
    * has something to show. See that method for why "exists but hidden" beats "created on demand" here. */
   private readonly processingNotice: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
+  /** `25-141`: the closed launcher's own unread-count badge - a child of `toggle` itself (not a
+   * sibling positioned over it) so it moves, scales and disappears with the button for free, and so
+   * a click anywhere on the launcher - including on the badge's own circle - still reaches `toggle`'s
+   * click handler. `renderUnreadBadge` is the only writer. */
+  private readonly unreadBadge: HTMLSpanElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly messages: HTMLDivElement;
   private readonly status: HTMLDivElement;
@@ -293,6 +298,18 @@ export class ChatWidget {
   private conversationId: string | null = null;
   private isOpen = false;
   private isConnected = false;
+  /**
+   * `25-141`: how many messages from "the other side of the conversation" (`appendMessageBubble`'s
+   * own `authorKind !== "Visitor"` test, reused rather than narrowed to `Operator` alone - a `System`
+   * module prompt or a materialised `AutoGreeting` arriving while the panel is closed is just as
+   * unread) have arrived since the panel was last opened. In-memory only, for this page load - the
+   * backlog item's own explicit scope, deferring "survives a reload" to `25-142` as a materially
+   * different mechanism (deriving the count from the reconciliation cursor against the server's
+   * latest sequence, on reconnect). Reset to zero by `open()` and `openForAutoGreeting()` alike, since
+   * both put the transcript in front of the visitor - never read directly outside `renderUnreadBadge`,
+   * which is the one place that turns this number into what the visitor (and a screen reader) sees.
+   */
+  private unreadCount = 0;
   /** `23-07`: at most one `open` beacon per session (this widget instance's own lifetime), never one
    * per click - see `open()`'s own doc comment. */
   private openBeaconSent = false;
@@ -430,6 +447,15 @@ export class ChatWidget {
         "M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z",
       ),
     );
+    // `25-141`: a child of `toggle`, hidden by default - `renderUnreadBadge` is the only thing that
+    // ever shows it, never this constructor. `aria-hidden`: the accessible name for "unread" lives
+    // entirely on `toggle`'s own `aria-label` (`renderUnreadBadge` again), so a screen reader must not
+    // also announce this span's bare digit as a second, redundant fact.
+    this.unreadBadge = document.createElement("span");
+    this.unreadBadge.className = "ago-unread-badge";
+    this.unreadBadge.setAttribute("aria-hidden", "true");
+    this.unreadBadge.hidden = true;
+    this.toggle.appendChild(this.unreadBadge);
     this.toggle.addEventListener("click", () => this.toggleOpen());
 
     this.panel = document.createElement("div");
@@ -821,7 +847,15 @@ export class ChatWidget {
     this.strings = getStrings(locale);
     const strings = this.strings;
 
-    this.toggle.setAttribute("aria-label", this.isOpen ? strings.closeChat : strings.openChat);
+    // `25-141`: the closed branch is unread-count-aware, matching `renderUnreadBadge`'s own choice -
+    // a locale that resolves (or re-resolves) while the launcher is already carrying a count must not
+    // silently drop back to the plain `openChat` sentence.
+    this.toggle.setAttribute(
+      "aria-label",
+      this.isOpen ? strings.closeChat
+      : this.unreadCount > 0 ? strings.openChatWithUnreadCount(this.unreadCount)
+      : strings.openChat,
+    );
     this.panel.setAttribute("aria-label", strings.chatLabel);
     this.title.textContent = strings.chatWithUs;
     this.closeButton.setAttribute("aria-label", strings.closeChat);
@@ -881,6 +915,11 @@ export class ChatWidget {
     this.panel.hidden = false;
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
+    // `25-141`: "read" happens here, not on a later render pass - the transcript is in front of the
+    // visitor from this line onward, which is the same fact `openForAutoGreeting` marks "read" for its
+    // own reveal.
+    this.unreadCount = 0;
+    this.renderUnreadBadge();
     this.focusTrap.activate();
     this.closeButton.focus();
 
@@ -901,6 +940,35 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
+  }
+
+  /**
+   * `25-141`: the only writer of `unreadBadge` and of `toggle`'s `aria-label` while the panel is
+   * closed. Never shows a visible "0" - `hidden` whenever `unreadCount` is zero, the same "absent,
+   * not a visible zero" rule this widget already applies to `notice`/`processingNotice` for their own
+   * "nothing to say" state, rather than a badge with empty or zeroed text sitting in the DOM.
+   *
+   * Deliberately leaves `aria-label` alone while `isOpen` is `true`: `open()`/`close()` already own
+   * that attribute for the panel's own open/close state (`strings.closeChat`/`strings.openChat`), and
+   * this method runs *after* either has set it - overwriting it here on every incoming message while
+   * the panel is open (`unreadCount` itself never rises then, but this method is still reachable from
+   * `applyStrings`' own re-localisation pass) would fight that assignment for no visitor-facing gain.
+   */
+  private renderUnreadBadge(): void {
+    if (this.unreadCount > 0) {
+      this.unreadBadge.textContent = String(this.unreadCount);
+      this.unreadBadge.hidden = false;
+    } else {
+      this.unreadBadge.textContent = "";
+      this.unreadBadge.hidden = true;
+    }
+
+    if (!this.isOpen) {
+      this.toggle.setAttribute(
+        "aria-label",
+        this.unreadCount > 0 ? this.strings.openChatWithUnreadCount(this.unreadCount) : this.strings.openChat,
+      );
+    }
   }
 
   /**
@@ -1049,6 +1117,13 @@ export class ChatWidget {
     this.panel.hidden = false;
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
+    // `25-141`: this reveal is "read" too - the backlog item's own words, "both put the transcript in
+    // front of the visitor" - even though nothing could actually have gone unread yet on this, the
+    // very first reveal; kept here rather than assumed so a later code path that starts calling this
+    // method a second time in some future item does not silently reopen the gap `open()`'s own reset
+    // closes.
+    this.unreadCount = 0;
+    this.renderUnreadBadge();
 
     this.storage.setAutoOpenGreetingShown();
     this.autoOpenedWithoutConnecting = true;
@@ -1779,6 +1854,17 @@ export class ChatWidget {
         this.pendingSends.delete(clientMessageId);
         bubble.remove();
       }
+    }
+
+    // `25-141`: the identical "other side of the conversation" test `appendMessageBubble` below
+    // already uses for deciding what to render richly - not narrowed to `Operator` alone, so a
+    // `System` module prompt or a materialised `AutoGreeting` arriving while the panel is closed
+    // counts as unread too. Gated on `isOpen`, never on whether the panel is merely visible on
+    // screen or the browser tab has focus - a message the visitor could already see is not unread
+    // regardless of window focus (this item's own stated "Where this is likely to go wrong").
+    if (!this.isOpen && message.authorKind !== "Visitor") {
+      this.unreadCount += 1;
+      this.renderUnreadBadge();
     }
 
     this.appendMessageBubble(message);

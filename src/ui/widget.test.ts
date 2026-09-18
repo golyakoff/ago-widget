@@ -252,6 +252,37 @@ describe("the panel while the connection is gone and after it returns", () => {
 });
 
 /**
+ * `25-140`: proves the fix stays scoped to `openForAutoGreeting` alone. A visitor who opens the panel
+ * themselves still calls `open()`, which still calls `connect()` immediately - a real connection
+ * attempt is genuinely underway, so "Подключение…" is the true thing to show, unlike the auto-open
+ * window this item's other tests (`ui/widget.test.ts`'s "the widget auto-open panel" describe) cover.
+ * The join answer is a deferred promise, not `joinResult([])` resolved immediately, so this test can
+ * observe the connecting state before it resolves to "connected" - the identical technique the
+ * reconnect describe above uses via `dropToReconnecting`/`completeReconnect`, adapted for the initial
+ * connect, which has no such two-step fake-driven hook of its own.
+ */
+describe("25-140: connecting text only where a connection is actually happening", () => {
+  it("still shows \"Connecting…\" immediately when the visitor opens the panel themselves", async () => {
+    let resolveJoin: (value: VisitorJoinResult) => void = () => {
+      throw new Error("resolveJoin called before it was assigned");
+    };
+    const joinPromise = new Promise<VisitorJoinResult>((resolve) => {
+      resolveJoin = resolve;
+    });
+    joinQueue.push(() => joinPromise);
+
+    const panel = await openWidget();
+
+    expect(panel.status.textContent).toBe(en.connecting);
+
+    resolveJoin(joinResult([]));
+    await flush();
+
+    expect(panel.status.textContent).toBe("");
+  });
+});
+
+/**
  * `25-61`: the hub-refusal half of `completeSend`'s `.catch` - the socket stays up and
  * `SendMessageAsync` itself rejects (`fakeSignalR`'s `failNextSend` with `leavingState:
  * HubConnectionState.Connected`, the same shape `connection.test.ts`'s "is reported as itself when
@@ -1588,6 +1619,56 @@ describe("the widget auto-open panel", () => {
     expect(panel.input.disabled).toBe(false);
     type(panel, "hello");
     expect(panel.send.disabled).toBe(false);
+  });
+
+  /**
+   * `25-140`: the bug report itself - the status line was born with `this.strings.connecting`
+   * ("Подключение…") as its construction-time text, and nothing ever corrected it on this path
+   * because `openForAutoGreeting` deliberately never calls `connect()` (this describe block's own
+   * "without connecting or calling the server again" test, above, proves that half already). Nothing
+   * is actually trying to connect here, so the fix clears the text rather than leaving it lying.
+   */
+  it("25-140: shows no status text at all right after auto-opening, since nothing is trying to connect yet", async () => {
+    stubHandshake();
+    const panel = await mountWidget();
+
+    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+    expect(panel.status.textContent).toBe("");
+  });
+
+  /**
+   * `25-140`'s own "Where this is likely to go wrong": confirms the fix does not also suppress the
+   * later, *true* "Подключение…" the visitor's first send triggers - `completeSend`'s lazy
+   * `connect()` call, `adr/0148`. The join answer is a deferred promise so this test can observe the
+   * connecting state before it resolves, the same technique `25-140: connecting text only where a
+   * connection is actually happening` uses for the ordinary `open()` path.
+   */
+  it("25-140: still shows the real \"Connecting…\" once the visitor's first send triggers the real connect", async () => {
+    stubHandshake();
+    let resolveJoin: (value: VisitorJoinResult) => void = () => {
+      throw new Error("resolveJoin called before it was assigned");
+    };
+    const joinPromise = new Promise<VisitorJoinResult>((resolve) => {
+      resolveJoin = resolve;
+    });
+    joinQueue.push(() => joinPromise);
+
+    const panel = await mountWidget();
+    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+    expect(panel.status.textContent).toBe("");
+
+    type(panel, "Yes, do you have this in blue?");
+    pressEnter(panel);
+    await flush();
+
+    expect(panel.status.textContent).toBe(en.connecting);
+
+    resolveJoin(joinResult([]));
+    await flush();
+
+    expect(panel.status.textContent).toBe("");
   });
 
   /**

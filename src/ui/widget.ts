@@ -1055,6 +1055,13 @@ export class ChatWidget {
     this.input.disabled = false;
     this.updateSendButtonEnabled();
     this.updateEmojiButtonEnabled();
+    // `25-140`: nothing is attempting to connect at this point - by design, this path never calls
+    // `connect()` (this method's own doc comment) - so the construction-time "Подключение…" the
+    // status line was born with (`this.status`'s own assignment in the constructor) is simply false
+    // here. `renderConnectionState` is untouched: it still owns every state a *real* connection
+    // attempt produces, starting with the true "Подключение…" `completeSend` triggers on the
+    // visitor's first send (`connect()`'s own call into `VisitorConnection.start()`).
+    this.status.textContent = "";
 
     this.drawAutoGreeting(greetingText);
   }

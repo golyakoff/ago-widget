@@ -32,6 +32,44 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
+// Matches an `http(s)://` run inside a longer string - the scheme is fixed by the pattern itself,
+// so a `javascript:`-shaped (or any other scheme) string can never match and can never become a
+// live anchor by construction, without an explicit denylist.
+const URL_PATTERN = /https?:\/\/[^\s<>"]+/g;
+
+/**
+ * Appends `text` to `parent` as plain text, except that any `http(s)://` URL run within it becomes
+ * a real `<a>` element instead - built procedurally (`createElement`/`.href`/`.textContent`,
+ * `document.createTextNode()` for the surrounding runs), never via `innerHTML`. This mirrors the
+ * same textContent-only discipline `widget.ts` states explicitly on its own `bubble.textContent =
+ * body` fallback: prompt/title/label/value text is untrusted content from the other side of the
+ * conversation and is never treated as markup, URL or not.
+ */
+function appendLinkedText(parent: Element, text: string): void {
+  URL_PATTERN.lastIndex = 0;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = URL_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parent.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+
+    const url = match[0];
+    const link = document.createElement("a");
+    link.href = url;
+    link.textContent = url;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    parent.appendChild(link);
+
+    lastIndex = match.index + url.length;
+  }
+
+  if (lastIndex < text.length) {
+    parent.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+}
+
 interface ConfirmationLine {
   readonly label?: unknown;
   readonly value?: unknown;
@@ -100,7 +138,7 @@ export function renderPrimitiveContent(
       if (typeof prompt === "string" && prompt.length > 0) {
         const title = document.createElement("div");
         title.className = "ago-primitive-title";
-        title.textContent = prompt;
+        appendLinkedText(title, prompt);
         container.appendChild(title);
       }
 
@@ -116,7 +154,7 @@ export function renderPrimitiveContent(
       if (typeof card.title === "string" && card.title.length > 0) {
         const title = document.createElement("div");
         title.className = "ago-primitive-title";
-        title.textContent = card.title;
+        appendLinkedText(title, card.title);
         container.appendChild(title);
       }
 
@@ -129,10 +167,10 @@ export function renderPrimitiveContent(
         row.className = "ago-primitive-line";
         const label = document.createElement("span");
         label.className = "ago-primitive-line-label";
-        label.textContent = line.label;
+        appendLinkedText(label, line.label);
         const value = document.createElement("span");
         value.className = "ago-primitive-line-value";
-        value.textContent = line.value;
+        appendLinkedText(value, line.value);
         row.append(label, value);
         container.appendChild(row);
       }
@@ -153,7 +191,7 @@ export function renderPrimitiveContent(
 
       const label = document.createElement("label");
       label.className = "ago-primitive-form-label";
-      label.textContent = fieldLabel;
+      appendLinkedText(label, fieldLabel);
 
       const input = document.createElement("input");
       input.type = "text";

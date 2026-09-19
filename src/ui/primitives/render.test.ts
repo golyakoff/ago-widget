@@ -148,4 +148,95 @@ describe("renderPrimitiveContent", () => {
     const element = renderPrimitiveContent(message, en, vi.fn())!;
     expect(element.querySelector(".ago-primitive-choices")).toBeNull();
   });
+
+  describe("25-158: URLs embedded in prompt/title/label/value text", () => {
+    it("renders a URL inside a choice_list/date_time_picker prompt as a real, clickable anchor", () => {
+      const message = baseMessage({
+        contentKind: "choice_list",
+        content: {
+          prompt: "Please review the policy: https://office.reserve-me.ru/policies/site-consent-01 before continuing",
+        },
+        actions: [],
+      });
+
+      const element = renderPrimitiveContent(message, en, vi.fn())!;
+      const title = element.querySelector(".ago-primitive-title")!;
+      const link = title.querySelector("a")!;
+      expect(link).not.toBeNull();
+      expect(link.href).toBe("https://office.reserve-me.ru/policies/site-consent-01");
+      expect(link.target).toBe("_blank");
+      expect(link.rel).toBe("noreferrer");
+      // The surrounding plain text is preserved, and the element's full text is unchanged overall.
+      expect(title.textContent).toBe(
+        "Please review the policy: https://office.reserve-me.ru/policies/site-consent-01 before continuing",
+      );
+    });
+
+    it("renders a URL inside a confirmation_card's title and a line's label/value as clickable anchors", () => {
+      const message = baseMessage({
+        contentKind: "confirmation_card",
+        content: {
+          title: "See https://example.com/terms for details",
+          lines: [{ label: "Policy https://example.com/policy", value: "Accepted https://example.com/receipt" }],
+        },
+        actions: [],
+      });
+
+      const element = renderPrimitiveContent(message, en, vi.fn())!;
+      const titleLink = element.querySelector(".ago-primitive-title a")!;
+      expect(titleLink.getAttribute("href")).toBe("https://example.com/terms");
+      expect(titleLink.getAttribute("target")).toBe("_blank");
+      expect(titleLink.getAttribute("rel")).toBe("noreferrer");
+
+      const labelLink = element.querySelector(".ago-primitive-line-label a")!;
+      expect(labelLink.getAttribute("href")).toBe("https://example.com/policy");
+
+      const valueLink = element.querySelector(".ago-primitive-line-value a")!;
+      expect(valueLink.getAttribute("href")).toBe("https://example.com/receipt");
+    });
+
+    it("renders a URL inside a form's field label as a clickable anchor", () => {
+      const message = baseMessage({
+        contentKind: "form",
+        content: { fieldLabel: "See https://example.com/help for guidance" },
+        actions: [],
+      });
+
+      const element = renderPrimitiveContent(message, en, vi.fn())!;
+      const link = element.querySelector(".ago-primitive-form-label a")!;
+      expect(link.getAttribute("href")).toBe("https://example.com/help");
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noreferrer");
+    });
+
+    it("renders a prompt with no URL exactly as before - plain text, no anchor at all", () => {
+      const message = baseMessage({
+        contentKind: "choice_list",
+        content: { prompt: "What would you like to book?" },
+        actions: [],
+      });
+
+      const element = renderPrimitiveContent(message, en, vi.fn())!;
+      const title = element.querySelector(".ago-primitive-title")!;
+      expect(title.querySelector("a")).toBeNull();
+      expect(title.textContent).toBe("What would you like to book?");
+      // Regression safety: a single text node, exactly as the old plain `textContent =` assignment
+      // would have produced - not merely the same concatenated text.
+      expect(title.childNodes).toHaveLength(1);
+      expect(title.childNodes[0]!.nodeType).toBe(Node.TEXT_NODE);
+    });
+
+    it("never turns a javascript:-shaped string into a live anchor - it stays inert plain text", () => {
+      const message = baseMessage({
+        contentKind: "choice_list",
+        content: { prompt: "click javascript://%0aalert(1) to continue" },
+        actions: [],
+      });
+
+      const element = renderPrimitiveContent(message, en, vi.fn())!;
+      const title = element.querySelector(".ago-primitive-title")!;
+      expect(title.querySelector("a")).toBeNull();
+      expect(title.textContent).toBe("click javascript://%0aalert(1) to continue");
+    });
+  });
 });

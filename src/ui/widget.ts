@@ -591,14 +591,21 @@ export class ChatWidget {
    * need no reveal logic of their own for it, since it is an ordinary child of `this.panel` on the
    * identical footing `this.messages`/`composer` already are. */
   private channelSwitcherCard: HTMLDivElement | null = null;
-  /** `25-191`: `null` until `buildChannelSwitcherLauncherRow` decides the row should exist at all -
-   * the identical "pays nothing" property `channelSwitcherCard` above already gives its own
-   * placement. Unlike that card, this element's own visibility is not fixed at build time: it is a
-   * sibling of `this.toggle`, not a child of `this.panel`, so nothing about `this.panel.hidden`
-   * hides it for free - `open()`/`close()`/`openForAutoGreeting()` each set this row's own `hidden`
-   * to match, the one piece of reveal/hide logic `channelSwitcherCard`'s own doc comment says that
-   * card needs none of. */
+  /** `25-191`/`25-192`: `null` until `buildChannelSwitcherLauncherRow` decides the row should exist
+   * at all - the identical "pays nothing" property `channelSwitcherCard` above already gives its own
+   * placement. Unlike that card, this element's own visibility is not fixed at build time and is not
+   * a plain function of `this.panel.hidden` either: it is a sibling of `this.toggle`, not a child of
+   * `this.panel`, so nothing about the panel's own state hides it for free, and `25-192`'s own
+   * correction made the real rule "visible on hover while closed, always hidden while open" rather
+   * than "visible exactly while open" - see `updateChannelSwitcherLauncherVisibility`. */
   private channelSwitcherLauncherRow: HTMLDivElement | null = null;
+  /** `25-192`: the live half of that same rule - whether the pointer is currently over `this.toggle`.
+   * Tracked explicitly rather than read from `:hover` at the moment it matters, because the row's
+   * own visibility also has to react to `open()`/`close()` themselves (a chat that closes while the
+   * pointer never moved must reveal the row immediately, with no fresh `pointerenter` to trigger
+   * it) - a single source of truth `updateChannelSwitcherLauncherVisibility` reads alongside
+   * `this.isOpen` covers both triggers with one function. */
+  private isToggleHovered = false;
   private readonly composer: HTMLFormElement;
   /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
    * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
@@ -787,6 +794,19 @@ export class ChatWidget {
     this.unreadBadge.hidden = true;
     this.toggle.appendChild(this.unreadBadge);
     this.toggle.addEventListener("click", () => this.toggleOpen());
+    // `25-192`: pointerenter/pointerleave, not mouseenter/mouseleave - this project's own target
+    // browser matrix includes touch devices, and pointer events are what fire consistently for a
+    // Shadow DOM host across both input types without a second, mouse-specific listener pair.
+    // Nothing here assumes a pointer type: touch's own synthetic hover (a tap-and-hold in some
+    // browsers) is out of this item's scope, not specifically excluded.
+    this.toggle.addEventListener("pointerenter", () => {
+      this.isToggleHovered = true;
+      this.updateChannelSwitcherLauncherVisibility();
+    });
+    this.toggle.addEventListener("pointerleave", () => {
+      this.isToggleHovered = false;
+      this.updateChannelSwitcherLauncherVisibility();
+    });
 
     this.panel = document.createElement("div");
     this.panel.className = "ago-panel";
@@ -1261,7 +1281,8 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
-    this.setChannelSwitcherLauncherRowVisible(true);
+    // `25-192`: re-evaluates to hidden regardless of hover - opening always wins.
+    this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     // `25-141`: "read" happens here, not on a later render pass - the transcript is in front of the
@@ -1289,21 +1310,26 @@ export class ChatWidget {
   private close(): void {
     this.isOpen = false;
     this.panel.hidden = true;
-    this.setChannelSwitcherLauncherRowVisible(false);
+    // `25-192`: closing while the pointer is still over the toggle must reveal the row right away -
+    // this call re-reads `this.isToggleHovered` fresh rather than assuming the pointer moved, which
+    // is exactly the case a `pointerleave`-only design would miss.
+    this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "false");
     this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
   }
 
-  /** `25-191`: the one place this row's own `hidden` is written - `open()`/`close()`/
-   * `openForAutoGreeting()` each call it exactly where they already set `this.panel.hidden`, so this
-   * row's own visibility tracks the panel's one-for-one rather than living the persistent,
-   * always-shown life `25-173` originally gave it. A no-op when the row was never built - a site with
-   * nothing connected, or one left on the card placement instead. */
-  private setChannelSwitcherLauncherRowVisible(visible: boolean): void {
+  /** `25-191`/`25-192`: the one place this row's own `hidden` is written - `open()`/`close()`/
+   * `openForAutoGreeting()` each call it exactly where they already set `this.panel.hidden`, and
+   * the two `pointerenter`/`pointerleave` listeners above call it on every hover change. The rule
+   * itself, restated by `25-192`: visible only while the chat is closed *and* the toggle is
+   * currently hovered - open always wins over hover, and neither fact alone is enough. A no-op when
+   * the row was never built - a site with nothing connected, or one left on the card placement
+   * instead. */
+  private updateChannelSwitcherLauncherVisibility(): void {
     if (this.channelSwitcherLauncherRow) {
-      this.channelSwitcherLauncherRow.hidden = !visible;
+      this.channelSwitcherLauncherRow.hidden = this.isOpen || !this.isToggleHovered;
     }
   }
 
@@ -1501,7 +1527,8 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
-    this.setChannelSwitcherLauncherRowVisible(true);
+    // `25-192`: re-evaluates to hidden regardless of hover - opening always wins.
+    this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     // `25-141`: this reveal is "read" too - the backlog item's own words, "both put the transcript in
@@ -1782,18 +1809,18 @@ export class ChatWidget {
    * `dispatchSend` to hide permanently. A site with nothing connected still builds nothing, the
    * identical "pays nothing" property the card gives itself.
    *
-   * `25-191`: **no longer a persistent row.** `25-173`'s own original design showed this row whether
+   * `25-191`: no longer a persistent row. `25-173`'s own original design showed this row whether
    * the panel was open or closed, on the reasoning that a sibling of `this.toggle` (not a child of
-   * `this.panel`) gets no reveal/hide behaviour from the panel's own `hidden` for free. The author's
-   * own correction: the two placements should differ in *where* the switcher sits, not in *when* it
-   * is visible - a visitor who has not opened the chat should see the plain launcher alone, exactly
-   * as the card placement already shows. `open()`/`close()`/`openForAutoGreeting()` now each call
-   * `setChannelSwitcherLauncherRowVisible` at the identical point they already set `this.panel.hidden`,
-   * so this row's own visibility tracks the panel's one-for-one despite living outside it in the DOM.
-   * Built hidden or shown to match `this.isOpen` at the moment the handshake resolves - the session
-   * promise this method awaits can settle after a visitor has already opened the panel themselves (an
-   * auto-greeting racing a slow handshake, for one), so "always start hidden" would be wrong on that
-   * path.
+   * `this.panel`) gets no reveal/hide behaviour from the panel's own `hidden` for free.
+   *
+   * `25-192`: and revealing it on open was itself wrong - the author's own second correction. The
+   * real rule is hover, not open: visible only while the chat is closed *and* the toggle is
+   * currently hovered, never while open regardless of hover.
+   * `updateChannelSwitcherLauncherVisibility` is the one place that rule is evaluated, called from
+   * here, from both `pointerenter`/`pointerleave` on `this.toggle`, and from
+   * `open()`/`close()`/`openForAutoGreeting()`. Built already hidden - hover is a live signal this
+   * method cannot know anything about at build time, so there is no snapshot worth taking here the
+   * way `25-191` briefly did for `this.isOpen`.
    */
   private buildChannelSwitcherLauncherRow(session: VisitorSession): void {
     if (session.channelLinks.length === 0) {
@@ -1803,7 +1830,7 @@ export class ChatWidget {
     const size = parseChannelSwitcherIconSize(session.widgetChannelSwitcherIconSize);
     const row = document.createElement("div");
     row.className = `ago-channel-switcher-launcher ago-channel-switcher-launcher--${size}`;
-    row.hidden = !this.isOpen;
+    row.hidden = true;
     row.setAttribute("role", "group");
     row.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
 
@@ -1813,6 +1840,9 @@ export class ChatWidget {
 
     this.container.append(row);
     this.channelSwitcherLauncherRow = row;
+    // `25-192`: in case the toggle is already hovered by the time this async build finishes (a slow
+    // handshake settling while the pointer sits over a launcher that had nothing to show yet).
+    this.updateChannelSwitcherLauncherVisibility();
   }
 
   /**

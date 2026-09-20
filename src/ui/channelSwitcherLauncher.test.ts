@@ -190,32 +190,83 @@ describe("a site on the new placement (BelowLauncher)", () => {
     expect(launcherIcons(panel.root)).toHaveLength(4);
   });
 
-  // `25-191`: the row is still a sibling of the toggle, not a child of the panel - but its own
-  // `hidden` now tracks the panel's open/close one-for-one (`setChannelSwitcherLauncherRowVisible`),
-  // reversing `25-173`'s original "persistent regardless of open/closed" design.
-  describe("visibility tracks the panel's own open/closed state", () => {
-    it("is hidden before the panel is ever opened", async () => {
+  // `25-192`: the row is still a sibling of the toggle, not a child of the panel. Its own `hidden`
+  // is neither a plain function of open/closed (`25-191`'s own short-lived rule) nor of hover alone
+  // - `updateChannelSwitcherLauncherVisibility` requires both "closed" and "hovered" together,
+  // reversing `25-173`'s original "persistent regardless of open/closed" design a second time.
+  describe("visibility requires both closed and hovered", () => {
+    function hoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    function unhoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    }
+
+    it("is hidden before the panel is ever opened and before any hover", async () => {
       stubFetch({ channelLinks: twoChannels() });
       const panel = await mountWidget();
       await flush();
 
-      // Never opened - panel.toggle.click() is deliberately not called here.
+      // Never opened, never hovered - panel.toggle.click() is deliberately not called here.
       expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
       expect(launcherIcons(panel.root)).toHaveLength(2);
     });
 
-    it("becomes visible once the panel opens, and hides again once it closes", async () => {
+    it("stays hidden while merely hovered - opening was never required, but neither is hover alone enough without being closed first", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      unhoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("never reveals on hover while the panel is open", async () => {
       stubFetch({ channelLinks: twoChannels() });
       const panel = await mountWidget();
       await flush();
 
       panel.toggle.click(); // open
       await flush();
-      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
 
-      panel.toggle.click(); // close
-      await flush();
+      hoverToggle(panel);
       expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("reveals immediately on close if the pointer never left the toggle", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      panel.toggle.click(); // open
+      await flush();
+      hoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true); // still open
+
+      panel.toggle.click(); // close, pointer still over the toggle
+      await flush();
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false); // no fresh pointerenter needed
+    });
+
+    it("reappears on hover after every close, not just the first", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      for (let i = 0; i < 2; i++) {
+        panel.toggle.click(); // open
+        await flush();
+        panel.toggle.click(); // close
+        await flush();
+
+        hoverToggle(panel);
+        expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+        unhoverToggle(panel);
+      }
     });
   });
 
@@ -304,9 +355,10 @@ describe("a site on the new placement (BelowLauncher)", () => {
     expect(launcherRow(panel.root)).not.toBeNull();
   });
 
-  // 25-173's own explicit Scope, still true after 25-191: no *permanent-dismiss* concept at all -
-  // unlike the above-composer card, nothing here ever stores "never show this again" for a visitor
-  // identity. Open/close visibility (proven above) is a different, unrelated fact from dismissal.
+  // 25-173's own explicit Scope, still true after 25-191/25-192: no *permanent-dismiss* concept at
+  // all - unlike the above-composer card, nothing here ever stores "never show this again" for a
+  // visitor identity. Closed+hover visibility (proven above) is a different, unrelated fact from
+  // dismissal.
   describe("no permanent-dismiss concept", () => {
     it("has no dismiss control anywhere in the row", async () => {
       stubFetch({ channelLinks: twoChannels() });
@@ -316,11 +368,11 @@ describe("a site on the new placement (BelowLauncher)", () => {
       expect(panel.root.querySelector(".ago-channel-switcher-row--dismiss")).toBeNull();
     });
 
-    it("stays visible after sending a message, while the panel is still open", async () => {
+    it("sending a message does not touch this row's own visibility either way", async () => {
       stubFetch({ channelLinks: twoChannels() });
       joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
-      panel.toggle.click();
+      panel.toggle.click(); // open - the row is hidden per the open/hover rule, not by sending
       await flush();
 
       panel.input.value = "Hello!";
@@ -330,7 +382,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
       );
       await flush();
 
-      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true); // still open, unaffected by the send
       expect(launcherIcons(panel.root)).toHaveLength(2);
     });
 

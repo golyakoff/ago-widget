@@ -47,7 +47,13 @@ const commit = process.env.AGO_COMMIT || "unknown";
 // Measured on a clean build (README's own "Bundle size" section carries the current number and
 // the date it was last measured) - this ceiling is a deliberate, small amount of headroom above
 // that, not a round number picked in advance.
-const GZIP_BUDGET_BYTES = 45 * 1024;
+//
+// `25-173`: raised from 45 KB to 46 KB - `25-172`'s own real brand-icon vector data had already
+// consumed all but ~0.5 KB of the previous ceiling's headroom before this item added its own second
+// channel-switcher renderer, which left no room for a real, working feature of any size. README's
+// own "Bundle size" section has the measured before/after numbers this bump is based on, not a round
+// figure picked in advance.
+const GZIP_BUDGET_BYTES = 46 * 1024;
 
 // `8-09`: the demo pages' own boot script - resolves `?site=`, injects the widget's <script> tag with
 // the answer, and wires the "get your own tenant" button. **A second entry point, not a second export

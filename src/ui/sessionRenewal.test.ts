@@ -161,6 +161,8 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetAutoOpenDelaySeconds: 30,
     widgetAutoOpenGreetingText: null,
     widgetContactCaptureConfirmationText: null,
+    widgetChannelSwitcherPlacement: null,
+    widgetChannelSwitcherIconSize: null,
   });
   return token;
 }

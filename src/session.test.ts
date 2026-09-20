@@ -101,6 +101,8 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetAutoOpenDelaySeconds: 30,
     widgetAutoOpenGreetingText: null,
     widgetContactCaptureConfirmationText: null,
+    widgetChannelSwitcherPlacement: null,
+    widgetChannelSwitcherIconSize: null,
   });
   return token;
 }
@@ -470,6 +472,8 @@ describe("a stored token this widget cannot read", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
 
     const sessionManager = manager();

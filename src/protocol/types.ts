@@ -182,6 +182,17 @@ export interface VisitorSessionResponse {
    * existed. `ui/widget.ts`'s channel-switcher card is what actually reads it.
    */
   channelLinks?: ChannelLinkDto[];
+  /**
+   * `25-173`: two more additive fields, on `widgetPosition`'s own terms - `Ago.Chat.Domain.ChannelSwitcherPlacement`/
+   * `Ago.Chat.Domain.ChannelSwitcherIconSize`'s own PascalCase member names on the wire, not yet
+   * normalised to this widget's own lowercase unions. `ui/appearance.ts`'s
+   * `parseChannelSwitcherPlacement`/`parseChannelSwitcherIconSize` are what do that, the same
+   * "courtesy re-check, never trust the wire value blindly" split `parseWidgetPosition` already draws.
+   * Optional and absent for a session cached before this field existed - `"AboveComposer"`/`"Medium"`,
+   * `25-149`'s own pre-existing card unchanged, is what an absent value normalises to either way.
+   */
+  widgetChannelSwitcherPlacement?: string;
+  widgetChannelSwitcherIconSize?: string;
 }
 
 /**

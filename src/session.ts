@@ -465,6 +465,12 @@ export class VisitorSessionManager {
       // posture `widgetNoticeText` already takes - `null` for a response from before this field
       // existed or for a site that has never configured one.
       widgetContactCaptureConfirmationText: body.widgetContactCaptureConfirmationText ?? null,
+      // `25-173`: the identical "collapse the wire's optional field to this type's own stored shape,
+      // right here" posture `widgetPosition` already takes for its own sibling enum - the raw wire
+      // value, not yet normalised (`ui/appearance.ts`'s `parseChannelSwitcherPlacement`/
+      // `parseChannelSwitcherIconSize` do that, at the point of use).
+      widgetChannelSwitcherPlacement: body.widgetChannelSwitcherPlacement ?? null,
+      widgetChannelSwitcherIconSize: body.widgetChannelSwitcherIconSize ?? null,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

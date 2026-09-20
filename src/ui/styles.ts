@@ -90,7 +90,8 @@ export const widgetStyles = /* css */ `
   .ago-input:focus-visible,
   .ago-emoji:focus-visible,
   .ago-emoji-cell:focus-visible,
-  .ago-channel-switcher-row:focus-visible {
+  .ago-channel-switcher-row:focus-visible,
+  .ago-channel-switcher-launcher-icon:focus-visible {
     outline: 0.1875rem solid var(--ago-accent);
     outline-offset: 0.125rem;
   }
@@ -624,6 +625,43 @@ export const widgetStyles = /* css */ `
   .ago-channel-switcher-row--dismiss {
     border-top: 0.0625rem solid #e5e7eb;
     font-weight: 500;
+  }
+
+  .ago-channel-switcher-launcher {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    right: calc(100% + var(--acsl-gap));
+  }
+  .ago-root.ago-position-left .ago-channel-switcher-launcher {
+    right: auto;
+    left: calc(100% + var(--acsl-gap));
+  }
+  .ago-channel-switcher-launcher--large { --acsl-gap: .625rem; gap: .625rem; }
+  .ago-channel-switcher-launcher--large .ago-channel-switcher-launcher-icon { width: 3.5rem; height: 3.5rem; }
+  .ago-channel-switcher-launcher--medium { --acsl-gap: .875rem; gap: .875rem; }
+  .ago-channel-switcher-launcher--medium .ago-channel-switcher-launcher-icon { width: 2.875rem; height: 2.875rem; }
+  .ago-channel-switcher-launcher--small { --acsl-gap: 1.25rem; gap: 1.25rem; }
+  .ago-channel-switcher-launcher--small .ago-channel-switcher-launcher-icon { width: 2.125rem; height: 2.125rem; }
+
+  .ago-channel-switcher-launcher-icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
+  }
+  .ago-channel-switcher-launcher-icon--fallback {
+    background: #6b7280;
+  }
+  .ago-channel-switcher-launcher-icon--fallback svg {
+    width: 60%;
+    height: 60%;
+    color: #fff;
   }
 
   /* 20-07: the closed primitive vocabulary's own rendering (ui/primitives/render.ts), appended

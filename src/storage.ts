@@ -86,6 +86,20 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "widget-channel-switcher-placement",
+    holds: "The tenant's configured placement for the connected-channels display - either the above-composer card or the below-launcher row of icons (`25-173`).",
+    why: "Same purpose as the corner above - a cached rendering preference, refreshed with the session.",
+    lifetime: "Same as the colour above.",
+    survivesTabClose: true,
+  },
+  {
+    key: "widget-channel-switcher-icon-size",
+    holds: "The tenant's configured icon size for the below-launcher channel row (`25-173`) - large, medium or small.",
+    why: "Same purpose as the corner above - a cached rendering preference, refreshed with the session.",
+    lifetime: "Same as the colour above.",
+    survivesTabClose: true,
+  },
+  {
     key: "widget-locale",
     holds: "The tenant's configured widget language.",
     why: "Same purpose as the colour above.",
@@ -305,6 +319,13 @@ export interface VisitorSession {
    * identically to "not set", and `ui/widget.ts`'s `appendContactCaptureControl` falls back to the
    * widget's own default sentence. */
   widgetContactCaptureConfirmationText: string | null;
+  /** `25-173`: cached alongside color/position on the identical terms `widgetPosition` already has -
+   * the raw wire value, not yet normalised - refreshed on the identical schedule (`25-05`). `null` for
+   * a session written before this field existed, or for a site that has never configured one -
+   * `ui/appearance.ts`'s `parseChannelSwitcherPlacement`/`parseChannelSwitcherIconSize` treat both
+   * identically to "not set" and fall back to `25-149`'s own pre-existing card at the default size. */
+  widgetChannelSwitcherPlacement: string | null;
+  widgetChannelSwitcherIconSize: string | null;
 }
 
 export class WidgetStorage {
@@ -360,6 +381,8 @@ export class WidgetStorage {
       widgetAutoOpenDelaySeconds: this.readAutoOpenDelaySecondsSafe(),
       widgetAutoOpenGreetingText: this.readSafe("widget-auto-open-greeting-text"),
       widgetContactCaptureConfirmationText: this.readSafe("widget-contact-capture-confirmation-text"),
+      widgetChannelSwitcherPlacement: this.readSafe("widget-channel-switcher-placement"),
+      widgetChannelSwitcherIconSize: this.readSafe("widget-channel-switcher-icon-size"),
     };
   }
 
@@ -501,6 +524,19 @@ export class WidgetStorage {
       this.writeSafe("widget-contact-capture-confirmation-text", session.widgetContactCaptureConfirmationText);
     } else {
       this.removeSafe("widget-contact-capture-confirmation-text");
+    }
+
+    // `25-173`: the identical "written only when present" shape `widgetPosition` already has above.
+    if (session.widgetChannelSwitcherPlacement) {
+      this.writeSafe("widget-channel-switcher-placement", session.widgetChannelSwitcherPlacement);
+    } else {
+      this.removeSafe("widget-channel-switcher-placement");
+    }
+
+    if (session.widgetChannelSwitcherIconSize) {
+      this.writeSafe("widget-channel-switcher-icon-size", session.widgetChannelSwitcherIconSize);
+    } else {
+      this.removeSafe("widget-channel-switcher-icon-size");
     }
 
     // `23-105`: written only when non-empty, matching every optional field above - a site with no

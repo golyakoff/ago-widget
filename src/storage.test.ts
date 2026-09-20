@@ -24,6 +24,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -41,6 +43,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -61,6 +65,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -84,6 +90,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -101,6 +109,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -123,6 +133,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -140,6 +152,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -162,6 +176,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -179,6 +195,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -202,6 +220,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -219,6 +239,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -242,6 +264,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -259,6 +283,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -283,6 +309,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -300,6 +328,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -323,6 +353,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -340,6 +372,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 
@@ -361,6 +395,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -378,6 +414,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()?.widgetAttractAttention).toBe(false);
   });
@@ -400,6 +438,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -417,6 +457,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -434,6 +476,8 @@ describe("WidgetStorage", () => {
       widgetAutoOpenDelaySeconds: 30,
       widgetAutoOpenGreetingText: null,
       widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
     });
   });
 

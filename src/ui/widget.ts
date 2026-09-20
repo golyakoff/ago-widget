@@ -24,6 +24,8 @@ import {
   parseAutoOpenDelaySeconds,
   parseAutoOpenEnabled,
   parseAutoOpenGreetingText,
+  parseChannelSwitcherIconSize,
+  parseChannelSwitcherPlacement,
   parseContactCaptureConfirmationText,
   parseNoticeText,
   parseNoticeUrl,
@@ -1019,11 +1021,12 @@ export class ChatWidget {
     // unaffected either way, whether or not the lazy chunk is ever actually fetched.
     guardAsync(() => this.loadBookingModuleChip());
 
-    // `25-149`: the identical "kicked off here, not on first open" shape `loadBookingModuleChip`
-    // just above already has, for the identical reason - the fact that decides whether this card
-    // exists at all (`session.channelLinks`) is not knowable until the handshake resolves, and this
-    // method's own `await this.sessionPromise` is what lets an auto-opened panel get the card too.
-    guardAsync(() => this.loadChannelSwitcherCard());
+    // `25-149`/`25-173`: the identical "kicked off here, not on first open" shape `loadBookingModuleChip`
+    // just above already has, for the identical reason - the fact that decides whether either
+    // channel-switcher renderer exists at all (`session.channelLinks`, `session.widgetChannelSwitcherPlacement`)
+    // is not knowable until the handshake resolves, and `loadChannelSwitcher`'s own `await
+    // this.sessionPromise` is what lets an auto-opened panel get it too.
+    guardAsync(() => this.loadChannelSwitcher());
   }
 
   /**
@@ -1624,6 +1627,27 @@ export class ChatWidget {
   }
 
   /**
+   * `25-173`: the one place `ChannelSwitcherPlacement` is actually read - kicked off from the
+   * constructor at the identical `loadBookingModuleChip` timing (`await this.sessionPromise`, so an
+   * auto-opened panel gets whichever renderer applies too), and the only caller of either one.
+   * `loadChannelSwitcherCard` below is `25-149`'s own pre-existing renderer, untouched - this method's
+   * whole job is choosing between it and `buildChannelSwitcherLauncherRow` without either renderer
+   * needing to know the other exists. A site left on the default placement (`"AboveComposer"`, or a
+   * session cached before this field existed - `parseChannelSwitcherPlacement`'s own fallback) still
+   * reaches `loadChannelSwitcherCard` by exactly the same call this constructor made before this item,
+   * so its own output is pixel-for-pixel unaffected.
+   */
+  private async loadChannelSwitcher(): Promise<void> {
+    const session = await this.sessionPromise;
+    if (parseChannelSwitcherPlacement(session.widgetChannelSwitcherPlacement) === "below-launcher") {
+      this.buildChannelSwitcherLauncherRow(session);
+      return;
+    }
+
+    await this.loadChannelSwitcherCard();
+  }
+
+  /**
    * `25-149`: a Jivo-style card offering the tenant's own connected channels, built once the
    * handshake resolves `session.channelLinks` - the identical timing `loadBookingModuleChip` above
    * already established (`await this.sessionPromise`, so an auto-opened panel gets it too) and the
@@ -1645,6 +1669,9 @@ export class ChatWidget {
    * `this.messages`/`composer` already are, so `open()`/`openForAutoGreeting()` revealing the whole
    * panel is what makes it visible again on every later open, for free - the same reason neither method
    * has to remember to re-reveal the transcript or the composer either.
+   *
+   * `25-173`: this method's own body is untouched by that item - `loadChannelSwitcher` above is the
+   * only thing that changed, and only to decide *whether* to call this at all.
    */
   private async loadChannelSwitcherCard(): Promise<void> {
     const session = await this.sessionPromise;
@@ -1711,6 +1738,79 @@ export class ChatWidget {
     row.append(label);
 
     return row;
+  }
+
+  /**
+   * `25-173`: the "below launcher" renderer - `loadChannelSwitcher`'s other branch, chosen instead of
+   * `loadChannelSwitcherCard` when `ChannelSwitcherPlacement` is `"BelowLauncher"`. A horizontal row
+   * of small circular icons, one per connected channel, vertically centred on `this.toggle`
+   * (`.ago-toggle`, 56px/`3.5rem`) - `ui/styles.ts`'s own `.ago-channel-switcher-launcher` rule
+   * positions it, starting right after the toggle and growing toward whichever side the panel already
+   * opens from (the same `.ago-position-left` class `bootstrapSession` toggles on `this.container` for
+   * the toggle/panel themselves - this row follows it rather than choosing a side of its own).
+   *
+   * Unlike `loadChannelSwitcherCard`, this has no dismiss concept at all - a persistent row, not an
+   * interruption, so there is no `storage.getChannelSwitcherDismissed()` check and nothing here for
+   * `dismissChannelSwitcher`/`dispatchSend` to hide. A site with nothing connected still builds
+   * nothing, the identical "pays nothing" property the card gives itself.
+   *
+   * A sibling of `this.toggle` inside `this.container` (`.ago-root`), not a child of `this.panel` -
+   * it has to render at the launcher's own height whether the panel is open or closed, which a child
+   * of the panel (`hidden` while closed) could not do.
+   */
+  private buildChannelSwitcherLauncherRow(session: VisitorSession): void {
+    if (session.channelLinks.length === 0) {
+      return;
+    }
+
+    const size = parseChannelSwitcherIconSize(session.widgetChannelSwitcherIconSize);
+    const row = document.createElement("div");
+    row.className = `ago-channel-switcher-launcher ago-channel-switcher-launcher--${size}`;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
+
+    for (const link of session.channelLinks) {
+      row.append(this.buildChannelSwitcherLauncherIcon(link));
+    }
+
+    this.container.append(row);
+  }
+
+  /**
+   * `25-173`: one circular icon per connected channel - reuses `25-172`'s own `buildBrandIcon`/
+   * `createSvgIcon(CHANNEL_FALLBACK_ICON_PATH)` mechanism directly rather than inventing a second one.
+   * The four recognised brand marks already render as full circular badges with their own fill
+   * (`CHANNEL_ICON_TREES`'s own remarks), so they only need resizing to the chosen diameter, no
+   * wrapping background; an unrecognised `kind` gets the same neutral fallback glyph
+   * `buildChannelSwitcherRow` falls back to, laid over a solid circle of `CHANNEL_FALLBACK_COLOR` so
+   * it still reads as one of the row's own circles rather than a glyph floating with no badge under
+   * it. A real `<a target="_blank" rel="noopener noreferrer">`, the identical reasoning
+   * `buildChannelSwitcherRow`'s own remarks give for why this is never a JS-driven navigation - and,
+   * since this row carries no visible text label the way the card's own rows do, the accessible name
+   * lives entirely on this anchor's own `aria-label`.
+   */
+  private buildChannelSwitcherLauncherIcon(link: { kind: string; url: string }): HTMLAnchorElement {
+    const item = document.createElement("a");
+    item.className = "ago-channel-switcher-launcher-icon";
+    item.href = link.url;
+    item.target = "_blank";
+    item.rel = "noopener noreferrer";
+    item.setAttribute("aria-label", CHANNEL_DISPLAY_NAMES[link.kind] ?? link.kind);
+
+    const brandIcon = buildBrandIcon(link.kind);
+    if (brandIcon) {
+      brandIcon.setAttribute("aria-hidden", "true");
+      brandIcon.style.width = "100%";
+      brandIcon.style.height = "100%";
+      item.append(brandIcon);
+      return item;
+    }
+
+    item.classList.add("ago-channel-switcher-launcher-icon--fallback");
+    const icon = createSvgIcon(CHANNEL_FALLBACK_ICON_PATH);
+    icon.setAttribute("aria-hidden", "true");
+    item.append(icon);
+    return item;
   }
 
   /**

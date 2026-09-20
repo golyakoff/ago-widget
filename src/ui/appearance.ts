@@ -155,3 +155,35 @@ export function parseContactCaptureConfirmationText(value: string | null | undef
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
 }
+
+/**
+ * `25-173`: which of the two placements a visitor sees the site's connected channels in
+ * (`widgetChannelSwitcherPlacement` - `AuthEndpoints.VisitorSessionResponse`, `ago-chat`). The
+ * identical "one non-default value, anything else falls back to the first member" shape
+ * `parseWidgetPosition` already takes for `Ago.Chat.Domain.ChannelSwitcherPlacement`'s own sibling
+ * enum: `"BelowLauncher"` is the one value that means anything other than `25-149`'s own pre-existing
+ * card, so a missing, malformed, or not-yet-recognised value (a session cached before this field
+ * existed, or a future server value this widget's build predates) renders exactly what every visitor
+ * already sees today, never the new placement by accident.
+ */
+export type ChannelSwitcherPlacement = "above-composer" | "below-launcher";
+
+export function parseChannelSwitcherPlacement(value: string | null | undefined): ChannelSwitcherPlacement {
+  return value === "BelowLauncher" ? "below-launcher" : "above-composer";
+}
+
+/**
+ * `25-173`: the closed set of three circle sizes `Ago.Chat.Domain.ChannelSwitcherIconSize` fixes - the
+ * identical "courtesy validation, default to the least-surprising behaviour" posture every other
+ * parser in this file already takes. Anything not exactly one of the three recognised wire values
+ * (missing, malformed, or a value this widget's own build predates) falls back to `"medium"` - the
+ * server's own default (`WidgetConfig.ChannelSwitcherIconSize`'s own remarks) - meaningful only while
+ * `parseChannelSwitcherPlacement` returns `"below-launcher"`, but computed unconditionally the same
+ * way every other field on this response is, so there is nothing conditional for a caller to get
+ * wrong.
+ */
+export type ChannelSwitcherIconSize = "large" | "medium" | "small";
+
+export function parseChannelSwitcherIconSize(value: string | null | undefined): ChannelSwitcherIconSize {
+  return value === "Large" ? "large" : value === "Small" ? "small" : "medium";
+}

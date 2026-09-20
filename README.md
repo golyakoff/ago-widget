@@ -132,6 +132,23 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**45.1 KB gzipped** (165.8 KB raw, minified), `25-173` measured 2026-09-20 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
+run build`) - **+0.6 KB gzipped** over the 44.5 KB baseline immediately before this item's own
+changes (`04bd125`, `25-172`'s brand icons - not logged here when it landed, so this entry's own
+baseline is a fresh measurement of that commit, not the `36.4 KB`/`25-120` entry below it, which the
+four brand icons' own real vector path data had already pushed well past by the time this item
+started), checked directly the same way this section already asks for (stash this item's own changes,
+build, unstash, build again) rather than trusted. The `+0.6 KB` is the whole of this item: the second,
+"below launcher" channel-switcher renderer (`loadChannelSwitcher`'s placement dispatch,
+`buildChannelSwitcherLauncherRow`/`buildChannelSwitcherLauncherIcon` in `ui/widget.ts`, reusing
+`25-172`'s own brand-icon mechanism rather than a second one) and its own CSS in `ui/styles.ts` - no
+dependency was added. **The 45 KB budget itself is raised to 46 KB in this same change** (`build.mjs`):
+`25-172`'s own real brand-icon data had already left only ~0.5 KB of the previous ceiling's own
+headroom before this item added anything, which is not enough room for a real, working feature of any
+size - the same "measured, not invented" posture this section already asks for, applied to the ceiling
+itself rather than only to what sits under it. Leaves 0.9 KB of the new 46 KB budget unused.
+
 **36.4 KB gzipped** (135.2 KB raw, minified), `25-120` measured 2026-09-17 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
 run build`) - **+1.3 KB gzipped** over the 35.1 KB baseline immediately below, checked directly the

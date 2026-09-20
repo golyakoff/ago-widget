@@ -139,6 +139,21 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**37.7 KB gzipped** (145.7 KB raw, minified), the CSS/JS minification item measured 2026-09-21
+against a clean build of this commit (`AGO_API_BASE_URL=http://localhost:5009
+AGO_POLICY_BASE_URL=http://localhost:5173 npm run build`) - **-8.3 KB gzipped** against a fresh
+measurement of the immediately preceding commit (46.0 KB, this entry's own baseline; several items
+between it and `25-186` below were not logged here when they landed, so this is a fresh measurement
+of what was actually running, not a claimed continuation of the log). `build.mjs`'s own `minify:
+true` only ever minified JavaScript - `ui/styles.ts`'s CSS lived inside a JS template literal, whose
+comments and whitespace shipped to production byte-for-byte, since a JS minifier has no reason to
+touch the contents of a string literal. Moved the CSS to a real `ui/styles.css`, minified once
+through esbuild's own CSS-aware `transform` at build time, inlined via the identical
+`__AGO_WIDGET_CSS__` define mechanism `__AGO_COMMIT__` etc. already use. `ux-gate`'s own WCAG
+contrast test (reads real computed styles inside the shadow root against the built artifact) stayed
+green, the closest thing this repository has to a live check that the minified CSS still renders
+identically.
+
 **45.4 KB gzipped** (167.1 KB raw, minified), `25-186` measured 2026-09-20 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
 run build`) - **+0.3 KB gzipped** over the 45.1 KB baseline immediately below, checked directly the

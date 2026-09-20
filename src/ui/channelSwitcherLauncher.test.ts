@@ -349,7 +349,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
 
     const root = panel.root.querySelector(".ago-root")!;
     expect(root.classList.contains("ago-position-left")).toBe(true);
-    // The row itself carries no side-specific class of its own - ui/styles.ts's
+    // The row itself carries no side-specific class of its own - ui/styles.css's
     // `.ago-root.ago-position-left .ago-channel-switcher-launcher` rule is what flips its anchor side,
     // driven by the identical .ago-position-left class the toggle/panel already share.
     expect(launcherRow(panel.root)).not.toBeNull();

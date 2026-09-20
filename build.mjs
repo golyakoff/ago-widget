@@ -3,11 +3,20 @@
 // esbuild rather than a bigger bundler/framework toolchain - the widget has no JSX, no CSS
 // modules, no code-splitting need (it is one entry point, loaded by one <script> tag), so
 // esbuild's minimal, fast IIFE output is the whole feature set this build needs.
-import { build } from "esbuild";
+import { build, transform } from "esbuild";
 import { gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 
 const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+
+// `ui/shadow-root.ts` injects this as the shadow root's own <style> text. `minify: true` below
+// (four times) is esbuild's *JavaScript* minifier - it has no idea a particular string constant
+// happens to hold CSS, so it never touches bytes inside a string literal, comments and all. Real
+// CSS minification needs esbuild's own CSS-aware transform, run here, once, on the actual source
+// file - not a JS template literal (`ui/styles.ts` used to be one; a single verbose comment there
+// once pushed the gzipped bundle over its own size budget, entirely avoidably).
+const widgetCssSource = readFileSync(new URL("./src/ui/styles.css", import.meta.url), "utf8");
+const { code: widgetCss } = await transform(widgetCssSource, { loader: "css", minify: true });
 
 const apiBaseUrl = process.env.AGO_API_BASE_URL;
 if (!apiBaseUrl) {
@@ -92,6 +101,7 @@ const result = await build({
     __AGO_DEFAULT_API_BASE_URL__: JSON.stringify(apiBaseUrl),
     __AGO_DEFAULT_POLICY_BASE_URL__: JSON.stringify(policyBaseUrl),
     __AGO_COMMIT__: JSON.stringify(commit),
+    __AGO_WIDGET_CSS__: JSON.stringify(widgetCss),
   },
 });
 

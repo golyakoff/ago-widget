@@ -18,7 +18,7 @@ export interface WidgetStrings {
   readonly closeChat: string;
   /** `25-141`: the closed launcher's accessible name once `ui/widget.ts`'s `unreadCount` is greater
    * than zero - replaces `openChat` above for exactly that state, so a screen-reader visitor learns
-   * the same fact the sighted-only `.ago-unread-badge` (`ui/styles.ts`) already shows. A function
+   * the same fact the sighted-only `.ago-unread-badge` (`ui/styles.css`) already shows. A function
    * like `fileTooLarge` below, not a fixed string, for the identical reason that one is: a number has
    * to sit inside an otherwise-translated sentence. */
   readonly openChatWithUnreadCount: (count: number) => string;

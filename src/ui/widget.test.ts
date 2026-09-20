@@ -492,7 +492,7 @@ describe("an automatic reply", () => {
     expect(panel.root.querySelectorAll(".ago-message--system")).toHaveLength(0);
     // `25-154` removed `14-04`'s own visible "automatic reply" label (the author's explicit decision,
     // stated plainly so a reader of `14-04` does not conclude it still exists) - `.ago-message--auto`
-    // now carries only the border-left accent `ui/styles.ts` still gives this class, no CSS `content`
+    // now carries only the border-left accent `ui/styles.css` still gives this class, no CSS `content`
     // pseudo-element. `renderBubble`'s own `bubble.textContent = body` line still writes exactly what
     // the shop scripted and nothing else, proven here against the bubble's own direct text rather than
     // `bubbleTexts()`'s full `textContent`, which now also picks up `23-09`'s contact-capture control

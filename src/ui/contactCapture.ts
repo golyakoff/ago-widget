@@ -121,7 +121,7 @@ export function renderContactCaptureControl(
 
   const phoneInput = document.createElement("input");
   phoneInput.type = "tel";
-  phoneInput.className = "ago-contact-capture-input";
+  phoneInput.className = "ago-contact-capture-input ago-contact-capture-phone-input";
   phoneInput.placeholder = strings.contactCapturePhonePlaceholder;
   phoneInput.setAttribute("aria-label", strings.contactCapturePhonePlaceholder);
   phoneInput.autocomplete = "tel";
@@ -131,9 +131,26 @@ export function renderContactCaptureControl(
   // full reasoning (hand-rolled vs. library, and the "+<code>" escape hatch for a non-Russian
   // visitor). Reformatting always moves the caret to the end; a hand-rolled mask this small does not
   // attempt to preserve a mid-string cursor position (see that file's own remarks on the trade-off).
+  // `25-186` touches none of this - the mask's own input/output is unchanged, only what sits beside
+  // the field in the DOM changed.
   phoneInput.addEventListener("input", () => {
     phoneInput.value = formatPhoneInput(phoneInput.value);
   });
+
+  // `25-186`: the mask above already, functionally, locks this field to Russia by default - what was
+  // missing was purely visual, nothing told a visitor *that* before they started typing. A
+  // non-interactive flag+dialling-code prefix to the left of the field, the same treatment
+  // `ago-console`'s new `PhoneInput.tsx` gives its own phone fields - there is no React here, so this
+  // is a parallel small piece of markup/CSS rather than a shared import. `aria-hidden` on the prefix:
+  // it is decorative, and `phoneInput`'s own `aria-label` above already names the field for a screen
+  // reader without it.
+  const phoneWrap = document.createElement("div");
+  phoneWrap.className = "ago-contact-capture-phone-wrap";
+  const phonePrefix = document.createElement("span");
+  phonePrefix.className = "ago-contact-capture-phone-prefix";
+  phonePrefix.setAttribute("aria-hidden", "true");
+  phonePrefix.textContent = "🇷🇺 +7";
+  phoneWrap.append(phonePrefix, phoneInput);
 
   // `23-58`: the third required field - `VisitorContactDetailKind.Email` on the wire
   // (`recordContactDetail(..., "Email", ...)`, `ui/widget.ts`'s `submitContactCapture`), a kind that
@@ -178,7 +195,7 @@ export function renderContactCaptureControl(
   errorNote.hidden = true;
   errorNote.setAttribute("role", "alert");
 
-  form.append(nameInput, phoneInput, emailInput);
+  form.append(nameInput, phoneWrap, emailInput);
   if (contactCheckbox && consent?.contact) {
     form.appendChild(buildConsentLabel(contactCheckbox, consent.contact, requirePolicyBaseUrl(policyBaseUrl)));
   }

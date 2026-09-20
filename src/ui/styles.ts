@@ -779,6 +779,39 @@ export const widgetStyles = /* css */ `
     color: #1a1a1a;
   }
 
+  /* 25-186: the phone field's own flag+prefix wrapper - one bordered shell (the border/radius that
+     .ago-contact-capture-input would otherwise draw itself) holding a static, non-interactive
+     "RU flag +7" to the left and the real masked input to the right, borderless so the two pieces
+     read as a single field rather than two boxes glued together. Purely presentational: phoneFormat.ts's
+     own mask (the input event listener above) is untouched, and this wrapper carries none of the
+     required/name/aria-label attributes - those all still live on .ago-contact-capture-phone-input
+     itself. */
+  .ago-contact-capture-phone-wrap {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #d5d9e0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .ago-contact-capture-phone-prefix {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.5rem;
+    border-right: 1px solid #d5d9e0;
+    color: #57575f;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .ago-contact-capture-phone-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    border-radius: 0;
+  }
+
   /* 24-05: the visitor's own consent checkbox(es) - a required one for handing over the contact
      itself, and an optional, never-required one for anything beyond it (marketing). Both share this
      one class; only the required attribute set in ui/contactCapture.ts tells them apart. */

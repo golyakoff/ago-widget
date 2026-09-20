@@ -44,6 +44,12 @@ export const widgetStyles = /* css */ `
     left: 1.25rem;
   }
 
+  /* found live on golyakov.net, mobile: the icon (createSvgIcon's own vertical-align: text-bottom)
+     sat visibly below centre - that rule anchors an inline SVG to the line box's own bottom, not the
+     button's centre, and how much air that leaves above depends on font metrics that differ by
+     platform. .ago-send below already solved this identical "round, icon-only button" shape with
+     flex centring, which makes vertical-align irrelevant rather than tuned around - the same fix,
+     applied here. */
   .ago-toggle {
     width: 3.5rem;
     height: 3.5rem;
@@ -56,6 +62,9 @@ export const widgetStyles = /* css */ `
     font-size: 1.5rem;
     cursor: pointer;
     box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     /* 25-141: the unread badge (.ago-unread-badge below) is positioned relative to this button. */
     position: relative;
   }

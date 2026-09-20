@@ -69,6 +69,12 @@ export const widgetStyles = /* css */ `
     position: relative;
   }
 
+  /* Optical, not a bbox bug: chat_bubble's tail sits outside its own visual body, so
+     bbox-centering (above) reads as too high. .ago-close's icon has no tail and needs no nudge. */
+  .ago-toggle svg {
+    transform: translateY(0.125rem);
+  }
+
   /* 25-141: the closed launcher's own unread-count badge (ui/widget.ts's renderUnreadBadge is the
      only thing that ever shows or sizes it - this rule only ever draws it when the JS has already
      decided it should be visible, via the plain hidden attribute rather than a class). Pinned to

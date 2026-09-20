@@ -160,26 +160,240 @@ function createSvgIcon(d: string): SVGSVGElement {
 }
 
 /**
- * `25-149`: one icon per `ChannelKind` this item covers - `AuthEndpoints.ChannelLinkResponse.Kind`
- * (`ago-chat`)'s own exact PascalCase wire string as the key (`ChannelLinkUrlBuilder`'s own remarks:
- * MAX, Telegram, VK, WhatsApp are the only four this response can ever actually carry - Avito never
- * among them, `25-147`'s own scope). Every path stays inside `createSvgIcon`'s existing
- * `0 -960 960 960` viewBox convention rather than each brand's own native asset coordinate space.
- *
- * `Telegram` reuses `sendButton`'s own verified "send" glyph above verbatim - a paper aeroplane, which
- * is also literally Telegram's own logo concept. `Max`/`Vk`/`WhatsApp` are this widget's own simplified
- * placeholder glyphs, **not a verified, pixel-accurate reproduction of any provider's real trademarked
- * mark** - this task had no licensed copy of any of the three to trace from, and guessing at one and
- * presenting it as "official" would be worse than an honestly-approximate placeholder. A later design
- * pass with the real brand assets in hand only ever needs to replace the three strings below; nothing
- * that reads this map needs to change.
+ * `25-172`: a generic node in a small structured-data tree that `buildIconTree` below walks into real
+ * `SVGElement`s, one `createElementNS`/`setAttribute` call per node/attribute - the same construction
+ * discipline `createSvgIcon` above already uses, extended to cover a node that is not just one
+ * `<path>` in a fixed viewBox. This file has no `.innerHTML` anywhere (a raw-embedded, third-party-site
+ * widget is exactly the context where that discipline earns its keep - a hosting page's own CSP may
+ * forbid it), and a real brand mark with multiple paths, or nested `<defs>`/gradients (MAX), cannot be
+ * expressed as one `d` string the way `createSvgIcon` wants it - hence a second, parallel builder
+ * instead of stretching `createSvgIcon` itself to cover a shape it was never designed for.
  */
-const CHANNEL_ICON_PATHS: Record<string, string> = {
-  Telegram: "M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z",
-  WhatsApp: "M160-760H800V-360H320L200-240V-360H160Z",
-  Vk: "M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z",
-  Max: "M480-120 120-480l360-360 360 360-360 360Z",
+interface IconNode {
+  tag: string;
+  attrs?: Record<string, string>;
+  children?: IconNode[];
+}
+
+function buildIconTree(node: IconNode): SVGElement {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", node.tag);
+  for (const [key, value] of Object.entries(node.attrs ?? {})) {
+    el.setAttribute(key, value);
+  }
+  for (const child of node.children ?? []) {
+    el.appendChild(buildIconTree(child));
+  }
+  return el;
+}
+
+/**
+ * `25-172`: real, multi-colour brand marks for the only four `ChannelKind` values
+ * `AuthEndpoints.ChannelLinkResponse.Kind` (`ago-chat`)'s own `ChannelLinkUrlBuilder` can ever actually
+ * emit (`25-147`'s own scope - Avito is never among them). These replace `25-149`'s own admittedly
+ * invented placeholder glyphs (MAX/VK/WhatsApp) and the too-blue `#40B3E0` the Telegram asset first
+ * carried; every one of the four was sourced by the author and confirmed live against an HTML review
+ * artifact before this item was filed - this map is the transcription of that approved result, not a
+ * fresh design pass.
+ *
+ * Each icon keeps its own native viewBox (unlike `createSvgIcon`'s shared `0 -960 960 960`) since these
+ * are real vector traces, not glyphs drawn to a common grid. `width`/`height: 1em` and the
+ * `display`/`vertical-align` pair on the outer `<svg>` match `createSvgIcon`'s own inline sizing so a
+ * brand icon sits in the row exactly like the fallback glyph would. MAX alone gets a `clip-path` in its
+ * own inline `style`: its native art is a rounded square (`rect ry="249.681"` on a `1000x1000` box), and
+ * every other channel's badge already renders as a circle from its own path data, so MAX needs the one
+ * per-icon crop the others don't (confirmed live against the approved review - keeping the rounded
+ * square was explicitly rejected).
+ *
+ * WhatsApp's two paths share one identical `d` on purpose: the source asset's cutout was originally an
+ * unfilled `evenodd` hole alone, showing whatever the host page's own background was behind it -
+ * invisible on a dark ground. Layering an opaque white `nonzero` copy of the same shape underneath fixes
+ * that: the green `evenodd` layer punches its handset-shaped hole through to white now, never through to
+ * the page.
+ */
+const CHANNEL_ICON_TREES: Record<string, IconNode> = {
+  Telegram: {
+    tag: "svg",
+    attrs: {
+      viewBox: "0 0 256 256",
+      width: "1em",
+      height: "1em",
+      style: "display:inline-block;vertical-align:text-bottom",
+    },
+    children: [
+      {
+        tag: "path",
+        attrs: {
+          d: "M128,0 C57.307,0 0,57.307 0,128 L0,128 C0,198.693 57.307,256 128,256 L128,256 C198.693,256 256,198.693 256,128 L256,128 C256,57.307 198.693,0 128,0 L128,0 Z",
+          fill: "#0088CC",
+        },
+      },
+      {
+        tag: "path",
+        attrs: {
+          d: "M190.2826,73.6308 L167.4206,188.8978 C167.4206,188.8978 164.2236,196.8918 155.4306,193.0548 L102.6726,152.6068 L83.4886,143.3348 L51.1946,132.4628 C51.1946,132.4628 46.2386,130.7048 45.7586,126.8678 C45.2796,123.0308 51.3546,120.9528 51.3546,120.9528 L179.7306,70.5928 C179.7306,70.5928 190.2826,65.9568 190.2826,73.6308",
+          fill: "#FFFFFF",
+        },
+      },
+      {
+        tag: "path",
+        attrs: {
+          d: "M98.6178,187.6035 C98.6178,187.6035 97.0778,187.4595 95.1588,181.3835 C93.2408,175.3085 83.4888,143.3345 83.4888,143.3345 L161.0258,94.0945 C161.0258,94.0945 165.5028,91.3765 165.3428,94.0945 C165.3428,94.0945 166.1418,94.5735 163.7438,96.8115 C161.3458,99.0505 102.8328,151.6475 102.8328,151.6475",
+          fill: "#D2E5F1",
+        },
+      },
+      {
+        tag: "path",
+        attrs: {
+          d: "M122.9015,168.1154 L102.0335,187.1414 C102.0335,187.1414 100.4025,188.3794 98.6175,187.6034 L102.6135,152.2624",
+          fill: "#B5CFE4",
+        },
+      },
+    ],
+  },
+  WhatsApp: {
+    tag: "svg",
+    attrs: {
+      viewBox: "0 0 48 48",
+      width: "1em",
+      height: "1em",
+      style: "display:inline-block;vertical-align:text-bottom",
+    },
+    children: [
+      {
+        tag: "g",
+        attrs: { transform: "translate(-700, -360)" },
+        children: [
+          {
+            tag: "path",
+            attrs: {
+              fill: "#ffffff",
+              "fill-rule": "nonzero",
+              d: "M723.993033,360 C710.762252,360 700,370.765287 700,383.999801 C700,389.248451 701.692661,394.116025 704.570026,398.066947 L701.579605,406.983798 L710.804449,404.035539 C714.598605,406.546975 719.126434,408 724.006967,408 C737.237748,408 748,397.234315 748,384.000199 C748,370.765685 737.237748,360.000398 724.006967,360.000398 L723.993033,360.000398 L723.993033,360 Z M717.29285,372.190836 C716.827488,371.07628 716.474784,371.034071 715.769774,371.005401 C715.529728,370.991464 715.262214,370.977527 714.96564,370.977527 C714.04845,370.977527 713.089462,371.245514 712.511043,371.838033 C711.806033,372.557577 710.056843,374.23638 710.056843,377.679202 C710.056843,381.122023 712.567571,384.451756 712.905944,384.917648 C713.258648,385.382743 717.800808,392.55031 724.853297,395.471492 C730.368379,397.757149 732.00491,397.545307 733.260074,397.27732 C735.093658,396.882308 737.393002,395.527239 737.971421,393.891043 C738.54984,392.25405 738.54984,390.857171 738.380255,390.560912 C738.211068,390.264652 737.745308,390.095816 737.040298,389.742615 C736.335288,389.389811 732.90737,387.696673 732.25849,387.470894 C731.623543,387.231179 731.017259,387.315995 730.537963,387.99333 C729.860819,388.938653 729.198006,389.89831 728.661785,390.476494 C728.238619,390.928051 727.547144,390.984595 726.969123,390.744481 C726.193254,390.420348 724.021298,389.657798 721.340985,387.273388 C719.267356,385.42535 717.856938,383.125756 717.448104,382.434484 C717.038871,381.729275 717.405907,381.319529 717.729948,380.938852 C718.082653,380.501232 718.421026,380.191036 718.77373,379.781688 C719.126434,379.372738 719.323884,379.160897 719.549599,378.681068 C719.789645,378.215575 719.62006,377.735746 719.450874,377.382942 C719.281687,377.030139 717.871269,373.587317 717.29285,372.190836 Z",
+            },
+          },
+          {
+            tag: "path",
+            attrs: {
+              fill: "#2AB540",
+              "fill-rule": "evenodd",
+              d: "M723.993033,360 C710.762252,360 700,370.765287 700,383.999801 C700,389.248451 701.692661,394.116025 704.570026,398.066947 L701.579605,406.983798 L710.804449,404.035539 C714.598605,406.546975 719.126434,408 724.006967,408 C737.237748,408 748,397.234315 748,384.000199 C748,370.765685 737.237748,360.000398 724.006967,360.000398 L723.993033,360.000398 L723.993033,360 Z M717.29285,372.190836 C716.827488,371.07628 716.474784,371.034071 715.769774,371.005401 C715.529728,370.991464 715.262214,370.977527 714.96564,370.977527 C714.04845,370.977527 713.089462,371.245514 712.511043,371.838033 C711.806033,372.557577 710.056843,374.23638 710.056843,377.679202 C710.056843,381.122023 712.567571,384.451756 712.905944,384.917648 C713.258648,385.382743 717.800808,392.55031 724.853297,395.471492 C730.368379,397.757149 732.00491,397.545307 733.260074,397.27732 C735.093658,396.882308 737.393002,395.527239 737.971421,393.891043 C738.54984,392.25405 738.54984,390.857171 738.380255,390.560912 C738.211068,390.264652 737.745308,390.095816 737.040298,389.742615 C736.335288,389.389811 732.90737,387.696673 732.25849,387.470894 C731.623543,387.231179 731.017259,387.315995 730.537963,387.99333 C729.860819,388.938653 729.198006,389.89831 728.661785,390.476494 C728.238619,390.928051 727.547144,390.984595 726.969123,390.744481 C726.193254,390.420348 724.021298,389.657798 721.340985,387.273388 C719.267356,385.42535 717.856938,383.125756 717.448104,382.434484 C717.038871,381.729275 717.405907,381.319529 717.729948,380.938852 C718.082653,380.501232 718.421026,380.191036 718.77373,379.781688 C719.126434,379.372738 719.323884,379.160897 719.549599,378.681068 C719.789645,378.215575 719.62006,377.735746 719.450874,377.382942 C719.281687,377.030139 717.871269,373.587317 717.29285,372.190836 Z",
+            },
+          },
+        ],
+      },
+    ],
+  },
+  Vk: {
+    tag: "svg",
+    attrs: {
+      viewBox: "0 0 97.75 97.75",
+      width: "1em",
+      height: "1em",
+      style: "display:inline-block;vertical-align:text-bottom",
+    },
+    children: [
+      {
+        tag: "path",
+        attrs: {
+          d: "M48.875,0C21.883,0,0,21.882,0,48.875S21.883,97.75,48.875,97.75S97.75,75.868,97.75,48.875S75.867,0,48.875,0z",
+          fill: "#345E90",
+        },
+      },
+      {
+        tag: "path",
+        attrs: {
+          d: "M73.667,54.161c2.278,2.225,4.688,4.319,6.733,6.774c0.906,1.086,1.76,2.209,2.41,3.472c0.928,1.801,0.09,3.776-1.522,3.883l-10.013-0.002c-2.586,0.214-4.644-0.829-6.379-2.597c-1.385-1.409-2.67-2.914-4.004-4.371c-0.545-0.598-1.119-1.161-1.803-1.604c-1.365-0.888-2.551-0.616-3.333,0.81c-0.797,1.451-0.979,3.059-1.055,4.674c-0.109,2.361-0.821,2.978-3.19,3.089c-5.062,0.237-9.865-0.531-14.329-3.083c-3.938-2.251-6.986-5.428-9.642-9.025c-5.172-7.012-9.133-14.708-12.692-22.625c-0.801-1.783-0.215-2.737,1.752-2.774c3.268-0.063,6.536-0.055,9.804-0.003c1.33,0.021,2.21,0.782,2.721,2.037c1.766,4.345,3.931,8.479,6.644,12.313c0.723,1.021,1.461,2.039,2.512,2.76c1.16,0.796,2.044,0.533,2.591-0.762c0.35-0.823,0.501-1.703,0.577-2.585c0.26-3.021,0.291-6.041-0.159-9.05c-0.28-1.883-1.339-3.099-3.216-3.455c-0.956-0.181-0.816-0.535-0.351-1.081c0.807-0.944,1.563-1.528,3.074-1.528l11.313-0.002c1.783,0.35,2.183,1.15,2.425,2.946l0.01,12.572c-0.021,0.695,0.349,2.755,1.597,3.21c1,0.33,1.66-0.472,2.258-1.105c2.713-2.879,4.646-6.277,6.377-9.794c0.764-1.551,1.423-3.156,2.063-4.764c0.476-1.189,1.216-1.774,2.558-1.754l10.894,0.013c0.321,0,0.647,0.003,0.965,0.058c1.836,0.314,2.339,1.104,1.771,2.895c-0.894,2.814-2.631,5.158-4.329,7.508c-1.82,2.516-3.761,4.944-5.563,7.471C71.48,50.992,71.611,52.155,73.667,54.161z",
+          fill: "#ffffff",
+        },
+      },
+    ],
+  },
+  Max: {
+    tag: "svg",
+    attrs: {
+      viewBox: "0 0 1000 1000",
+      width: "1em",
+      height: "1em",
+      style: "display:inline-block;vertical-align:text-bottom;clip-path:circle(50% at 50% 50%)",
+    },
+    children: [
+      {
+        tag: "defs",
+        children: [
+          {
+            tag: "linearGradient",
+            attrs: { id: "b" },
+            children: [
+              { tag: "stop", attrs: { offset: "0", "stop-color": "#00f" } },
+              { tag: "stop", attrs: { offset: "1", "stop-opacity": "0" } },
+              { tag: "stop", attrs: { offset: "1", "stop-opacity": "0" } },
+            ],
+          },
+          {
+            tag: "linearGradient",
+            attrs: { id: "a" },
+            children: [
+              { tag: "stop", attrs: { offset: "0", "stop-color": "#4cf" } },
+              { tag: "stop", attrs: { offset: ".662", "stop-color": "#53e" } },
+              { tag: "stop", attrs: { offset: "1", "stop-color": "#93d" } },
+            ],
+          },
+          {
+            tag: "linearGradient",
+            attrs: {
+              id: "c",
+              x1: "117.847",
+              x2: "1000",
+              y1: "760.536",
+              y2: "500",
+              gradientUnits: "userSpaceOnUse",
+              href: "#a",
+            },
+          },
+          {
+            tag: "radialGradient",
+            attrs: {
+              id: "d",
+              cx: "-87.392",
+              cy: "1166.116",
+              r: "500",
+              fx: "-87.392",
+              fy: "1166.116",
+              gradientTransform: "rotate(51.356 1551.478 559.3)scale(2.42703433 1)",
+              gradientUnits: "userSpaceOnUse",
+              href: "#b",
+            },
+          },
+        ],
+      },
+      { tag: "rect", attrs: { width: "1000", height: "1000", fill: "url(#c)", ry: "249.681" } },
+      { tag: "rect", attrs: { width: "1000", height: "1000", fill: "url(#d)", ry: "249.681" } },
+      {
+        tag: "path",
+        attrs: {
+          fill: "#fff",
+          "fill-rule": "evenodd",
+          d: "M508.211 878.328c-75.007 0-109.864-10.95-170.453-54.75-38.325 49.275-159.686 87.783-164.979 21.9 0-49.456-10.95-91.248-23.36-136.873-14.782-56.21-31.572-118.807-31.572-209.508 0-216.626 177.754-379.597 388.357-379.597 210.785 0 375.947 171.001 375.947 381.604.707 207.346-166.595 376.118-373.94 377.224m3.103-571.585c-102.564-5.292-182.499 65.7-200.201 177.024-14.6 92.162 11.315 204.398 33.397 210.238 10.585 2.555 37.23-18.98 53.837-35.587a189.8 189.8 0 0 0 92.71 33.032c106.273 5.112 197.08-75.794 204.215-181.95 4.154-106.382-77.67-196.486-183.958-202.574Z",
+          "clip-rule": "evenodd",
+        },
+      },
+    ],
+  },
 };
+
+/**
+ * `25-172`: looks up a real brand mark for the four recognised `ChannelKind`s above and builds it via
+ * `buildIconTree`; `undefined` for anything else (including a future, unrecognised `kind`) so the one
+ * caller below can fall through to exactly `createSvgIcon(CHANNEL_FALLBACK_ICON_PATH)` - `createSvgIcon`
+ * itself, and its every other caller, stay untouched by this item.
+ */
+function buildBrandIcon(kind: string): SVGSVGElement | undefined {
+  const tree = CHANNEL_ICON_TREES[kind];
+  if (tree === undefined) {
+    return undefined;
+  }
+  return buildIconTree(tree) as SVGSVGElement;
+}
 
 /** `25-149`: an unrecognised `kind` on the wire (a future channel this build has not shipped an icon
  * for yet) still gets a real, working row - never dropped, never a crash. The plain outer circle
@@ -191,19 +405,23 @@ const CHANNEL_FALLBACK_ICON_PATH =
 /**
  * `25-149`: every colour here is a small, widget-local constant, deliberately independent of
  * `--ago-accent` - the identical "must read against whatever a tenant configured" reasoning
- * `--ago-unread-badge-bg` already states for itself (`ui/styles.ts`). `Telegram`'s is its own
- * well-known public brand blue; `Max`/`Vk`/`WhatsApp` are, like the placeholder paths above, this
- * widget's own stand-in pending the real brand guideline for each - a later design pass replaces these
- * three strings alongside the icon paths they sit next to.
+ * `--ago-unread-badge-bg` already states for itself (`ui/styles.ts`). `25-172` narrowed this map's job:
+ * since the four real brand icons above carry their own explicit fills (never `currentColor`), this
+ * `row.style.color` value now only tints the row's *label text* (via `.ago-channel-switcher-row { color:
+ * inherit }` in `ui/styles.ts`) - it no longer doubles as an icon colour. `Telegram`/`WhatsApp`/`Vk`
+ * were updated to the same authoritative brand hex the icons themselves now use (`#0088CC`/`#2AB540`/
+ * `#345E90`), so the label text and the badge read as one colour again despite the two now being
+ * independent mechanisms. `Max` is left at its pre-existing placeholder purple: MAX's real mark is a
+ * gradient with no single flat hex to promote to text-tint duty, and inventing one is out of scope here.
  *
  * VK ships in this first version despite `25-147`'s own note that its whole integration has never
  * been exercised against a real token - the author's own explicit decision, 2026-09-18: a wrong URL
  * there is `25-147`'s own bug to fix, not a reason to withhold VK's row here.
  */
 const CHANNEL_BRAND_COLORS: Record<string, string> = {
-  Telegram: "#2AABEE",
-  WhatsApp: "#25D366",
-  Vk: "#0077FF",
+  Telegram: "#0088CC",
+  WhatsApp: "#2AB540",
+  Vk: "#345E90",
   Max: "#6E56CF",
 };
 
@@ -1470,6 +1688,11 @@ export class ChatWidget {
    * meaningless "image" content. An unrecognised `kind` still gets a real, working row: the neutral
    * fallback icon and colour, and the raw wire string itself as its label - never dropped, never a
    * throw (`25-149`'s own explicit Done-when).
+   *
+   * `25-172`: `buildBrandIcon` covers the four recognised kinds with their real, multi-colour marks;
+   * anything else - including a future, unrecognised `kind` - falls through to exactly
+   * `createSvgIcon(CHANNEL_FALLBACK_ICON_PATH)`, byte-for-byte the row this file has always built for
+   * that case.
    */
   private buildChannelSwitcherRow(link: { kind: string; url: string }): HTMLAnchorElement {
     const row = document.createElement("a");
@@ -1479,7 +1702,7 @@ export class ChatWidget {
     row.rel = "noopener noreferrer";
     row.style.color = CHANNEL_BRAND_COLORS[link.kind] ?? CHANNEL_FALLBACK_COLOR;
 
-    const icon = createSvgIcon(CHANNEL_ICON_PATHS[link.kind] ?? CHANNEL_FALLBACK_ICON_PATH);
+    const icon = buildBrandIcon(link.kind) ?? createSvgIcon(CHANNEL_FALLBACK_ICON_PATH);
     icon.setAttribute("aria-hidden", "true");
     row.append(icon);
 

@@ -312,7 +312,10 @@ describe("a site with connected channels", () => {
       vi.useRealTimers();
     });
 
-    it("hides the card, focuses the composer, sends nothing, and never forces a connection", async () => {
+    // `25-191`: no longer a dismissal trigger - the author's own correction, two independent
+    // dismissal paths (this click, and sending the first message) doing the identical thing read as
+    // one condition rather than two, and the one that should survive is an actual sent message.
+    it("focuses the composer, sends nothing, never forces a connection, and leaves the card visible", async () => {
       stubFetch({
         channelLinks: twoChannels(),
         widgetAutoOpenEnabled: true,
@@ -331,7 +334,7 @@ describe("a site with connected channels", () => {
       const dismissRow = panel.root.querySelector<HTMLButtonElement>(".ago-channel-switcher-row--dismiss")!;
       dismissRow.click();
 
-      expect(card(panel.root)).toHaveProperty("hidden", true);
+      expect(card(panel.root)).toHaveProperty("hidden", false);
       expect(panel.root.activeElement).toBe(panel.input);
       expect(hubs.length).toBe(0); // still never connected
     });
@@ -371,8 +374,11 @@ describe("a site with connected channels", () => {
       await flush();
       expect(card(panel.root)).toHaveProperty("hidden", false);
 
-      const dismissRow = panel.root.querySelector<HTMLButtonElement>(".ago-channel-switcher-row--dismiss")!;
-      dismissRow.click();
+      // `25-191`: the write-in-chat row no longer dismisses - sending an actual message is the one
+      // remaining trigger, the identical send the "sending the first message" describe block above
+      // already proves in isolation.
+      type(panel, "Hello!");
+      pressEnter(panel);
       await flush();
       expect(card(panel.root)).toHaveProperty("hidden", true);
 

@@ -591,6 +591,14 @@ export class ChatWidget {
    * need no reveal logic of their own for it, since it is an ordinary child of `this.panel` on the
    * identical footing `this.messages`/`composer` already are. */
   private channelSwitcherCard: HTMLDivElement | null = null;
+  /** `25-191`: `null` until `buildChannelSwitcherLauncherRow` decides the row should exist at all -
+   * the identical "pays nothing" property `channelSwitcherCard` above already gives its own
+   * placement. Unlike that card, this element's own visibility is not fixed at build time: it is a
+   * sibling of `this.toggle`, not a child of `this.panel`, so nothing about `this.panel.hidden`
+   * hides it for free - `open()`/`close()`/`openForAutoGreeting()` each set this row's own `hidden`
+   * to match, the one piece of reveal/hide logic `channelSwitcherCard`'s own doc comment says that
+   * card needs none of. */
+  private channelSwitcherLauncherRow: HTMLDivElement | null = null;
   private readonly composer: HTMLFormElement;
   /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
    * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
@@ -1253,6 +1261,7 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
+    this.setChannelSwitcherLauncherRowVisible(true);
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     // `25-141`: "read" happens here, not on a later render pass - the transcript is in front of the
@@ -1280,10 +1289,22 @@ export class ChatWidget {
   private close(): void {
     this.isOpen = false;
     this.panel.hidden = true;
+    this.setChannelSwitcherLauncherRowVisible(false);
     this.toggle.setAttribute("aria-expanded", "false");
     this.toggle.setAttribute("aria-label", this.strings.openChat);
     this.focusTrap.deactivate();
     this.toggle.focus();
+  }
+
+  /** `25-191`: the one place this row's own `hidden` is written - `open()`/`close()`/
+   * `openForAutoGreeting()` each call it exactly where they already set `this.panel.hidden`, so this
+   * row's own visibility tracks the panel's one-for-one rather than living the persistent,
+   * always-shown life `25-173` originally gave it. A no-op when the row was never built - a site with
+   * nothing connected, or one left on the card placement instead. */
+  private setChannelSwitcherLauncherRowVisible(visible: boolean): void {
+    if (this.channelSwitcherLauncherRow) {
+      this.channelSwitcherLauncherRow.hidden = !visible;
+    }
   }
 
   /**
@@ -1480,6 +1501,7 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
+    this.setChannelSwitcherLauncherRowVisible(true);
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     // `25-141`: this reveal is "read" too - the backlog item's own words, "both put the transcript in
@@ -1692,12 +1714,18 @@ export class ChatWidget {
     writeInChatRow.type = "button";
     writeInChatRow.className = "ago-channel-switcher-row ago-channel-switcher-row--dismiss";
     writeInChatRow.textContent = this.strings.channelSwitcherWriteInChat;
-    // `adr/0148`: hides the card, marks it dismissed and focuses the composer - never `connect()`.
-    // `completeSend`'s own lazy connect-on-first-send is what actually opens the hub; a control that
-    // sends nothing itself must not undo that laziness, which is exactly the regression the backlog
-    // item names by pointing at `adr/0148` here.
+    // `adr/0148`: focuses the composer - never `connect()`. `completeSend`'s own lazy
+    // connect-on-first-send is what actually opens the hub; a control that sends nothing itself must
+    // not undo that laziness, which is exactly the regression the backlog item names by pointing at
+    // `adr/0148` here.
+    //
+    // `25-191`: no longer dismisses the card. The author's own correction - two independent
+    // dismissal triggers (this click, and `dispatchSend`'s own call for "the visitor's first sent
+    // message") read as one condition doing double duty; the single one that should survive is the
+    // visitor actually sending a message. Choosing to type instead of picking a channel is not the
+    // same fact as having sent something - the card stays exactly as visible after this click as
+    // before it, and `dispatchSend` remains the one place `dismissChannelSwitcher` is ever called.
     writeInChatRow.addEventListener("click", () => {
-      this.dismissChannelSwitcher();
       this.input.focus();
     });
     card.append(writeInChatRow);
@@ -1749,14 +1777,23 @@ export class ChatWidget {
    * opens from (the same `.ago-position-left` class `bootstrapSession` toggles on `this.container` for
    * the toggle/panel themselves - this row follows it rather than choosing a side of its own).
    *
-   * Unlike `loadChannelSwitcherCard`, this has no dismiss concept at all - a persistent row, not an
-   * interruption, so there is no `storage.getChannelSwitcherDismissed()` check and nothing here for
-   * `dismissChannelSwitcher`/`dispatchSend` to hide. A site with nothing connected still builds
-   * nothing, the identical "pays nothing" property the card gives itself.
+   * Still no dismiss concept, unlike `loadChannelSwitcherCard` - there is no
+   * `storage.getChannelSwitcherDismissed()` check here, and nothing for `dismissChannelSwitcher`/
+   * `dispatchSend` to hide permanently. A site with nothing connected still builds nothing, the
+   * identical "pays nothing" property the card gives itself.
    *
-   * A sibling of `this.toggle` inside `this.container` (`.ago-root`), not a child of `this.panel` -
-   * it has to render at the launcher's own height whether the panel is open or closed, which a child
-   * of the panel (`hidden` while closed) could not do.
+   * `25-191`: **no longer a persistent row.** `25-173`'s own original design showed this row whether
+   * the panel was open or closed, on the reasoning that a sibling of `this.toggle` (not a child of
+   * `this.panel`) gets no reveal/hide behaviour from the panel's own `hidden` for free. The author's
+   * own correction: the two placements should differ in *where* the switcher sits, not in *when* it
+   * is visible - a visitor who has not opened the chat should see the plain launcher alone, exactly
+   * as the card placement already shows. `open()`/`close()`/`openForAutoGreeting()` now each call
+   * `setChannelSwitcherLauncherRowVisible` at the identical point they already set `this.panel.hidden`,
+   * so this row's own visibility tracks the panel's one-for-one despite living outside it in the DOM.
+   * Built hidden or shown to match `this.isOpen` at the moment the handshake resolves - the session
+   * promise this method awaits can settle after a visitor has already opened the panel themselves (an
+   * auto-greeting racing a slow handshake, for one), so "always start hidden" would be wrong on that
+   * path.
    */
   private buildChannelSwitcherLauncherRow(session: VisitorSession): void {
     if (session.channelLinks.length === 0) {
@@ -1766,6 +1803,7 @@ export class ChatWidget {
     const size = parseChannelSwitcherIconSize(session.widgetChannelSwitcherIconSize);
     const row = document.createElement("div");
     row.className = `ago-channel-switcher-launcher ago-channel-switcher-launcher--${size}`;
+    row.hidden = !this.isOpen;
     row.setAttribute("role", "group");
     row.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
 
@@ -1774,6 +1812,7 @@ export class ChatWidget {
     }
 
     this.container.append(row);
+    this.channelSwitcherLauncherRow = row;
   }
 
   /**
@@ -1814,10 +1853,11 @@ export class ChatWidget {
   }
 
   /**
-   * `25-149`: the one place both dismissal paths converge - the «Написать в чат» row's own click,
-   * and `dispatchSend`'s own call below for the item's second, independent trigger, "the visitor's
-   * first sent message." Idempotent by construction: a second call (a second message sent, or a click
-   * once the card is already hidden) writes the identical stored value and hides an already-hidden or
+   * `25-149`: dismisses the card, permanently for this visitor identity. `25-191`: `dispatchSend`'s
+   * own call below - "the visitor's first sent message" - is now the *only* caller; the «Написать в
+   * чат» row's own click used to trigger this identically and no longer does (that handler's own
+   * remarks have the reasoning). Idempotent by construction regardless: a second send once the card
+   * is already dismissed writes the identical stored value and hides an already-hidden or
    * already-absent element, never a throw.
    *
    * Reuses `WidgetStorage`'s own per-identity clearing (`VisitorSessionManager.start`'s `17-07`

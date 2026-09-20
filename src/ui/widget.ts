@@ -77,7 +77,7 @@ export const ATTRACT_INITIAL_DELAY_MS = 2_000;
 export const ATTRACT_PULSE_INTERVAL_MS = 4_000;
 
 /** `23-63`: how long one pulse's `ago-toggle--attract` class stays on the launcher - matches (and
- * must keep matching) the `ago-attract` keyframe's own duration in `ui/styles.ts`, since this is what
+ * must keep matching) the `ago-attract` keyframe's own duration in `ui/styles.css`, since this is what
  * tells the JS side of the animation when the CSS side has finished rather than duplicating that
  * number as a CSS `animation-iteration-count` a `setTimeout` could drift out of step with. */
 export const ATTRACT_PULSE_DURATION_MS = 700;
@@ -407,10 +407,10 @@ const CHANNEL_FALLBACK_ICON_PATH =
 /**
  * `25-149`: every colour here is a small, widget-local constant, deliberately independent of
  * `--ago-accent` - the identical "must read against whatever a tenant configured" reasoning
- * `--ago-unread-badge-bg` already states for itself (`ui/styles.ts`). `25-172` narrowed this map's job:
+ * `--ago-unread-badge-bg` already states for itself (`ui/styles.css`). `25-172` narrowed this map's job:
  * since the four real brand icons above carry their own explicit fills (never `currentColor`), this
  * `row.style.color` value now only tints the row's *label text* (via `.ago-channel-switcher-row { color:
- * inherit }` in `ui/styles.ts`) - it no longer doubles as an icon colour. `Telegram`/`WhatsApp`/`Vk`
+ * inherit }` in `ui/styles.css`) - it no longer doubles as an icon colour. `Telegram`/`WhatsApp`/`Vk`
  * were updated to the same authoritative brand hex the icons themselves now use (`#0088CC`/`#2AB540`/
  * `#345E90`), so the label text and the badge read as one colour again despite the two now being
  * independent mechanisms. `Max` is left at its pre-existing placeholder purple: MAX's real mark is a
@@ -429,7 +429,7 @@ const CHANNEL_BRAND_COLORS: Record<string, string> = {
 
 /** `25-149`: the neutral fallback colour, for the identical unrecognised-`kind` case
  * `CHANNEL_FALLBACK_ICON_PATH` covers - `#6b7280`, the same grey `.ago-status`/`.ago-message--system`
- * already use in `ui/styles.ts`, not a new literal invented for this one case. */
+ * already use in `ui/styles.css`, not a new literal invented for this one case. */
 const CHANNEL_FALLBACK_COLOR = "#6b7280";
 
 /**
@@ -552,7 +552,7 @@ export class ChatWidget {
    * genuinely two-dimensional (`ArrowUp`/`ArrowDown` cross rows, `ArrowLeft`/`ArrowRight` cross
    * columns) - a listbox's own one-dimensional model would have to fake the vertical axis, which a
    * grid already names correctly. Anchored to `.ago-composer-controls` (`position: relative` there,
-   * `ui/styles.ts`) rather than a second, differently-styled overlay mechanism - reuses this row's
+   * `ui/styles.css`) rather than a second, differently-styled overlay mechanism - reuses this row's
    * own sizing/spacing rather than inventing a new surface. */
   private readonly emojiPicker: HTMLDivElement;
   /** `25-120`: every cell button in `emojiPicker`, in the same row-major order as
@@ -976,7 +976,7 @@ export class ChatWidget {
 
     // `23-62`: a real button now, in the place `23-61` reserved for it - a down-arrow icon, the
     // author's own decision (backlog item's own "Decision" line). Sized and laid out identically to
-    // `attachButton` (`.ago-save` mirrors `.ago-attach` in `ui/styles.ts`) so the row keeps reading as
+    // `attachButton` (`.ago-save` mirrors `.ago-attach` in `ui/styles.css`) so the row keeps reading as
     // one aligned icon strip; `aria-label` carries the whole accessible name, the same icon-only shape
     // `sendButton` above already uses, since the glyph itself says nothing a screen reader can use.
     this.saveButton = document.createElement("button");
@@ -994,7 +994,7 @@ export class ChatWidget {
     this.saveButton.addEventListener("click", () => guardAsync(() => this.saveConversation()));
 
     // `23-61`: the field's own full-width row, alone - the composer's whole reason for existing is
-    // this field, and `.ago-composer-row` styling (`ui/styles.ts`) is what actually widens it, this
+    // this field, and `.ago-composer-row` styling (`ui/styles.css`) is what actually widens it, this
     // is only what stops the send button from sharing the row `attachButton` used to narrow it from.
     // Send stays beside the field rather than moving to the row below with `attachButton`: it is "the
     // one control that must never become hard to hit" (the backlog item's own words), so it stays
@@ -1390,12 +1390,12 @@ export class ChatWidget {
    * rather than a CSS `animation-iteration-count`: a fixed iteration count can only ever *run to
    * completion*, it cannot be told to stop mid-course the instant the panel opens, which is exactly
    * the guarantee this item's scope asks for ("nothing moves once the panel is open"). The motion
-   * itself is still pure CSS (`ui/styles.ts`'s `.ago-toggle--attract`/`@keyframes ago-attract`) - this
+   * itself is still pure CSS (`ui/styles.css`'s `.ago-toggle--attract`/`@keyframes ago-attract`) - this
    * method only ever adds and removes one class name, never touches a style property directly, so the
    * bundle pays nothing beyond that toggle logic for what stays a CSS animation.
    *
    * <b>`prefers-reduced-motion` wins over the tenant's own setting, unconditionally.</b> Checked here,
-   * not only left to the CSS media query `ui/styles.ts` also gates the keyframe behind: a tenant
+   * not only left to the CSS media query `ui/styles.css` also gates the keyframe behind: a tenant
    * cannot consent to repeated motion on a visitor's behalf (this item's own scope), so the widget
    * must not even *attempt* to animate for a visitor who has told their browser they don't want that -
    * asserted at the JS level is what makes that a fact a test can observe, rather than trusting that
@@ -1799,7 +1799,7 @@ export class ChatWidget {
    * `25-173`: the "below launcher" renderer - `loadChannelSwitcher`'s other branch, chosen instead of
    * `loadChannelSwitcherCard` when `ChannelSwitcherPlacement` is `"BelowLauncher"`. A horizontal row
    * of small circular icons, one per connected channel, vertically centred on `this.toggle`
-   * (`.ago-toggle`, 56px/`3.5rem`) - `ui/styles.ts`'s own `.ago-channel-switcher-launcher` rule
+   * (`.ago-toggle`, 56px/`3.5rem`) - `ui/styles.css`'s own `.ago-channel-switcher-launcher` rule
    * positions it, starting right after the toggle and growing toward whichever side the panel already
    * opens from (the same `.ago-position-left` class `bootstrapSession` toggles on `this.container` for
    * the toggle/panel themselves - this row follows it rather than choosing a side of its own).
@@ -2715,7 +2715,7 @@ export class ChatWidget {
    * `23-58`: renders as a sibling placed right *after* `bubble` via `insertAdjacentElement`, never
    * appended inside it - `bubble` here is the visitor's own accent-colored message
    * (`.ago-message--visitor`), and this control's light-grey text is contrast-checked against the
-   * panel's white background (`ui/styles.ts`'s own `.ago-contact-capture-intro-link` rule), not
+   * panel's white background (`ui/styles.css`'s own `.ago-contact-capture-intro-link` rule), not
    * against that bubble's fill; `insertAdjacentElement` keeps the control anchored to *this* message
    * regardless of what else has since been appended to `this.messages`, which a plain
    * `this.messages.appendChild` would not.

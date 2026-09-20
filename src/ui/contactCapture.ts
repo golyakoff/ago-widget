@@ -12,7 +12,7 @@ import { formatPhoneInput } from "./phoneFormat.js";
  * message at all, it POSTs straight to `Ago.Chat.Application.UseCases.RecordVisitorContactDetail`
  * (`contactDetails.ts`), so it has no `contentKind` to speak of and reusing `ago-primitive-form`'s own
  * CSS class names here would misname a structurally unrelated thing as one of the four. New,
- * similarly-shaped class names exist for it instead (`ui/styles.ts`'s own `.ago-contact-capture*` rules).
+ * similarly-shaped class names exist for it instead (`ui/styles.css`'s own `.ago-contact-capture*` rules).
  *
  * <b>Two modes exist in `decisions.md` §4 - verified and unverified. Only the unverified one is built
  * here.</b> The verified mode's own caller (booking, `14-15`/`20-09`) is out of this item's scope; this

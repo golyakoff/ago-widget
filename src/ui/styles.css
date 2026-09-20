@@ -1,9 +1,3 @@
-/**
- * Injected inside the Shadow DOM root only - never touches the host page's own stylesheet
- * (embeddable-widget skill's Hard constraints). Sizes are `rem`/`em` and layout is flex-based so
- * the panel stays usable at 200% browser zoom rather than clipping at a fixed pixel size.
- */
-export const widgetStyles = /* css */ `
   :host {
     all: initial;
     /* 11-03: the widget's own built-in default - overridden per-instance via
@@ -916,4 +910,3 @@ export const widgetStyles = /* css */ `
     text-decoration: underline;
     cursor: pointer;
   }
-`;

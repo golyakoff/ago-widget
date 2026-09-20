@@ -71,20 +71,45 @@ export function measureContrastViolations(): ContrastResult {
   const AA_LARGE_RATIO = 3;
 
   function parseColor(value: string): Rgba | null {
-    const match = /rgba?\(([^)]+)\)/.exec(value);
-    if (!match) {
-      return null;
+    const rgbMatch = /rgba?\(([^)]+)\)/.exec(value);
+    if (rgbMatch) {
+      const parts = rgbMatch[1].split(",").map((part) => parseFloat(part.trim()));
+      if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) {
+        return null;
+      }
+      return {
+        r: parts[0],
+        g: parts[1],
+        b: parts[2],
+        a: parts.length > 3 ? parts[3] : 1,
+      };
     }
-    const parts = match[1].split(",").map((part) => parseFloat(part.trim()));
-    if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) {
-      return null;
+
+    // `25-169`: `getComputedStyle` resolves a `color-mix()`-derived `background-color` to the CSS
+    // Color 4 `color(srgb R G B[ / A])` function - channels as 0-1 floats, never the legacy `rgb()`
+    // this parser already handled - rather than the `rgb(0-255)` form every value in this codebase
+    // produced before `25-169` introduced the first `color-mix()` use. Found live: the widget's own
+    // header rendered a correct, fully opaque gradient, but this parser returned `null` for its
+    // background-color, so the walk-up-ancestors loop below skipped past it entirely and measured
+    // the header's white text against the demo page's own white background instead - a false
+    // positive in the check, not a real contrast defect. `srgb` is the only color space `color-mix(in
+    // srgb, ...)` (the only color space this codebase uses) ever produces; not extended to
+    // `display-p3`/others since nothing here emits those.
+    const colorFnMatch = /^color\(srgb\s+([^)/]+?)(?:\s*\/\s*([\d.]+))?\)$/.exec(value.trim());
+    if (colorFnMatch) {
+      const channels = colorFnMatch[1].trim().split(/\s+/).map((part) => parseFloat(part));
+      if (channels.length !== 3 || channels.some((n) => Number.isNaN(n))) {
+        return null;
+      }
+      return {
+        r: channels[0] * 255,
+        g: channels[1] * 255,
+        b: channels[2] * 255,
+        a: colorFnMatch[2] !== undefined ? parseFloat(colorFnMatch[2]) : 1,
+      };
     }
-    return {
-      r: parts[0],
-      g: parts[1],
-      b: parts[2],
-      a: parts.length > 3 ? parts[3] : 1,
-    };
+
+    return null;
   }
 
   function channelToLinear(channel255: number): number {

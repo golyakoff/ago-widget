@@ -49,7 +49,9 @@ export const widgetStyles = /* css */ `
     height: 3.5rem;
     border-radius: 50%;
     border: none;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     font-size: 1.5rem;
     cursor: pointer;
@@ -163,7 +165,9 @@ export const widgetStyles = /* css */ `
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem 1rem;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
   }
 
@@ -258,7 +262,9 @@ export const widgetStyles = /* css */ `
 
   .ago-message--visitor {
     align-self: flex-end;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     border-bottom-right-radius: 0.125rem;
   }
@@ -387,7 +393,9 @@ export const widgetStyles = /* css */ `
     justify-content: center;
     border: none;
     border-radius: 50%;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     padding: 0;
     cursor: pointer;
@@ -557,7 +565,9 @@ export const widgetStyles = /* css */ `
     margin: 0 0.75rem 0.5rem;
     border: none;
     border-radius: 0.5rem;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     font: inherit;
     font-weight: 600;
@@ -694,7 +704,9 @@ export const widgetStyles = /* css */ `
     align-self: flex-start;
     border: none;
     border-radius: 0.5rem;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     padding: 0.375rem 0.75rem;
     cursor: pointer;
@@ -764,7 +776,9 @@ export const widgetStyles = /* css */ `
     align-self: flex-start;
     border: none;
     border-radius: 0.5rem;
-    background: var(--ago-accent);
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
     padding: 0.375rem 0.75rem;
     cursor: pointer;

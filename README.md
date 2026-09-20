@@ -149,6 +149,22 @@ headroom before this item added anything, which is not enough room for a real, w
 size - the same "measured, not invented" posture this section already asks for, applied to the ceiling
 itself rather than only to what sits under it. Leaves 0.9 KB of the new 46 KB budget unused.
 
+**44.5 KB gzipped** (162.6 KB raw, minified), `25-172` measured retroactively 2026-09-20 - this item
+landed (`04bd125`) without its own entry, found and filled in while `25-173` measured its own baseline
+against this same commit. Checked directly the same way this section always asks for: `04bd125`
+itself for the "after" figure, then `04bd125~1`'s two changed files (`ui/widget.ts`,
+`ui/channelSwitcher.test.ts`) checked out over it for the "before" one, built both, real numbers
+either way - **+3.3 KB gzipped** over the 41.2 KB baseline immediately below. That 41.2 KB baseline is
+itself higher than the 36.4 KB this section's own `25-120` entry records two paragraphs down -
+several items (at least `25-169`, plus others touching `ui/widget.ts` in between) landed on `main`
+between that measurement and this one without one of their own, the same drift this section has
+already documented once before (see the `25-27` entry further down, "not chased further than
+confirming it" - the identical call here, for the identical reason). The `+3.3 KB` is the whole of
+`25-172` itself: the four real brand-icon SVGs (Telegram/WhatsApp/VK/MAX) inlined as path data in
+`ui/widget.ts`, replacing the four hand-drawn placeholder glyphs - no dependency was added. Leaves
+0.5 KB of the 45 KB budget unused at the time this landed - the reason `25-173`'s own entry above
+had to raise the ceiling before it could add anything at all.
+
 **36.4 KB gzipped** (135.2 KB raw, minified), `25-120` measured 2026-09-17 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
 run build`) - **+1.3 KB gzipped** over the 35.1 KB baseline immediately below, checked directly the

@@ -644,6 +644,13 @@ export const widgetStyles = /* css */ `
     align-items: center;
     right: calc(100% + var(--acsl-gap));
   }
+  /* 25-191: this row's own hidden attribute is now written on every open/close (widget.ts's
+     setChannelSwitcherLauncherRowVisible) - without this, the class's own unconditional
+     display: flex above would outrank the attribute's UA-stylesheet display: none, the identical
+     reason .ago-panel[hidden] already needs its own override. */
+  .ago-channel-switcher-launcher[hidden] {
+    display: none;
+  }
   .ago-root.ago-position-left .ago-channel-switcher-launcher {
     right: auto;
     left: calc(100% + var(--acsl-gap));

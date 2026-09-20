@@ -190,14 +190,33 @@ describe("a site on the new placement (BelowLauncher)", () => {
     expect(launcherIcons(panel.root)).toHaveLength(4);
   });
 
-  it("renders regardless of whether the panel is open or closed - a persistent row, not a panel child", async () => {
-    stubFetch({ channelLinks: twoChannels() });
-    const panel = await mountWidget();
-    await flush();
+  // `25-191`: the row is still a sibling of the toggle, not a child of the panel - but its own
+  // `hidden` now tracks the panel's open/close one-for-one (`setChannelSwitcherLauncherRowVisible`),
+  // reversing `25-173`'s original "persistent regardless of open/closed" design.
+  describe("visibility tracks the panel's own open/closed state", () => {
+    it("is hidden before the panel is ever opened", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
 
-    // Never opened - panel.toggle.click() is deliberately not called here.
-    expect(launcherRow(panel.root)).not.toBeNull();
-    expect(launcherIcons(panel.root)).toHaveLength(2);
+      // Never opened - panel.toggle.click() is deliberately not called here.
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+      expect(launcherIcons(panel.root)).toHaveLength(2);
+    });
+
+    it("becomes visible once the panel opens, and hides again once it closes", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      panel.toggle.click(); // open
+      await flush();
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      panel.toggle.click(); // close
+      await flush();
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
   });
 
   it("renders each icon as a real new-tab link carrying the server's own URL", async () => {
@@ -285,8 +304,10 @@ describe("a site on the new placement (BelowLauncher)", () => {
     expect(launcherRow(panel.root)).not.toBeNull();
   });
 
-  // 25-173's own explicit Scope: no dismiss concept at all - a persistent row, never an interruption.
-  describe("no dismiss concept", () => {
+  // 25-173's own explicit Scope, still true after 25-191: no *permanent-dismiss* concept at all -
+  // unlike the above-composer card, nothing here ever stores "never show this again" for a visitor
+  // identity. Open/close visibility (proven above) is a different, unrelated fact from dismissal.
+  describe("no permanent-dismiss concept", () => {
     it("has no dismiss control anywhere in the row", async () => {
       stubFetch({ channelLinks: twoChannels() });
       const panel = await mountWidget();
@@ -295,7 +316,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
       expect(panel.root.querySelector(".ago-channel-switcher-row--dismiss")).toBeNull();
     });
 
-    it("stays visible after sending a message - nothing in this widget ever hides it", async () => {
+    it("stays visible after sending a message, while the panel is still open", async () => {
       stubFetch({ channelLinks: twoChannels() });
       joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
@@ -309,7 +330,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
       );
       await flush();
 
-      expect(launcherRow(panel.root)).not.toBeNull();
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
       expect(launcherIcons(panel.root)).toHaveLength(2);
     });
 

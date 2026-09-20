@@ -132,6 +132,17 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**45.4 KB gzipped** (167.1 KB raw, minified), `25-186` measured 2026-09-20 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
+run build`) - **+0.3 KB gzipped** over the 45.1 KB baseline immediately below, checked directly the
+same way (stash this item's own changes, build, unstash, build again) rather than trusted. The
+`+0.3 KB` is the whole of this item: `ui/contactCapture.ts`'s new, non-interactive
+`.ago-contact-capture-phone-wrap`/`.ago-contact-capture-phone-prefix` markup (a static "🇷🇺 +7" beside
+the existing phone field) and its CSS in `ui/styles.ts` - `phoneFormat.ts`'s own mask is untouched, no
+dependency was added, and no new i18n string was needed (the prefix is `aria-hidden`, decorative only;
+`phoneInput`'s own existing `aria-label` already names the field for a screen reader). Leaves 0.6 KB of
+the 46 KB budget unused.
+
 **45.1 KB gzipped** (165.8 KB raw, minified), `25-173` measured 2026-09-20 against a clean build of
 this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
 run build`) - **+0.6 KB gzipped** over the 44.5 KB baseline immediately before this item's own

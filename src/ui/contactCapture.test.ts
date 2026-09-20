@@ -160,6 +160,40 @@ describe("renderContactCaptureControl", () => {
     expect(input.value).toBe("+1555");
   });
 
+  // `25-186`: the flag+dialling-code prefix - `ago-console`'s own `PhoneInput.tsx` gets the identical
+  // treatment; there is no React here, so this is the parallel plain-DOM markup/CSS instead of a
+  // shared import (`contactCapture.ts`'s own remarks on the phone field say why).
+  it("wraps the phone field in .ago-contact-capture-phone-wrap with a 🇷🇺 +7 prefix beside it", () => {
+    const control = renderContactCaptureControl(en, vi.fn());
+
+    const wrap = control.querySelector<HTMLDivElement>(".ago-contact-capture-phone-wrap");
+    expect(wrap).not.toBeNull();
+    const prefix = wrap!.querySelector(".ago-contact-capture-phone-prefix");
+    expect(prefix).not.toBeNull();
+    expect(prefix!.textContent).toBe("🇷🇺 +7");
+    expect(prefix!.getAttribute("aria-hidden")).toBe("true");
+    // The real phone input lives inside that same wrapper, not as a sibling beside it - the mask's
+    // own wiring below only means anything if this is the same element the mask listener is on.
+    expect(wrap!.contains(phoneInput(control))).toBe(true);
+  });
+
+  // `25-186`'s own regression risk, stated explicitly: the mask above (`25-28`) is wired directly on
+  // the phone `<input>`, but that input now sits one level deeper in the DOM - nested inside
+  // `.ago-contact-capture-phone-wrap` rather than a direct child of the form. Typing through the
+  // wrapper's own reference to the input, not the flat `phoneInput(control)` helper the pre-25-186
+  // tests above use, is what makes this a real proof that the new nesting did not silently detach the
+  // `input` listener - a fails-before check against a build that mounted the listener on the wrong node.
+  it("still reformats through the mask once the field is nested inside the new wrapper", () => {
+    const control = renderContactCaptureControl(en, vi.fn());
+    const wrap = control.querySelector<HTMLDivElement>(".ago-contact-capture-phone-wrap")!;
+    const input = wrap.querySelector<HTMLInputElement>('input[type="tel"]')!;
+
+    setValue(input, "9");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(input.value).toBe("+7 (9");
+  });
+
   // `25-28`: a real, named regex check runs before submit - not just `type="email"`'s own loose
   // native behaviour, which `jsdom`'s constraint validation would not catch here anyway since this
   // is a programmatically dispatched submit (the same gap the pre-existing required-field guards

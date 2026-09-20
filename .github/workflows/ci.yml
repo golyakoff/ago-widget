@@ -98,14 +98,21 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-  # `15-07`/`adr/0051`: the two public demo images are published to GHCR from here, not built on the
+  # `15-07`/`adr/0051`: the public demo image is published to GHCR from here, not built on the
   # deployment node. Only on `main`, and only after build-test passed - a pull request never
   # publishes, so a fork or a draft branch cannot put an image into the registry a deploy might
   # later reach for. Modelled directly on ago-chat's own publish-images job (adr/0047).
   #
-  # One repository, two images: the widget bundle is byte-identical between them and only the
-  # embedded demo page differs (Dockerfile's DEMO_PAGE_DIR). That difference lives in the image
-  # *name*, never in the tag, so both images' SHA tags keep meaning exactly one thing.
+  # `25-182`: this used to publish two demo images (ago-demo-shop1, ago-demo-shop2) from the same
+  # Dockerfile, differing only in the embedded demo page (DEMO_PAGE_DIR). ago-demo-shop2 is gone - the
+  # second demo tenant it served had no route left in ago-deploy and no link from ago-landing reaching
+  # it - so only ago-demo-shop1 remains here. The Dockerfile's own DEMO_PAGE_DIR mechanism and
+  # public-demo-2/ page are left in place as dead code rather than removed - nothing in either this
+  # repository or ago-deploy still builds an image from them (the managing session also cleaned up
+  # `ago-deploy`'s own `k8s/build-static-images.sh` reference, this item's own report), but
+  # public-demo-2's own removal from this repository's real behavior (`ui/widget.ts`/`boot.ts`'s
+  # per-page logic, see this item's own report) is a real, separate follow-up rather than a
+  # mechanical deletion.
   publish-images:
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -127,8 +134,9 @@ jobs:
       # Note what is NOT passed here: AGO_API_BASE_URL. The Dockerfile carries the deployment's own
       # value as a committed default (adr/0051), so this image is a function of the commit alone -
       # which is the only thing that lets ${{ github.sha }} keep being a truthful name for it.
-      # DEMO_PAGE_DIR is passed, and is not an exception: it picks which of the two images is being
-      # built, and that choice is already in the image name.
+      # DEMO_PAGE_DIR is passed, and is not an exception: it names which page this one image embeds,
+      # and that choice is already in the image name (`25-182`: it used to also pick between two
+      # images this job built; now there is only the one).
       - name: Build the images
         env:
           DOCKER_BUILDKIT: "1"
@@ -163,7 +171,6 @@ jobs:
             echo "::endgroup::"
           }
           build_one ago-demo-shop1 public-demo
-          build_one ago-demo-shop2 public-demo-2
 
       # Proves the commit actually reached the served files, rather than only the tag. Cheap, and it
       # is the exact property 15-07 exists for - a published image that cannot name its own commit
@@ -174,7 +181,7 @@ jobs:
       - name: Check the images can name their own commit
         run: |
           set -euo pipefail
-          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             served=$(docker run --rm --entrypoint cat "${repo}:${{ github.sha }}" /usr/share/nginx/html/version.json)
             echo "${name}: ${served}"
@@ -193,7 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
-          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             echo "::group::${repo}"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
@@ -210,7 +217,7 @@ jobs:
       - name: Push the images
         run: |
           set -euo pipefail
-          for name in ago-widget-assets ago-demo-shop1 ago-demo-shop2; do
+          for name in ago-widget-assets ago-demo-shop1; do
             repo="ghcr.io/${{ github.repository_owner }}/${name}"
             docker push "${repo}:${{ github.sha }}"
             docker push "${repo}:main"
@@ -223,7 +230,7 @@ jobs:
             echo
             echo "Deploy with: \`./deploy.sh demo-shop1 ${{ github.sha }}\` (ago-deploy/k8s, on the node)"
             echo
-            for n in widget-assets demo-shop1 demo-shop2; do
+            for n in widget-assets demo-shop1; do
               echo "- \`ghcr.io/${{ github.repository_owner }}/ago-${n}:${{ github.sha }}\`"
             done
           } >> "$GITHUB_STEP_SUMMARY"

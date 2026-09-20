@@ -1,10 +1,19 @@
 # Builds this repository's widget bundle and packages it, alongside a public demo page, into one
 # minimal static-file-serving image.
 #
-# `15-07`/`adr/0051`: CI publishes this to GHCR as ghcr.io/golyakoff/ago-demo-shop1 and
-# ago-demo-shop2, tagged with the full 40-character commit SHA - the same shape adr/0047 gave the
-# three Ago.Chat.* hosts. It supersedes adr/0026's "build it on the VPS and import it into
-# containerd", which is now the fallback rather than the mechanism.
+# `15-07`/`adr/0051`: CI publishes this to GHCR as ghcr.io/golyakoff/ago-demo-shop1, tagged with the
+# full 40-character commit SHA - the same shape adr/0047 gave the three Ago.Chat.* hosts. It
+# supersedes adr/0026's "build it on the VPS and import it into containerd", which is now the
+# fallback rather than the mechanism.
+#
+# `25-182`: CI used to also publish `ago-demo-shop2` from this same file (`DEMO_PAGE_DIR=public-demo-2`
+# below) - the second demo tenant it served had no route left in ago-deploy and no link from
+# ago-landing reaching it, so that publish step is gone. `DEMO_PAGE_DIR` and `public-demo-2/` stay in
+# the repository as dead code rather than being deleted with it: nothing left in either this
+# repository or `ago-deploy` builds an image from them (the managing session cleaned up
+# `k8s/build-static-images.sh`'s own reference too), but `public-demo-2`'s per-page behavior baked
+# into `ui/widget.ts`/`boot.ts` is a real, separate follow-up, not a mechanical deletion - see this
+# item's own report.
 #
 # **This Dockerfile takes no environment input from its build command, and that is the whole point**
 # (adr/0051). A build arg that varies per invocation would make ago-demo-shop1:<sha> mean "the demo

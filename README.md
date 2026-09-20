@@ -114,10 +114,18 @@ mechanism, and this must not pre-empt its shape.
 
 ## Publishing
 
-CI publishes two images to GHCR on every push to `main` -
-`ghcr.io/golyakoff/ago-demo-shop{1,2}:<40-char commit SHA>` - both from this repository's
-`Dockerfile`, differing only in which demo page is embedded (`DEMO_PAGE_DIR`). Publishing needs no
-secret beyond the workflow's own `GITHUB_TOKEN` (`adr/0047`).
+CI publishes `ghcr.io/golyakoff/ago-demo-shop1:<40-char commit SHA>` to GHCR on every push to
+`main`, from this repository's `Dockerfile`. Publishing needs no secret beyond the workflow's own
+`GITHUB_TOKEN` (`adr/0047`).
+
+`25-182`: CI used to also publish `ago-demo-shop2` from the same `Dockerfile`, differing only in
+which demo page was embedded (`DEMO_PAGE_DIR`) - the second demo tenant it served had no route left
+in `ago-deploy` and no link from `ago-landing` reaching it, so that publish step is gone.
+`DEMO_PAGE_DIR` and `public-demo-2/` stay in the repository as dead code rather than being removed
+with it: nothing left in either this repository or `ago-deploy` builds an image from them any more
+(the managing session also cleaned up `k8s/build-static-images.sh`'s own reference), but
+`public-demo-2`'s own per-page behavior baked into `ui/widget.ts`/`boot.ts` is a real, separate
+follow-up rather than a mechanical deletion.
 
 The `Dockerfile` deliberately takes **no environment input from its build command**: it carries the
 demo deployment's own API and console origins as committed defaults, so `ago-demo-shop1:<sha>` is a

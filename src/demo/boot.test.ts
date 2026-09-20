@@ -1,11 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  applyOwnTenantPageCopy,
-  bootWidget,
-  demoNoticeFor,
-  resolveDemoPageLocale,
-  wireMintButton,
-} from "./boot.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { applyOwnTenantPageCopy, bootWidget, demoNoticeFor, wireMintButton } from "./boot.js";
 
 describe("bootWidget", () => {
   beforeEach(() => {
@@ -28,13 +22,13 @@ describe("bootWidget", () => {
   });
 
   /**
-   * `#337`: the whole reason this page cannot rely on `adr/0092`'s origin inference.
-   * `public-demo`/`public-demo-2` each serve their own copy of the bundle from their own origin
-   * (`demo-shop1.reserve-me.ru`/`demo-shop2.reserve-me.ru`), so a script tag with only `data-site` and
-   * no `data-api` would have `config.ts` infer the *demo shop's* origin as the API to call - both
-   * public demo pages would talk to themselves instead of `Ago.Chat.Api`. This asserts the attribute
-   * a demo-shop-shaped embed needs to win `config.ts`'s resolution order at step one, and would fail
-   * exactly the way a silent regression here would: no `data-api` attribute, or the wrong value.
+   * `#337`: the whole reason this page cannot rely on `adr/0092`'s origin inference. `public-demo`
+   * serves its own copy of the bundle from its own origin (`demo-shop1.reserve-me.ru`), so a script
+   * tag with only `data-site` and no `data-api` would have `config.ts` infer the *demo shop's* origin
+   * as the API to call - the public demo page would talk to itself instead of `Ago.Chat.Api`. This
+   * asserts the attribute a demo-shop-shaped embed needs to win `config.ts`'s resolution order at step
+   * one, and would fail exactly the way a silent regression here would: no `data-api` attribute, or
+   * the wrong value.
    */
   it("sets data-api explicitly, so a demo shop's own origin can never be inferred instead", () => {
     bootWidget(document, "demo_site", "public", "https://chat-api.reserve-me.ru");
@@ -79,47 +73,9 @@ describe("demoNoticeFor", () => {
   });
 });
 
-/**
- * `8-13`: the one function that decides which of the two locale tables `applyOwnTenantPageCopy`
- * reaches for. Extracted and tested on its own for the same reason `demoNoticeFor` is - a page's
- * `<html lang>` is the one input a future third locale would have to be recognised from, and a
- * regression here would be silent (both demo pages currently declare a value this function
- * recognises, so nothing downstream would fail loudly).
- */
-describe("resolveDemoPageLocale", () => {
-  afterEach(() => {
-    document.documentElement.lang = "";
-  });
-
-  it("resolves demo-shop1's own declared locale to ru", () => {
-    document.documentElement.lang = "ru";
-    expect(resolveDemoPageLocale(document)).toBe("ru");
-  });
-
-  it("resolves demo-shop2's own declared locale to en", () => {
-    document.documentElement.lang = "en";
-    expect(resolveDemoPageLocale(document)).toBe("en");
-  });
-
-  it("falls back to en for a page that never set lang, rather than throwing or guessing ru", () => {
-    document.documentElement.lang = "";
-    expect(resolveDemoPageLocale(document)).toBe("en");
-  });
-
-  it("is case-insensitive, since <html lang> is not guaranteed lower-case", () => {
-    document.documentElement.lang = "RU";
-    expect(resolveDemoPageLocale(document)).toBe("ru");
-  });
-});
-
 describe("applyOwnTenantPageCopy", () => {
   beforeEach(() => {
     document.body.replaceChildren();
-    document.documentElement.lang = "";
-  });
-
-  afterEach(() => {
-    document.documentElement.lang = "";
   });
 
   /**
@@ -144,48 +100,35 @@ describe("applyOwnTenantPageCopy", () => {
     return { banner, privacyNote };
   }
 
-  it("replaces the page banner's public warning with what is true on a minted tenant", () => {
+  /**
+   * `8-13`/`25-187`: the replacement text is fixed Russian now, not resolved from the page's own
+   * `<html lang>` - `public-demo/index.html` (the only page `boot.ts` still runs on) is `lang="ru"`,
+   * so a resolver reading that attribute would always have answered `"ru"` anyway. This asserts the
+   * fixed table's own content directly, rather than faking a `<html lang>` first to reach it.
+   */
+  it("replaces the page banner's public warning with the Russian sentence true on a minted tenant", () => {
     const { banner } = seedSharedPageCopy();
 
     expect(applyOwnTenantPageCopy(document).banner).toBe(true);
 
     const replaced = banner.textContent ?? "";
-    expect(replaced).toContain("tenant of your own");
-    expect(replaced).toContain("nobody but you can read what you type here");
-    // The claim this item exists to remove, in the two shapes the original copy used.
+    expect(replaced).toContain("собственный тенант");
+    // The claim this item exists to remove, in the two shapes the original English copy used.
     expect(replaced).not.toContain("anyone can read");
     expect(replaced).not.toContain("including yours");
-  });
-
-  /**
-   * `8-13`: the bug, reproduced. Before this item both sentences were English literals, swapped into
-   * `demo-shop1` - a page declared `lang="ru"` - unconditionally. This asserts the replacement text
-   * itself is Russian on a Russian-declared page, not merely that a swap happened.
-   */
-  it("replaces both blocks with the Russian sentences on a page declared lang=\"ru\"", () => {
-    document.documentElement.lang = "ru";
-    const { banner, privacyNote } = seedSharedPageCopy();
-
-    expect(applyOwnTenantPageCopy(document)).toEqual({ banner: true, privacyNote: true });
-
-    expect(banner.textContent).toContain("собственный тенант");
-    expect(privacyNote.textContent).toContain("тенанту, на котором вы находитесь");
-    // The English literals this item removed must not survive as a fallback.
-    expect(banner.textContent).not.toContain("tenant of your own");
-    expect(privacyNote.textContent).not.toContain("never the tenant you are on");
   });
 
   /**
    * The third place the same claim lived, and the one a source reading missed - it was found by
    * walking the built page in a browser, which is what the item's own Done-when asks for.
    */
-  it("replaces the safety card's privacy paragraph too", () => {
+  it("replaces the safety card's privacy paragraph too, in Russian", () => {
     const { privacyNote } = seedSharedPageCopy();
 
     expect(applyOwnTenantPageCopy(document).privacyNote).toBe(true);
 
     const replaced = privacyNote.textContent ?? "";
-    expect(replaced).toContain("never the tenant you are on");
+    expect(replaced).toContain("тенанту, на котором вы находитесь");
     expect(replaced).not.toContain("readable by any stranger");
     expect(replaced).not.toContain("Treat this chat as a public one");
   });
@@ -211,11 +154,11 @@ describe("applyOwnTenantPageCopy", () => {
 
   /**
    * Same defensive shape as the mint button: a page missing its markup still boots its widget,
-   * because the widget is the demo and the copy is commentary on it. `demo-shop2` genuinely has no
-   * safety card, so a missing privacy note is the ordinary case rather than a fault - which is why
-   * each element is reported separately instead of collapsing into one boolean.
+   * because the widget is the demo and the copy is commentary on it. The boolean per element is what
+   * would report a future markup edit that accidentally drops one of these ids - distinguishing "not
+   * there" from "not swapped" instead of collapsing both into one answer.
    */
-  it("reports each block separately, so a page without a safety card is not a failure", () => {
+  it("reports each block separately, so a page missing one element is not a failure", () => {
     const banner = document.createElement("p");
     banner.id = "ago-demo-public-notice";
     banner.textContent = "This is a public demo.";

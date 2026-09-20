@@ -97,7 +97,7 @@ export const ATTRACT_PULSE_DURATION_MS = 700;
 const CONVERSATION_CLOSED_HUB_ERROR_PREFIX = "Conversation.InvalidState: ";
 
 /**
- * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1`/`demo-shop2` (public) or a
+ * `8-06`/`8-11`: the two fixed demo sentences a stranger on `demo-shop1` (public) or a
  * tenant minted by `8-07`'s button (private) must have read before typing - three short statements of
  * fact for the public case, a precise reassurance plus the tenant's own disposability for the private
  * one. Full reasoning for both sentences' wording stays where it always has: `i18n/en.ts`'s own

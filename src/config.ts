@@ -53,7 +53,7 @@
  * Which of the widget's own demo sentences to render inside the panel, if any.
  *
  * - `"public"` - `8-06`'s warning. Everything typed here is readable by anyone with the published
- *   operator login. True on the shared demo shops.
+ *   operator login. True on the shared demo shop.
  * - `"private"` - `8-11`'s counterpart, for a tenant minted by `8-07`'s button: only the credentials
  *   this visitor was just given can read it, and the whole tenant expires.
  * - `"none"` - a real embed. Every shop that is not us gets this, and gets it by saying nothing.

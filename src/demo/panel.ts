@@ -50,7 +50,7 @@ export function renderOutcome(container: HTMLElement, outcome: MintOutcome, now:
       container.appendChild(
         renderNotice(
           "Not available here",
-          "This deployment has demo tenants switched off. The two shared demo shops below still work.",
+          "This deployment has demo tenants switched off. The shared demo shop below still works.",
         ),
       );
       return;

@@ -13,7 +13,7 @@
  * `src/demo/` is imported by `src/index.ts`, and nothing here imports the widget.
  */
 import type { DemoNotice } from "../config.js";
-import { getStrings, type SupportedLocale } from "../i18n/resolve.js";
+import { getStrings } from "../i18n/resolve.js";
 import { mintDemoTenant } from "./mint.js";
 import { renderOutcome } from "./panel.js";
 import { resolveDemoSiteKey } from "./siteKey.js";
@@ -34,9 +34,9 @@ declare const __AGO_DEFAULT_API_BASE_URL__: string;
  * parameter rather than reading the module-level `declare const` here, so a test can supply a
  * demo-shop-shaped value and prove it wins). `config.ts`'s resolution order is `data-api` first,
  * then the script's own origin - and this page's script tag has `src="./widget.js"`, resolved by
- * the DOM against *this page's own origin* (`demo-shop1`/`demo-shop2`), which is never the API's.
+ * the DOM against *this page's own origin* (`demo-shop1`), which is never the API's.
  * Without this attribute, `adr/0092`'s origin-inference would read this demo page's own address as
- * the API to call and both public demo pages would talk to themselves instead of `Ago.Chat.Api`.
+ * the API to call and the public demo page would talk to itself instead of `Ago.Chat.Api`.
  */
 export function bootWidget(
   doc: Document,
@@ -78,26 +78,9 @@ export function bootWidget(
  * it: the decision is a pure function, the wiring is what stays untested.
  */
 export function demoNoticeFor(siteKey: string, fallbackSiteKey: string): DemoNotice {
-  // A page serving its own baked-in key is one of the shared demo shops, and `8-06`'s warning is
-  // exactly right there. Anything else arrived through a minted `visitorUrl`.
+  // A page serving its own baked-in key is the shared demo shop, and `8-06`'s warning is exactly
+  // right there. Anything else arrived through a minted `visitorUrl`.
   return siteKey === fallbackSiteKey ? "public" : "private";
-}
-
-/**
- * `8-13`: the one locale signal this script has. `boot.ts` runs standalone, before the widget bundle
- * it injects ever calls home - there is no `session.widgetLocale` yet, which is what
- * `ui/widget.ts`'s `parseWidgetLocale` resolves (and that function's input is the server's own `"Ru"`
- * enum spelling, not a `lang` attribute, so it is the wrong function to reach for here even though
- * its output type matches). The one locale fact already sitting on the document is the `<html lang>`
- * both demo pages already declare for every other reason a browser or a screen reader cares about
- * (`public-demo/index.html` is `lang="ru"`, `public-demo-2/index.html` is `lang="en"`) - so this reads
- * that instead of adding a second, boot-script-only locale attribute nobody else would ever set.
- * Anything other than `"ru"` resolves to English, the same "unrecognised -> en" default
- * `parseWidgetLocale` uses one layer up, for the same reason: a locale this function has never heard
- * of must still render in the widget's original language rather than fail to render at all.
- */
-export function resolveDemoPageLocale(doc: Document): SupportedLocale {
-  return doc.documentElement.lang.toLowerCase() === "ru" ? "ru" : "en";
 }
 
 /**
@@ -117,23 +100,34 @@ export function resolveDemoPageLocale(doc: Document): SupportedLocale {
  * told a visitor on their own tenant that any stranger could read what they typed. Reading the source
  * would not have caught it; the item asks for a browser for exactly this reason.
  *
- * Guarded per element like the mint button, and each result reported separately - `demo-shop2` has no
- * safety card at all, so a missing element is the ordinary case rather than a fault, and a single
- * boolean would have made "not there" and "not swapped" the same answer.
+ * Guarded per element rather than collapsed into one boolean, like the mint button - so a future
+ * markup edit that drops one of these ids is reported precisely (`{banner: true, privacyNote: false}`
+ * says which one broke) instead of "not there" and "not swapped" reading as the same answer.
  *
  * `8-13`: the replacement text used to be two English literals right here - the one place in this
  * repository display text bypassed `i18n/en.ts`/`ru.ts` entirely, which is both why it was
  * untranslated and why nobody noticed. It now comes from `WidgetStrings`
- * (`demoOwnTenantBannerNotice`/`demoOwnTenantPrivacyNote`), resolved against the page's own locale
- * (`resolveDemoPageLocale`, above) the same way every other visitor-facing string in this widget is
- * resolved - `i18n/resolve.ts`'s `getStrings` - rather than a language chosen once for both pages.
+ * (`demoOwnTenantBannerNotice`/`demoOwnTenantPrivacyNote`), the same way every other visitor-facing
+ * string in this widget is resolved - `i18n/resolve.ts`'s `getStrings`.
+ *
+ * `25-187`: fixed at `"ru"` rather than read off the page. A `resolveDemoPageLocale(doc)` helper used
+ * to live here, reading `<html lang>`, because `public-demo-2/index.html` (`lang="en"`) needed the
+ * English table and `public-demo/index.html` (`lang="ru"`) needed the Russian one. `public-demo-2/`
+ * is deleted, so `"ru"` - `public-demo/index.html`'s own declared locale - is the only value that
+ * helper could ever have returned in practice; a resolver with one reachable answer is a check with
+ * a permanently dead arm; stating the answer directly says the same thing without pretending the
+ * other arm is still live. If a second demo page with its own locale returns, the helper (read
+ * `doc.documentElement.lang`, fall back to `"en"` for anything unrecognised) is what to reintroduce,
+ * not this literal.
  */
 export function applyOwnTenantPageCopy(doc: Document): { banner: boolean; privacyNote: boolean } {
-  const strings = getStrings(resolveDemoPageLocale(doc));
+  const strings = getStrings("ru");
   return {
     banner: swap(doc, "ago-demo-public-notice", strings.demoOwnTenantBannerNotice),
-    // The safety card's second paragraph. Only demo-shop1's page carries the card, so this is
-    // routinely false on demo-shop2 and that is not a failure - see this function's own remarks.
+    // The safety card's second paragraph. `public-demo/index.html` - the only page left - always
+    // carries it, so `privacyNote` is expected `true` in practice; the boolean stays so a future
+    // markup regression is reported rather than silently assumed away, not because a missing card is
+    // the ordinary case any more.
     privacyNote: swap(doc, "ago-demo-privacy-note", strings.demoOwnTenantPrivacyNote),
   };
 }

@@ -6,14 +6,13 @@
 # supersedes adr/0026's "build it on the VPS and import it into containerd", which is now the
 # fallback rather than the mechanism.
 #
-# `25-182`: CI used to also publish `ago-demo-shop2` from this same file (`DEMO_PAGE_DIR=public-demo-2`
-# below) - the second demo tenant it served had no route left in ago-deploy and no link from
-# ago-landing reaching it, so that publish step is gone. `DEMO_PAGE_DIR` and `public-demo-2/` stay in
-# the repository as dead code rather than being deleted with it: nothing left in either this
-# repository or `ago-deploy` builds an image from them (the managing session cleaned up
-# `k8s/build-static-images.sh`'s own reference too), but `public-demo-2`'s per-page behavior baked
-# into `ui/widget.ts`/`boot.ts` is a real, separate follow-up, not a mechanical deletion - see this
-# item's own report.
+# `25-182`: CI used to also publish `ago-demo-shop2` from this same file (`DEMO_PAGE_DIR=public-demo-2`)
+# - the second demo tenant it served had no route left in ago-deploy and no link from ago-landing
+# reaching it, so that publish step is gone. `25-182` left `DEMO_PAGE_DIR` and `public-demo-2/` in
+# place rather than deleting them with it, because `public-demo-2`'s own per-page behavior baked into
+# `ui/widget.ts`/`boot.ts` needed checking against `demo-shop1`'s real behavior first, not a mechanical
+# deletion. `25-187` did that check and deleted `public-demo-2/` - the `DEMO_PAGE_DIR` mechanism itself
+# stays, `demo-shop1`'s own `public-demo` is its only value now.
 #
 # **This Dockerfile takes no environment input from its build command, and that is the whole point**
 # (adr/0051). A build arg that varies per invocation would make ago-demo-shop1:<sha> mean "the demo
@@ -137,15 +136,16 @@ LABEL org.opencontainers.image.description="AGO Chat public demo page + widget b
 COPY --from=build /app/dist/demo-boot.js /usr/share/nginx/html/demo-boot.js
 COPY --from=build /app/dist/demo-boot.js.map /usr/share/nginx/html/demo-boot.js.map
 # DEMO_PAGE_DIR selects which demo page this image embeds - `public-demo` (demo-shop1, the
-# original 8-02 page, `data-site="demo_site"`) by default, or `public-demo-2` (demo-shop2, a
-# second, independent tenant seeded specifically to demonstrate tenant isolation live: a different
-# operator, a different site row, a visibly different page - `data-site="demo_site2"`). Both share
-# this one widget bundle unmodified; only the HTML embedded alongside it differs.
+# original 8-02 page, `data-site="demo_site"`) by default, and the only value left since `25-187`
+# deleted its own second option, `public-demo-2` (demo-shop2, a second, independent tenant seeded to
+# demonstrate tenant isolation live). The mechanism itself stays a build arg rather than collapsing
+# into a hardcoded path, because it is still what names which page this one image embeds - see the
+# next paragraph - even with one value to choose from.
 #
 # This one *is* passed on the command line, by CI and by ago-deploy's build-static-images.sh alike,
 # and adr/0051's "no environment input" rule is not being broken by it: it does not select an
-# environment, it selects which of two images is being built - and that choice is already in the
-# image's own name (ago-demo-shop1 vs ago-demo-shop2), so the tag is not being asked to carry it.
+# environment, it names which page this one image embeds - and that choice is already in the image's
+# own name (ago-demo-shop1), so the tag is not being asked to carry it.
 ARG DEMO_PAGE_DIR=public-demo
 COPY ${DEMO_PAGE_DIR}/index.html /usr/share/nginx/html/index.html
 # `15-07`: the same commit again, as a file the running container serves. Uniform across all four

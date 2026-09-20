@@ -37,7 +37,7 @@ export const en: WidgetStrings = {
   attachmentUnavailable: "Attachment unavailable.",
   attachmentRemoved: "This file was removed.",
   attachmentAlt: "Attachment",
-  // `8-06`: the sentence a stranger on `demo-shop1`/`demo-shop2` must have read before typing. Three
+  // `8-06`: the sentence a stranger on `demo-shop1` must have read before typing. Three
   // short statements of fact, no hedging and no reassurance - the backlog item's own point is that a
   // polite banner people skim is worth less than a blunt one they finish reading. `8-11` did not
   // touch a word of it - what changed is *when* it appears (attached to the tenant, not the page).
@@ -76,11 +76,11 @@ export const en: WidgetStrings = {
   // against the page's `<html lang>` rather than a `WidgetLocale`.
   demoOwnTenantBannerNotice:
     "You are on a tenant of your own. The operator login published below belongs to the shared demo "
-    + "shops, not to this tenant - nobody but you can read what you type here. This tenant and "
+    + "shop, not to this tenant - nobody but you can read what you type here. This tenant and "
     + "everything in it delete themselves after about a day.",
   demoOwnTenantPrivacyNote:
     "Safe for the deployment, and private for you on this page: the login above is published, but "
-    + "it only reaches the shared demo shops - never the tenant you are on. Only the operator "
+    + "it only reaches the shared demo shop - never the tenant you are on. Only the operator "
     + "account you were handed can read this conversation, and it is deleted with the tenant after "
     + "about a day.",
 };

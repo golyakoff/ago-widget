@@ -106,13 +106,12 @@ jobs:
   # `25-182`: this used to publish two demo images (ago-demo-shop1, ago-demo-shop2) from the same
   # Dockerfile, differing only in the embedded demo page (DEMO_PAGE_DIR). ago-demo-shop2 is gone - the
   # second demo tenant it served had no route left in ago-deploy and no link from ago-landing reaching
-  # it - so only ago-demo-shop1 remains here. The Dockerfile's own DEMO_PAGE_DIR mechanism and
-  # public-demo-2/ page are left in place as dead code rather than removed - nothing in either this
-  # repository or ago-deploy still builds an image from them (the managing session also cleaned up
-  # `ago-deploy`'s own `k8s/build-static-images.sh` reference, this item's own report), but
+  # it - so only ago-demo-shop1 remains here. `25-182` left the Dockerfile's own DEMO_PAGE_DIR
+  # mechanism and public-demo-2/ page in place rather than removing them with it, since
   # public-demo-2's own removal from this repository's real behavior (`ui/widget.ts`/`boot.ts`'s
-  # per-page logic, see this item's own report) is a real, separate follow-up rather than a
-  # mechanical deletion.
+  # per-page logic) needed checking against ago-demo-shop1's own behavior first, not a mechanical
+  # deletion. `25-187` did that check and deleted public-demo-2/; DEMO_PAGE_DIR stays as a mechanism,
+  # with public-demo (ago-demo-shop1) its only value now.
   publish-images:
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

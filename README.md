@@ -82,10 +82,10 @@ At runtime `config.ts` resolves the API origin in three steps (`#337`): the scri
 (`adr/0092` - the canonical bundle is served from the API's own origin, so for a real hosted tenant
 that origin already is the right answer, and a future hostname rename no longer needs a bundle
 already cached in a visitor's browser to be rebuilt); otherwise this build's baked-in
-`AGO_API_BASE_URL`. `data-api` still exists because inference is wrong for `public-demo/` and
-`public-demo-2/`, which each serve their own copy of the bundle from their own origin -
-`src/demo/boot.ts`'s `bootWidget` sets `data-api` on the injected tag explicitly so those two pages
-never fall through to inferring themselves as the API.
+`AGO_API_BASE_URL`. `data-api` still exists because inference is wrong for `public-demo/`, which
+serves its own copy of the bundle from its own origin - `src/demo/boot.ts`'s `bootWidget` sets
+`data-api` on the injected tag explicitly so that page never falls through to inferring itself as
+the API.
 
 `AGO_POLICY_BASE_URL` (`25-27`) gets the identical refusal, for a second origin: the console's own
 public policy pages (`ago-console`'s `/policies/:documentKey`, `23-37`), which `ui/contactCapture.ts`
@@ -107,7 +107,7 @@ is fine, and one that claims a commit it was not built from is not.
 
 A third attribute, `data-public-demo="true"`, renders one fixed line inside the panel telling the
 visitor that anyone with the published operator login can read what they type (`8-06`). It is set on
-this repository's own two public demo pages and nowhere else; the default is off, and only the exact
+this repository's own public demo page and nowhere else; the default is off, and only the exact
 string `"true"` turns it on, so no real shop's embed can acquire it by accident. It is a flag and not
 a free-text notice deliberately - a tenant-configurable processing notice is `16-04`'s server-driven
 mechanism, and this must not pre-empt its shape.
@@ -120,12 +120,11 @@ CI publishes `ghcr.io/golyakoff/ago-demo-shop1:<40-char commit SHA>` to GHCR on 
 
 `25-182`: CI used to also publish `ago-demo-shop2` from the same `Dockerfile`, differing only in
 which demo page was embedded (`DEMO_PAGE_DIR`) - the second demo tenant it served had no route left
-in `ago-deploy` and no link from `ago-landing` reaching it, so that publish step is gone.
-`DEMO_PAGE_DIR` and `public-demo-2/` stay in the repository as dead code rather than being removed
-with it: nothing left in either this repository or `ago-deploy` builds an image from them any more
-(the managing session also cleaned up `k8s/build-static-images.sh`'s own reference), but
-`public-demo-2`'s own per-page behavior baked into `ui/widget.ts`/`boot.ts` is a real, separate
-follow-up rather than a mechanical deletion.
+in `ago-deploy` and no link from `ago-landing` reaching it, so that publish step is gone. `25-182`
+left `DEMO_PAGE_DIR` and `public-demo-2/` in place rather than deleting them with it, since
+`public-demo-2`'s own per-page behavior baked into `ui/widget.ts`/`boot.ts` needed checking against
+`demo-shop1`'s real behavior first. `25-187` did that check and deleted `public-demo-2/`;
+`DEMO_PAGE_DIR` stays as a mechanism, `public-demo` (`demo-shop1`) is its only value now.
 
 The `Dockerfile` deliberately takes **no environment input from its build command**: it carries the
 demo deployment's own API and console origins as committed defaults, so `ago-demo-shop1:<sha>` is a

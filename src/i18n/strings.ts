@@ -147,8 +147,9 @@ export interface WidgetStrings {
   // page swaps into its static markup, replacing text that would otherwise tell that visitor a
   // stranger can read what they type. These lived as English literals in `boot.ts` itself until
   // `8-13`; that file has no `WidgetLocale` to resolve against (it runs standalone, before the widget
-  // it injects ever calls home), so it resolves these two against the page's own `<html lang>`
-  // instead (`boot.ts`'s own `resolveDemoPageLocale`) - the same table, a different locale signal.
+  // it injects ever calls home). `25-187`: `boot.ts` fixed the lookup at `"ru"` once `public-demo-2/`
+  // (the only page that ever needed the English table) was deleted - see `applyOwnTenantPageCopy`'s
+  // own doc comment.
   /** The page's own top banner - was `ago-demo-public-notice`'s public-demo wording, false the moment
    * the tenant stops being shared. */
   readonly demoOwnTenantBannerNotice: string;

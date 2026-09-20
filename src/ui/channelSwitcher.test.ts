@@ -224,6 +224,83 @@ describe("a site with connected channels", () => {
     expect(card(panel.root)).not.toBeNull();
   });
 
+  // `25-172`: the four recognised kinds now render a real, multi-path brand mark built via a
+  // structured-tree builder rather than `createSvgIcon`'s single `fill: currentColor` path - these
+  // assertions would have failed against `25-149`'s own placeholder shapes (each exactly one `<path>`)
+  // and guard against silently regressing back to them.
+  describe("the four recognised channels' real brand icons", () => {
+    function allFourChannels(): ChannelLinkFixture[] {
+      return [
+        { kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" },
+        { kind: "WhatsApp", url: "https://wa.me/15550100" },
+        { kind: "Vk", url: "https://vk.me/tenant_bot" },
+        { kind: "Max", url: "https://max.ru/tenant_bot" },
+      ];
+    }
+
+    // Wire `kind` -> the label `CHANNEL_DISPLAY_NAMES` actually renders (`Vk`/`Max` display as the
+    // all-caps "VK"/"MAX" acronyms) - rows() below finds a row by its visible text, not the wire string.
+    const DISPLAYED_LABEL: Record<string, string> = {
+      Telegram: "Telegram",
+      WhatsApp: "WhatsApp",
+      Vk: "VK",
+      Max: "MAX",
+    };
+
+    it("gives Telegram, WhatsApp and VK more than one <path> - a real multi-part mark, not a placeholder glyph", async () => {
+      stubFetch({ channelLinks: allFourChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click();
+      await flush();
+
+      const built = rows(panel.root);
+      for (const kind of ["Telegram", "WhatsApp", "Vk"]) {
+        const row = built.find((r) => r.textContent?.includes(DISPLAYED_LABEL[kind]!))!;
+        const svg = row.querySelector("svg")!;
+        expect(svg.querySelectorAll("path").length).toBeGreaterThan(1);
+      }
+    });
+
+    it("never leaves the recognised channels' icon fill reading currentColor - it must not follow row.style.color", async () => {
+      stubFetch({ channelLinks: allFourChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click();
+      await flush();
+
+      const built = rows(panel.root);
+      for (const kind of ["Telegram", "WhatsApp", "Vk", "Max"]) {
+        const row = built.find((r) => r.textContent?.includes(DISPLAYED_LABEL[kind]!))!;
+        const svg = row.querySelector("svg")!;
+        expect(svg.getAttribute("fill")).not.toBe("currentColor");
+      }
+    });
+
+    it("crops MAX's icon to a true circle via clip-path, unlike its native rounded-square art", async () => {
+      stubFetch({ channelLinks: allFourChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click();
+      await flush();
+
+      const maxRow = rows(panel.root).find((r) => r.textContent?.includes("MAX"))!;
+      const svg = maxRow.querySelector("svg")!;
+      expect(svg.getAttribute("style") ?? "").toContain("clip-path:circle(50% at 50% 50%)");
+    });
+
+    it("keeps the label text tint independent of the icon - row.style.color still carries the brand hex", async () => {
+      stubFetch({ channelLinks: allFourChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click();
+      await flush();
+
+      const telegramRow = rows(panel.root).find((r) => r.textContent?.includes("Telegram")) as HTMLAnchorElement;
+      expect(telegramRow.style.color).toBe("rgb(0, 136, 204)"); // #0088CC
+    });
+  });
+
   describe("the write-in-chat row", () => {
     const AUTO_OPEN_DELAY_MS = 30_000;
 

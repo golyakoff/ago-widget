@@ -55,6 +55,9 @@ export const ru: WidgetStrings = {
   processingNoticeLinkText: "Подробнее",
   channelSwitcherGroupLabel: "Другие способы связаться с нами",
   channelSwitcherWriteInChat: "Написать в чат",
+  channelSwitcherRoutingQuestion: "Как вам удобнее с нами связаться?",
+  channelSwitcherOnlineChat: "Онлайн чат",
+  channelSwitcherCancel: "Отмена",
 
   unsupportedFileTypeSuffix: "не поддерживается. Попробуйте изображение или PDF.",
   unknownFileType: "неизвестный тип",

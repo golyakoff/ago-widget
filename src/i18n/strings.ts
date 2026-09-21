@@ -94,6 +94,15 @@ export interface WidgetStrings {
    * colour) - falls through to the ordinary in-page conversation. Hides the card, marks it dismissed
    * and focuses the composer; sends nothing and never forces a connection (`adr/0148`). */
   readonly channelSwitcherWriteInChat: string;
+  /** `25-197`: the touch routing sheet's own header - a question, not a label, since this sheet is
+   * shown *instead of* opening the chat, asking the visitor to choose before anything opens. */
+  readonly channelSwitcherRoutingQuestion: string;
+  /** `25-197`: the routing sheet's own row that actually opens the widget's chat panel - the one
+   * row here that is a `<button>` calling `open()`, not an `<a>` to an external channel. */
+  readonly channelSwitcherOnlineChat: string;
+  /** `25-197`: closes the routing sheet with no other effect - the panel stays closed, nothing
+   * opens. Mirrors `channelSwitcherWriteInChat`'s own "visually distinct, final row" placement. */
+  readonly channelSwitcherCancel: string;
 
   // attachments.ts - the courtesy upload checks.
   /** Appended after the quoted, untranslated MIME type: `` `"${type}" ${unsupportedFileTypeSuffix}` ``. */

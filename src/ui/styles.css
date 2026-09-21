@@ -680,6 +680,57 @@
     color: #fff;
   }
 
+  /* 25-197: fixed to the viewport, not to .ago-root's own small footprint - a real backdrop, the
+     same reason .ago-channel-switcher-launcher's own row never needed one (it never claims the
+     rest of the screen). Clicking the backdrop itself closes the sheet (ui/widget.ts's own
+     click listener); a click on the panel below never reaches it. */
+  .ago-touch-routing-sheet {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .ago-touch-routing-sheet[hidden] {
+    display: none;
+  }
+
+  .ago-touch-routing-panel {
+    width: 100%;
+    max-width: 26rem;
+    max-height: min(32rem, calc(100vh - 4rem));
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 -0.5rem 2rem rgba(0, 0, 0, 0.3);
+  }
+
+  .ago-touch-routing-question {
+    padding: 1rem 1rem 0.75rem;
+    text-align: center;
+    font-weight: 600;
+    color: #4b5563;
+  }
+
+  /* Every row here - a real channel link, "Онлайн чат", "Отмена" - also carries
+     .ago-channel-switcher-row (ui/widget.ts), reused wholesale for its flex layout/reset rather
+     than duplicated; only the divider and sizing are this sheet's own, matching
+     .ago-channel-switcher-row--dismiss's own precedent for a row-separator line. */
+  .ago-touch-routing-row {
+    padding: 0.75rem 1rem;
+    border-top: 0.0625rem solid #e5e7eb;
+    font-size: 0.9375rem;
+  }
+  .ago-touch-routing-row--chat {
+    color: var(--ago-accent);
+  }
+  .ago-touch-routing-row--cancel {
+    color: #6b7280;
+    justify-content: center;
+    font-weight: 500;
+  }
+
   /* 20-07: the closed primitive vocabulary's own rendering (ui/primitives/render.ts), appended
      inside an ordinary incoming bubble - never a separate panel, because a step is a message now,
      not a view. Sized to sit comfortably under a bubble's own body text rather than as a card of its

@@ -1,4 +1,4 @@
-import type { MessageDto } from "../protocol/types.js";
+import type { MessageDto, ChannelLinkDto } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
 import { WidgetStorage, type VisitorSession } from "../storage.js";
 import { VisitorSessionExpiredError, VisitorSessionManager } from "../session.js";
@@ -404,6 +404,12 @@ function buildBrandIcon(kind: string): SVGSVGElement | undefined {
 const CHANNEL_FALLBACK_ICON_PATH =
   "M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z";
 
+/** `25-197`: the identical Material Symbols Outlined `chat_bubble` glyph the closed launcher's own
+ * icon already uses (`this.toggle`'s own construction, below) - named here once this item gives it
+ * a second call site (the touch routing sheet's own "Онлайн чат" row) so the two never drift. */
+const CHAT_BUBBLE_ICON_PATH =
+  "M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z";
+
 /**
  * `25-149`: every colour here is a small, widget-local constant, deliberately independent of
  * `--ago-accent` - the identical "must read against whatever a tenant configured" reasoning
@@ -606,6 +612,18 @@ export class ChatWidget {
    * it) - a single source of truth `updateChannelSwitcherLauncherVisibility` reads alongside
    * `this.isOpen` covers both triggers with one function. */
   private isToggleHovered = false;
+  /** `25-197`: the session's own connected channels, captured once in `loadChannelSwitcher`
+   * regardless of which placement renderer runs - `toggleOpen` needs to know whether there is
+   * anything to route to *synchronously*, at the moment of a click, which neither
+   * `channelSwitcherCard`/`channelSwitcherLauncherRow` (placement-specific, built lazily, and
+   * `null` for a site on the other placement) can answer on their own. Empty until the handshake
+   * resolves - a click before then falls through to opening the chat directly, the same honest
+   * degradation this widget already accepts for `loadBookingModuleChip`'s own chip. */
+  private channelLinks: ChannelLinkDto[] = [];
+  /** `25-197`: `null` until first needed - built lazily on the first click this item's own gate
+   * actually fires for, not eagerly alongside the two existing switcher renderers, since most
+   * visitors (anyone with a hover-capable pointer) never trigger it at all. */
+  private touchRoutingSheet: HTMLDivElement | null = null;
   private readonly composer: HTMLFormElement;
   /** `11-10`: the widget's own built-in language until `bootstrapSession` resolves the site's real
    * one (`applyStrings`'s own doc comment). Every piece of DOM this class builds is constructed
@@ -781,7 +799,7 @@ export class ChatWidget {
     // Material Symbols Outlined: chat_bubble
     this.toggle.appendChild(
       createSvgIcon(
-        "M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z",
+        CHAT_BUBBLE_ICON_PATH,
       ),
     );
     // `25-141`: a child of `toggle`, hidden by default - `renderUnreadBadge` is the only thing that
@@ -1252,12 +1270,129 @@ export class ChatWidget {
     this.saveButton.title = strings.saveConversation;
   }
 
+  /**
+   * `25-197`: on a device with no hover at all (`(hover: none)` - true for essentially every
+   * touchscreen phone, false for a mouse or trackpad even on a touchscreen laptop), the closed
+   * toggle no longer opens the chat directly when there is somewhere else the visitor could go:
+   * it opens the routing sheet instead, and only that sheet's own "Онлайн чат" row calls `open()`.
+   * A site with nothing connected (`this.channelLinks.length === 0`) is unaffected - taps
+   * straight into chat, exactly as before this item. Checked fresh on every click rather than
+   * cached at construction, the identical "read the live fact, do not snapshot it" instinct every
+   * other hover/open check in this file already follows - cheap, and a session that outlives a
+   * device's own input-method change (a docked tablet gaining a mouse) is not a case worth
+   * optimising away the correctness of.
+   *
+   * `window.matchMedia?.(...)?.matches ?? false` - the identical feature-detection shape
+   * `scheduleAttractAttention`'s own remarks already establish for `prefers-reduced-motion`/
+   * `pointer: coarse`, doubled here (both the call *and* the property read are optional) because
+   * this path, unlike those two, is reachable on nearly every test that clicks the toggle at all -
+   * `jsdom` implements no `matchMedia` by default, so `false` (behave exactly as before this item)
+   * is what an environment that cannot answer the question gets, never a thrown exception.
+   */
   private toggleOpen(): void {
     if (this.isOpen) {
       this.close();
-    } else {
-      this.open();
+      return;
     }
+
+    if (this.channelLinks.length > 0 && (window.matchMedia?.("(hover: none)")?.matches ?? false)) {
+      this.openTouchRoutingSheet();
+      return;
+    }
+
+    this.open();
+  }
+
+  /** `25-197`: reveals the touch routing sheet, building it on first use - most visitors (anyone
+   * with a hover-capable pointer) never trigger `toggleOpen`'s own gate for it at all, so building
+   * it eagerly alongside the two placement-specific switcher renderers would be pure waste for
+   * them, the identical "pays nothing" instinct this widget already applies to `moduleChip`/
+   * `channelSwitcherCard`. */
+  private openTouchRoutingSheet(): void {
+    if (this.touchRoutingSheet === null) {
+      this.touchRoutingSheet = this.buildTouchRoutingSheet();
+    }
+
+    this.touchRoutingSheet.hidden = false;
+  }
+
+  /** `25-197`: the sheet's own three ways to leave it - a channel row's own click, the "Отмена"
+   * row, and the "Онлайн чат" row (after that row's own `open()` call) - all converge here. No
+   * dismissed-forever memory, unlike `dismissChannelSwitcher`: this sheet is a routing step, not
+   * an offer a visitor accepts or declines once - it reappears on the very next tap, by design. */
+  private closeTouchRoutingSheet(): void {
+    if (this.touchRoutingSheet !== null) {
+      this.touchRoutingSheet.hidden = true;
+    }
+  }
+
+  /**
+   * `25-197`: the routing sheet itself - a question, one real row per connected channel (reusing
+   * `buildChannelSwitcherRow` wholesale: the identical real `<a target="_blank"
+   * rel="noopener noreferrer">` the above-composer card already builds, so a channel row here
+   * opens exactly the way every other channel row in this codebase already does, plus one extra
+   * listener that closes the sheet without touching the anchor's own navigation), an "Онлайн чат"
+   * row that is the only row calling `open()`, and a "Отмена" row that closes the sheet with no
+   * other effect. A sibling of `this.toggle` inside `this.container`, not a child of `this.panel` -
+   * it has to be reachable while the panel is still closed, which is the whole point of it.
+   */
+  private buildTouchRoutingSheet(): HTMLDivElement {
+    const sheet = document.createElement("div");
+    sheet.className = "ago-touch-routing-sheet";
+    sheet.hidden = true;
+    // The backdrop is this element itself - clicking it (anywhere outside the panel below) closes
+    // the sheet the same way "Отмена" does. A click that lands on the panel never reaches this
+    // listener at all (it does not bubble past the panel's own click - every real control inside
+    // it stops the event by virtue of not being this element).
+    sheet.addEventListener("click", (event) => {
+      if (event.target === sheet) {
+        this.closeTouchRoutingSheet();
+      }
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "ago-touch-routing-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-label", this.strings.channelSwitcherRoutingQuestion);
+    sheet.append(panel);
+
+    const question = document.createElement("div");
+    question.className = "ago-touch-routing-question";
+    question.textContent = this.strings.channelSwitcherRoutingQuestion;
+    panel.append(question);
+
+    for (const link of this.channelLinks) {
+      const row = this.buildChannelSwitcherRow(link);
+      row.classList.add("ago-touch-routing-row");
+      row.addEventListener("click", () => this.closeTouchRoutingSheet());
+      panel.append(row);
+    }
+
+    const onlineChatRow = document.createElement("button");
+    onlineChatRow.type = "button";
+    onlineChatRow.className = "ago-channel-switcher-row ago-touch-routing-row ago-touch-routing-row--chat";
+    const chatIcon = createSvgIcon(CHAT_BUBBLE_ICON_PATH);
+    chatIcon.setAttribute("aria-hidden", "true");
+    onlineChatRow.append(chatIcon);
+    const chatLabel = document.createElement("span");
+    chatLabel.textContent = this.strings.channelSwitcherOnlineChat;
+    onlineChatRow.append(chatLabel);
+    onlineChatRow.addEventListener("click", () => {
+      this.closeTouchRoutingSheet();
+      this.open();
+    });
+    panel.append(onlineChatRow);
+
+    const cancelRow = document.createElement("button");
+    cancelRow.type = "button";
+    cancelRow.className = "ago-channel-switcher-row ago-touch-routing-row ago-touch-routing-row--cancel";
+    cancelRow.textContent = this.strings.channelSwitcherCancel;
+    cancelRow.addEventListener("click", () => this.closeTouchRoutingSheet());
+    panel.append(cancelRow);
+
+    this.container.append(sheet);
+    return sheet;
   }
 
   /**
@@ -1688,6 +1823,11 @@ export class ChatWidget {
    */
   private async loadChannelSwitcher(): Promise<void> {
     const session = await this.sessionPromise;
+    // `25-197`: captured regardless of which placement branch runs below - see this.channelLinks'
+    // own doc comment for why toggleOpen needs this synchronously, independent of either
+    // placement-specific renderer.
+    this.channelLinks = session.channelLinks;
+
     if (parseChannelSwitcherPlacement(session.widgetChannelSwitcherPlacement) === "below-launcher") {
       this.buildChannelSwitcherLauncherRow(session);
       return;

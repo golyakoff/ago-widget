@@ -177,6 +177,13 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     survivesTabClose: true,
   },
   {
+    key: "widget-panel-title",
+    holds: "The tenant's own override for the chat panel's title (`25-210`), if they set one - words the tenant wrote, not the widget's own. Absent for a tenant who has not configured one; the widget then shows its own built-in default greeting, not stored here.",
+    why: "Same purpose as the notice text above - lets the widget show the tenant's chosen title without a second round trip once the session is cached.",
+    lifetime: "Same as the colour above.",
+    survivesTabClose: true,
+  },
+  {
     key: "auto-open-greeting-shown",
     holds: "Whether this browser has already been shown the tenant's auto-open greeting (`23-64`) - a yes/no flag, never the greeting text itself.",
     why: "«Opening is once» - a returning visitor within the same identity is not shown the greeting a second time.",
@@ -326,6 +333,12 @@ export interface VisitorSession {
    * identically to "not set" and fall back to `25-149`'s own pre-existing card at the default size. */
   widgetChannelSwitcherPlacement: string | null;
   widgetChannelSwitcherIconSize: string | null;
+  /** `25-210`: cached alongside the rest on the identical terms `widgetNoticeText` already has - the
+   * chat panel's own `<h1>` override, refreshed on the identical schedule (`25-05`). `null` for a
+   * session written before this field existed, or for a site that has never configured one -
+   * `ui/appearance.ts`'s `parsePanelTitle` treats both identically to "not set", and `ui/widget.ts`
+   * falls back to the widget's own built-in default greeting, never to a blank title. */
+  widgetPanelTitle: string | null;
 }
 
 export class WidgetStorage {
@@ -383,6 +396,7 @@ export class WidgetStorage {
       widgetContactCaptureConfirmationText: this.readSafe("widget-contact-capture-confirmation-text"),
       widgetChannelSwitcherPlacement: this.readSafe("widget-channel-switcher-placement"),
       widgetChannelSwitcherIconSize: this.readSafe("widget-channel-switcher-icon-size"),
+      widgetPanelTitle: this.readSafe("widget-panel-title"),
     };
   }
 
@@ -524,6 +538,15 @@ export class WidgetStorage {
       this.writeSafe("widget-contact-capture-confirmation-text", session.widgetContactCaptureConfirmationText);
     } else {
       this.removeSafe("widget-contact-capture-confirmation-text");
+    }
+
+    // `25-210`: the identical "written only when present" shape `widgetNoticeText` already has above -
+    // absent whenever the tenant has not configured an override, so the widget falls back to its own
+    // built-in default greeting rather than reading a stale value from an earlier site configuration.
+    if (session.widgetPanelTitle) {
+      this.writeSafe("widget-panel-title", session.widgetPanelTitle);
+    } else {
+      this.removeSafe("widget-panel-title");
     }
 
     // `25-173`: the identical "written only when present" shape `widgetPosition` already has above.

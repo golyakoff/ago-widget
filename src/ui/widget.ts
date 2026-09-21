@@ -29,6 +29,7 @@ import {
   parseContactCaptureConfirmationText,
   parseNoticeText,
   parseNoticeUrl,
+  parsePanelTitle,
   parseWidgetColor,
   parseWidgetPosition,
 } from "./appearance.js";
@@ -1319,7 +1320,12 @@ export class ChatWidget {
       : strings.openChat,
     );
     this.panel.setAttribute("aria-label", strings.chatLabel);
-    this.title.textContent = strings.chatWithUs;
+    // `25-210`: the site's own configured override, if present, otherwise the widget's own (now
+    // resolved-language) built-in default greeting - never blank, matching
+    // `WidgetConfig.PanelTitle`'s own "always renders something" terms. `25-211`'s channel-switcher
+    // header bar reads this same resolved text off `this.title` rather than re-deriving it, so the two
+    // surfaces can never show different words.
+    this.title.textContent = parsePanelTitle(this.session?.widgetPanelTitle) ?? strings.chatWithUs;
     this.closeButton.setAttribute("aria-label", strings.closeChat);
     // Found live: `this.notice`'s text was set once in the constructor from that moment's
     // `this.strings` (the English default) and never revisited - unlike every other element here, it

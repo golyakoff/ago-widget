@@ -62,6 +62,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
       widgetChannelSwitcherPlacement: "BelowLauncher",
       widgetChannelSwitcherIconSize: "Large",
+      widgetPanelTitle: "Есть вопросы о заказе?",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);
@@ -99,6 +100,7 @@ describe("WIDGET_STORAGE_DISCLOSURE matches what WidgetStorage actually writes",
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
       widgetChannelSwitcherPlacement: "BelowLauncher",
       widgetChannelSwitcherIconSize: "Large",
+      widgetPanelTitle: "Есть вопросы о заказе?",
     });
     storage.setConversationId("conv-1");
     storage.setLastKnownSequence("conv-1", 3);

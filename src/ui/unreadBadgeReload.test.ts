@@ -95,6 +95,7 @@ function storeValidSession(): string {
     widgetContactCaptureConfirmationText: null,
     widgetChannelSwitcherPlacement: null,
     widgetChannelSwitcherIconSize: null,
+    widgetPanelTitle: null,
   });
   return token;
 }

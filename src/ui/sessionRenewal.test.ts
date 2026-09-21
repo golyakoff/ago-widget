@@ -163,6 +163,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetContactCaptureConfirmationText: null,
     widgetChannelSwitcherPlacement: null,
     widgetChannelSwitcherIconSize: null,
+    widgetPanelTitle: null,
   });
   return token;
 }

@@ -1309,6 +1309,85 @@ describe("the panel's processing notice", () => {
   });
 });
 
+/**
+ * `25-210`: the chat panel's own `<h1>` (`.ago-header h1`) - unlike the processing notice above,
+ * `null`/absent always renders *something*: the site's own configured override when present, the
+ * widget's own built-in default greeting otherwise, never a blank title.
+ */
+describe("the panel's own title", () => {
+  function stubHandshake(overrides: Record<string, unknown> = {}): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              token: "visitor-token",
+              visitorId: "99999999-9999-9999-9999-999999999999",
+              widgetPrimaryColorHex: null,
+              widgetPosition: "BottomRight",
+              widgetLocale: "En",
+              widgetNoticeText: null,
+              widgetNoticeUrl: null,
+              enabledModules: [],
+              ...overrides,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+  }
+
+  async function mountAndWait(): Promise<ShadowRoot> {
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    if (host?.shadowRoot == null) {
+      throw new Error("the widget did not mount");
+    }
+
+    return host.shadowRoot;
+  }
+
+  it("renders the widget's own built-in default greeting for a site that has never configured an override", async () => {
+    stubHandshake();
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-header h1")?.textContent).toBe("How can we help you?");
+  });
+
+  it("renders the built-in default in the resolved locale, not the English default it was built with", async () => {
+    stubHandshake({ widgetLocale: "Ru" });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-header h1")?.textContent).toBe("Чем мы могли бы вам помочь?");
+  });
+
+  it("renders the site's own configured override instead of the built-in default", async () => {
+    stubHandshake({ widgetPanelTitle: "Есть вопросы о заказе?" });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-header h1")?.textContent).toBe("Есть вопросы о заказе?");
+  });
+
+  // A malformed value from the wire (never trusted blindly, even though the server already validates
+  // it) must fall back to the built-in default, the same "courtesy re-check, never a blank result"
+  // posture every other field in `ui/appearance.ts` already takes.
+  it("falls back to the built-in default for a whitespace-only override", async () => {
+    stubHandshake({ widgetPanelTitle: "   " });
+
+    const root = await mountAndWait();
+
+    expect(root.querySelector(".ago-header h1")?.textContent).toBe("How can we help you?");
+  });
+});
+
 function urlOf(input: RequestInfo | URL): string {
   if (typeof input === "string") {
     return input;

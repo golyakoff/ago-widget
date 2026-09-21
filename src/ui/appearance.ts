@@ -194,3 +194,26 @@ export type ChannelSwitcherIconSize = "large" | "medium" | "small";
 export function parseChannelSwitcherIconSize(value: string | null | undefined): ChannelSwitcherIconSize {
   return value === "Large" ? "large" : value === "Small" ? "small" : "medium";
 }
+
+/**
+ * `25-210`: the chat panel's own `<h1>` (`.ago-header h1`, `ui/widget.ts`) - also read by `25-211`'s
+ * channel-switcher header bar, so the two surfaces never show different words. The identical
+ * trim-and-reject-empty shape `parseNoticeText`/`parseAutoOpenGreetingText`/
+ * `parseContactCaptureConfirmationText` all already use - `Ago.Chat.Domain.WidgetConfig.PanelTitle`'s
+ * own constructor already rejects a whitespace-only or over-length value server-side; this is the
+ * same courtesy re-check, not a trust boundary the widget relies on.
+ *
+ * `undefined` on rejection - unlike `parseAutoOpenGreetingText` (whose `undefined` means "draw nothing
+ * at all"), the caller here always falls back to `strings.chatWithUs`, the widget's own built-in
+ * default greeting, never to silence: a chat panel always needs a title exactly the way it always
+ * needs a launcher position (`WidgetConfig.PanelTitle`'s own remarks on why this joins
+ * `PrimaryColorHex`/`Position`'s "always renders something" terms, not `NoticeText`'s).
+ */
+export function parsePanelTitle(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}

@@ -185,7 +185,10 @@ describe("the widget on a hostile host page", () => {
     expect(document.getElementById("ago-toggle")?.textContent).toBe("The host page's own button");
     expect(document.querySelectorAll(".ago-panel")).toHaveLength(1);
     expect(document.getElementsByTagName("textarea")).toHaveLength(0);
-    expect(document.body.textContent).not.toContain("Chat with us");
+    // `25-210`: the panel's own title text changed (`i18n/en.ts`'s `chatWithUs`) - this assertion
+    // follows it so it keeps actually probing shadow isolation, rather than trivially passing because
+    // the old string no longer appears anywhere.
+    expect(document.body.textContent).not.toContain("How can we help you?");
   });
 
   it("keeps its stylesheet inside that root instead of adding one to the host's head", async () => {

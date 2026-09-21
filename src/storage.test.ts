@@ -26,6 +26,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -45,6 +46,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -67,6 +69,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     const siteB = new WidgetStorage("site_b");
     expect(siteB.getVisitorSession()).toBeNull();
@@ -92,6 +95,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -111,6 +115,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -135,6 +140,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -154,6 +160,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -178,6 +185,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -197,6 +205,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -222,6 +231,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -241,6 +251,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: "Thanks, {name} - your details have been added.",
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -266,6 +277,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -285,6 +297,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -311,6 +324,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -330,6 +344,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -355,6 +370,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -374,6 +390,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 
@@ -397,6 +414,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -416,6 +434,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()?.widgetAttractAttention).toBe(false);
   });
@@ -440,6 +459,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     storage.setVisitorSession({
       token: "t",
@@ -459,6 +479,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
     expect(storage.getVisitorSession()).toEqual({
       token: "t",
@@ -478,6 +499,7 @@ describe("WidgetStorage", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
   });
 

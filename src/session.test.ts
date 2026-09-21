@@ -103,6 +103,7 @@ function storeSessionMintedAt(mintedAt: number): string {
     widgetContactCaptureConfirmationText: null,
     widgetChannelSwitcherPlacement: null,
     widgetChannelSwitcherIconSize: null,
+    widgetPanelTitle: null,
   });
   return token;
 }
@@ -474,6 +475,7 @@ describe("a stored token this widget cannot read", () => {
       widgetContactCaptureConfirmationText: null,
       widgetChannelSwitcherPlacement: null,
       widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
     });
 
     const sessionManager = manager();

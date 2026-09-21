@@ -144,7 +144,7 @@ describe("a widget booted against a site with WidgetLocale = ru", () => {
 
     expect(panel.toggle.getAttribute("aria-label")).toBe("Закрыть чат");
     expect(panel.panelEl.getAttribute("aria-label")).toBe("Чат");
-    expect(panel.title.textContent).toBe("Напишите нам");
+    expect(panel.title.textContent).toBe("Чем мы могли бы вам помочь?");
     expect(panel.closeButton.getAttribute("aria-label")).toBe("Закрыть чат");
     expect(panel.input.getAttribute("aria-label")).toBe("Сообщение");
     expect(panel.input.placeholder).toBe("Введите сообщение…");
@@ -255,7 +255,7 @@ describe("a widget booted against a site with no WidgetLocale set", () => {
 
     expect(panel.toggle.getAttribute("aria-label")).toBe("Close chat");
     expect(panel.panelEl.getAttribute("aria-label")).toBe("Chat");
-    expect(panel.title.textContent).toBe("Chat with us");
+    expect(panel.title.textContent).toBe("How can we help you?");
     expect(panel.closeButton.getAttribute("aria-label")).toBe("Close chat");
     expect(panel.input.getAttribute("aria-label")).toBe("Message");
     expect(panel.input.placeholder).toBe("Type a message…");

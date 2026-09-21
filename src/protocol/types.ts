@@ -193,6 +193,15 @@ export interface VisitorSessionResponse {
    */
   widgetChannelSwitcherPlacement?: string;
   widgetChannelSwitcherIconSize?: string;
+  /**
+   * `25-210`: one more additive, nullable field, on `widgetNoticeText`'s own wire terms - the chat
+   * panel's own `<h1>` (`.ago-header h1`, `ui/widget.ts`), also read by `25-211`'s channel-switcher
+   * header bar. `null`/absent means "this tenant has not configured an override," which
+   * `ui/appearance.ts`'s `parsePanelTitle` normalises the same courtesy-re-check way every other field
+   * here already gets - unlike `widgetNoticeText`, an absent value here still renders something: the
+   * widget's own built-in default greeting (`i18n`'s `chatWithUs`), never a blank title.
+   */
+  widgetPanelTitle?: string | null;
 }
 
 /**

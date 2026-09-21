@@ -471,6 +471,10 @@ export class VisitorSessionManager {
       // `parseChannelSwitcherIconSize` do that, at the point of use).
       widgetChannelSwitcherPlacement: body.widgetChannelSwitcherPlacement ?? null,
       widgetChannelSwitcherIconSize: body.widgetChannelSwitcherIconSize ?? null,
+      // `25-210`: the identical "collapse the wire's optional field to this type's own stored shape,
+      // right here" posture `widgetNoticeText` already takes - `null` for a response from before this
+      // field existed or for a site that has never configured one.
+      widgetPanelTitle: body.widgetPanelTitle ?? null,
     };
     this.storage.setVisitorSession(session);
     this.session = session;

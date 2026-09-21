@@ -4,6 +4,7 @@ import {
   parseContactCaptureConfirmationText,
   parseNoticeText,
   parseNoticeUrl,
+  parsePanelTitle,
   parseWidgetColor,
   parseWidgetPosition,
 } from "./appearance.js";
@@ -176,5 +177,34 @@ describe("parseContactCaptureConfirmationText", () => {
 
   it("falls back to undefined for a whitespace-only string", () => {
     expect(parseContactCaptureConfirmationText("   ")).toBeUndefined();
+  });
+});
+
+describe("parsePanelTitle", () => {
+  it("accepts an ordinary sentence", () => {
+    expect(parsePanelTitle("Чем мы могли бы вам помочь?")).toBe("Чем мы могли бы вам помочь?");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(parsePanelTitle("  How can we help you?  ")).toBe("How can we help you?");
+  });
+
+  // `25-210`'s own point: unlike `parseNoticeText`, `undefined` here is never the end of the story -
+  // every caller falls back to the widget's own built-in default greeting (`strings.chatWithUs`),
+  // never to a blank title.
+  it("falls back to undefined for null - no override configured server-side", () => {
+    expect(parsePanelTitle(null)).toBeUndefined();
+  });
+
+  it("falls back to undefined for undefined - a session cached before this field existed", () => {
+    expect(parsePanelTitle(undefined)).toBeUndefined();
+  });
+
+  it("falls back to undefined for an empty string", () => {
+    expect(parsePanelTitle("")).toBeUndefined();
+  });
+
+  it("falls back to undefined for a whitespace-only string", () => {
+    expect(parsePanelTitle("   ")).toBeUndefined();
   });
 });

@@ -11,7 +11,7 @@ export const en: WidgetStrings = {
   openChatWithUnreadCount: (count) => `Open chat (${count} unread message${count === 1 ? "" : "s"})`,
   closeChat: "Close chat",
   chatLabel: "Chat",
-  chatWithUs: "Chat with us",
+  chatWithUs: "How can we help you?",
   connecting: "Connecting…",
   reconnecting: "Reconnecting…",
   disconnectedReconnecting: "Disconnected. Trying to reconnect…",

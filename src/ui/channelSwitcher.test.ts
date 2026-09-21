@@ -119,6 +119,11 @@ function banner(root: ShadowRoot): HTMLDivElement | null {
   return root.querySelector<HTMLDivElement>(".ago-channel-switcher-banner");
 }
 
+/** `25-211`: the banner's own header bar. */
+function bannerHeader(root: ShadowRoot): HTMLDivElement | null {
+  return root.querySelector<HTMLDivElement>(".ago-channel-switcher-banner-header");
+}
+
 function isChatOpen(root: ShadowRoot): boolean {
   return !root.querySelector<HTMLDivElement>(".ago-panel")!.hidden;
 }
@@ -681,5 +686,191 @@ describe("the shared row rule's colour and dividers (25-206)", () => {
     expect(rule.style.borderTopWidth).toBe("0.0625rem");
     expect(rule.style.borderTopStyle).toBe("solid");
     expect(rule.style.borderTopColor).toBe("rgb(229, 231, 235)"); // #e5e7eb
+  });
+});
+
+/**
+ * `25-211`: a live sizing picker (icon scale 100-200%, row padding, a header-bar preview) settled on
+ * the values this describe block proves - 28px icons (175%), 10px vertical row padding, and a dark
+ * header bar sitting above the rows. jsdom cannot compute a shadow root's own cascade
+ * (`touchRoutingSheetSizing.test.ts`'s own top comment has the full reasoning), so the sizing half of
+ * this block reads the declared source rules directly, the identical shape
+ * `touchRoutingSheetSizing.test.ts`/the "shared row rule's colour and dividers" block above already
+ * establish. The real, painted result is confirmed separately, live, against the picker itself - this
+ * item's own Done-when explicitly asks for that, not a unit test standing in for it.
+ */
+describe("the banner's own sizing and header bar (25-211)", () => {
+  function styleSheet(): CSSStyleSheet {
+    const cssSource = readFileSync(path.join(process.cwd(), "src", "ui", "styles.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = cssSource;
+    document.head.append(style);
+    const sheet = style.sheet;
+    if (sheet === null) {
+      throw new Error("jsdom did not parse styles.css into a CSSStyleSheet");
+    }
+    return sheet;
+  }
+
+  function ruleFor(sheet: CSSStyleSheet, selectorText: string): CSSStyleRule {
+    const rule = [...sheet.cssRules].find(
+      (r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText === selectorText,
+    );
+    if (rule === undefined) {
+      throw new Error(`no rule found for selector ${selectorText}`);
+    }
+    return rule;
+  }
+
+  describe("row and icon sizing", () => {
+    it("sets the banner row's own font-size to 1.75rem (28px) - the icon's inline 1em attribute resolves against it", () => {
+      const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner .ago-channel-switcher-row");
+      expect(rule.style.fontSize).toBe("1.75rem");
+    });
+
+    it("sets the banner row's own vertical padding to 0.625rem (10px), horizontal unchanged", () => {
+      const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner .ago-channel-switcher-row");
+      expect(rule.style.paddingTop).toBe("0.625rem");
+      expect(rule.style.paddingBottom).toBe("0.625rem");
+      expect(rule.style.paddingLeft).toBe("0.75rem");
+      expect(rule.style.paddingRight).toBe("0.75rem");
+    });
+
+    it("pins the label span back to 1rem so it does not grow with the row's own font-size", () => {
+      const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner .ago-channel-switcher-row span");
+      expect(rule.style.fontSize).toBe("1rem");
+    });
+
+    it("never applies the banner's own sizing to the bare .ago-channel-switcher-row every placement shares", () => {
+      const sheet = styleSheet();
+      const bareRow = ruleFor(sheet, ".ago-channel-switcher-row");
+      // The bare rule's own `font: inherit` shorthand decomposes its own `font-size` sub-property to
+      // literally `"inherit"` - never the banner's fixed `1.75rem`, which is exactly what "never
+      // applies" means here.
+      expect(bareRow.style.fontSize).toBe("inherit");
+    });
+
+    it("leaves the touch sheet's own font-size (16px) untouched - it is declared after this rule and wins by source order regardless", () => {
+      const sheet = styleSheet();
+      const touchRow = ruleFor(sheet, ".ago-touch-routing-row");
+      expect(touchRow.style.fontSize).toBe("16px");
+    });
+  });
+
+  describe("the header bar's own declared style", () => {
+    it("gives the header bar a dark background, white bold text, and rounded top corners matching the banner's own", () => {
+      const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner-header");
+      expect(rule.style.background).toBe("rgb(55, 65, 81)"); // #374151, the same value .ago-channel-switcher-row's own `color` already uses
+      expect(rule.style.color).toBe("rgb(255, 255, 255)");
+      expect(rule.style.fontWeight).toBe("700");
+      expect(rule.style.borderRadius).toBe("0.75rem 0.75rem 0 0");
+    });
+
+    it("reuses the exact #374151 the shared row rule already settled on, not a close-but-different neighbour", () => {
+      const sheet = styleSheet();
+      const header = ruleFor(sheet, ".ago-channel-switcher-banner-header");
+      const row = ruleFor(sheet, ".ago-channel-switcher-row");
+      expect(header.style.background).toBe(row.style.color);
+    });
+  });
+
+  describe("the header bar in the mounted widget", () => {
+    it("renders as the banner's own first child, above every channel row", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      const built = banner(panel.root)!;
+      expect(built.firstElementChild).toBe(bannerHeader(panel.root));
+      expect(bannerHeader(panel.root)!.classList.contains("ago-channel-switcher-row")).toBe(false);
+    });
+
+    it("shows exactly the real panel's own resolved title - never a second, independently-derived copy", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      expect(bannerHeader(panel.root)!.textContent).toBe(panel.root.querySelector(".ago-header h1")!.textContent);
+      expect(bannerHeader(panel.root)!.textContent).not.toBe("");
+    });
+
+    it("carries no button, link, or other control of any kind - nothing here to dismiss", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      const header = bannerHeader(panel.root)!;
+      expect(header.querySelector("button")).toBeNull();
+      expect(header.querySelector("a")).toBeNull();
+      expect(header.querySelector("svg")).toBeNull();
+    });
+
+    it("builds no header bar at all for a site with nothing connected - the banner itself never builds either", async () => {
+      stubFetch({ channelLinks: [] });
+      const panel = await mountWidget();
+      await flush();
+
+      expect(bannerHeader(panel.root)).toBeNull();
+    });
+  });
+});
+
+/**
+ * `25-211`'s own explicit scope: `BelowLauncher`'s circular launcher-icon row and the mobile touch
+ * routing sheet are neither renderer this item's banner - both must render at their pre-existing
+ * sizes with their own pre-existing dividers, provably unchanged by this item's new banner-scoped
+ * rules and its header bar.
+ */
+describe("BelowLauncher and the touch routing sheet stay untouched (25-211's own explicit Out of scope)", () => {
+  it("BelowLauncher's own icon size rules are untouched - still governed by .ago-channel-switcher-launcher-icon, never the banner's new font-size rule", () => {
+    const cssSource = readFileSync(path.join(process.cwd(), "src", "ui", "styles.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = cssSource;
+    document.head.append(style);
+    const sheet = style.sheet;
+    if (sheet === null) {
+      throw new Error("jsdom did not parse styles.css into a CSSStyleSheet");
+    }
+
+    const rules = [...sheet.cssRules];
+    const largeIcon = rules.find(
+      (r): r is CSSStyleRule =>
+        r instanceof CSSStyleRule && r.selectorText === ".ago-channel-switcher-launcher--large .ago-channel-switcher-launcher-icon",
+    );
+    if (largeIcon === undefined) {
+      throw new Error("BelowLauncher's own large-icon rule is missing");
+    }
+    // Pre-existing pixel sizes (`25-173`), unchanged by anything this item added.
+    expect(largeIcon.style.width).toBe("3.5rem");
+    expect(largeIcon.style.height).toBe("3.5rem");
+  });
+
+  it("builds no header bar and no font-size/padding change for BelowLauncher's own row - it never uses .ago-channel-switcher-banner at all", async () => {
+    stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "BelowLauncher" });
+    const panel = await mountWidget();
+    await flush();
+
+    expect(banner(panel.root)).toBeNull();
+    expect(bannerHeader(panel.root)).toBeNull();
+    expect(panel.root.querySelector(".ago-channel-switcher-launcher")).not.toBeNull();
+  });
+
+  it("leaves the touch routing sheet's own row padding (0.75rem 1rem) untouched", () => {
+    const cssSource = readFileSync(path.join(process.cwd(), "src", "ui", "styles.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = cssSource;
+    document.head.append(style);
+    const sheet = style.sheet;
+    if (sheet === null) {
+      throw new Error("jsdom did not parse styles.css into a CSSStyleSheet");
+    }
+
+    const rule = [...sheet.cssRules].find(
+      (r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText === ".ago-touch-routing-row",
+    );
+    if (rule === undefined) {
+      throw new Error("no rule found for .ago-touch-routing-row");
+    }
+    expect(rule.style.padding).toBe("0.75rem 1rem");
   });
 });

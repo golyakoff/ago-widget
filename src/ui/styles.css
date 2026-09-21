@@ -648,8 +648,44 @@
      Two class selectors here (0,2,0,0) outrank `.ago-channel-switcher-row--open-chat`'s one (0,1,0,0),
      so its own `border-top` above is now redundant on that row rather than conflicting - confirmed live
      that an identical value from either rule paints as one line, not two. */
+  /* `25-211`: two more declarations added to this same rule (not a second block with the identical
+     selector) - a live sizing picker (icon scale 100-200%, row padding) settled on 175% - 28px, from
+     this row's own previously-inherited 16px/1rem font-size, since the icon's own inline `width="1em"
+     height="1em"` attribute (`ui/widget.ts`'s `createSvgIcon`) resolves against it. Row padding moves
+     from `0.5rem` (8px) to `0.625rem` (10px) vertical, horizontal unchanged. Both stay scoped to
+     `.ago-channel-switcher-banner .ago-channel-switcher-row` on the identical terms `border-top`
+     already established just above - not the bare `.ago-channel-switcher-row` every placement shares,
+     the identical "must not leak to the touch sheet or `BelowLauncher`" reasoning
+     `.ago-touch-routing-row svg`'s own scoping comment gives a few lines up (`.ago-touch-routing-row`
+     already carries its own explicit, later-declared `font-size`/`padding` that would win regardless,
+     but this item scopes explicitly anyway rather than relying on that as an incidental safety net). */
   .ago-channel-switcher-banner .ago-channel-switcher-row {
     border-top: 0.0625rem solid #e5e7eb;
+    font-size: 1.75rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  /* The label text must not grow with the icon above - this row's own font-size exists only so the
+     icon's inline `1em` sizing attribute resolves against it; the label stays at its own, unscaled
+     size. */
+  .ago-channel-switcher-banner .ago-channel-switcher-row span {
+    font-size: 1rem;
+  }
+
+  /* `25-211`: the banner's own header bar - a sibling of the channel rows, always the banner's first
+     child (`ui/widget.ts`'s `buildChannelSwitcherBanner`), with nothing to dismiss (clicking outside or
+     the pointer leaving the hover region already closes this banner - `25-203`'s own hover mechanism).
+     `#374151` - not a new colour, the exact value `.ago-channel-switcher-row`'s own `color` a few lines
+     up already settled on (`25-205`/`25-206`'s own colour-picker Artifact) - reused rather than a
+     close-but-different neighbour so this file names one dark neutral, not two. Rounded top corners
+     only, matching the banner's own `border-radius: 0.75rem` - the banner's own `overflow: hidden`
+     clips the rest, so the bottom corners need no rule here. */
+  .ago-channel-switcher-banner-header {
+    padding: 0.75rem;
+    background: #374151;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 0.75rem 0.75rem 0 0;
   }
 
   /* `25-204`: the `AboveComposer` banner itself - a sibling of `.ago-toggle`, never a child of

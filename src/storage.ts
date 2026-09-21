@@ -684,10 +684,18 @@ export class WidgetStorage {
   /**
    * `25-149`: the identical "opening is once - unless it's this instead" shape `getHasKnownContactDetail`
    * already has, for a different fact - whether this browser's visitor identity has already dismissed
-   * the channel-switcher card. `ui/widget.ts`'s `dismissChannelSwitcher` is the one place that ever
-   * calls `setChannelSwitcherDismissed`, regardless of which of its two callers (the card's own
-   * «Написать в чат» row, or the visitor's first sent message) triggered it - both count as "chose the
-   * in-page chat," so neither tracks its own separate flag.
+   * the channel-switcher card. `ui/widget.ts`'s `dismissChannelSwitcher` used to be the one place that
+   * ever called `setChannelSwitcherDismissed`, regardless of which of its two callers (the card's own
+   * «Написать в чат» row, or the visitor's first sent message) triggered it - both counted as "chose
+   * the in-page chat," so neither tracked its own separate flag.
+   *
+   * `25-204`: that card (`loadChannelSwitcherCard`) and `dismissChannelSwitcher` with it were retired
+   * outright - the `AboveComposer` placement is now a purely hover-driven floating banner with no
+   * persisted "seen once" memory at all (`buildChannelSwitcherBanner`'s own doc comment has the
+   * reasoning). Nothing in `ui/widget.ts` calls `setChannelSwitcherDismissed`/`getChannelSwitcherDismissed`
+   * any more; these two, and `clearChannelSwitcherDismissed` below, are exercised only by this file's
+   * own tests now, plus `VisitorSessionManager.start`'s `17-07` identity-reset sweep, which clears every
+   * per-identity flag unconditionally regardless of whether the widget still reads it.
    */
   getChannelSwitcherDismissed(): boolean {
     return this.readSafe("channel-switcher-dismissed") === "true";

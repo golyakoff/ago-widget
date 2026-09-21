@@ -590,28 +590,19 @@
     cursor: not-allowed;
   }
 
-  /* 25-149: the channel-switcher card - "directly above the composer," the item's own words, the
-     identical anchor .ago-module-chip above already uses (this file's own remarks up there). Reuses
-     existing tokens only, nothing parallel: background/radius are .ago-panel's own literal values
-     (#fff, 0.75rem) rather than a second surface colour, and the three-sided margin is
-     .ago-module-chip's own (0 0.75rem 0.5rem) - the identical clearance from .ago-messages above and
-     .ago-composer below. A role="group" region (ui/widget.ts), not a list - the rows read as one
-     group of alternatives, not an enumerated sequence. */
-  .ago-channel-switcher {
-    display: flex;
-    flex-direction: column;
-    background: #fff;
-    border-radius: 0.75rem;
-    margin: 0 0.75rem 0.5rem;
-  }
+  /* `25-149`: introduced an above-composer card surface here (`.ago-channel-switcher`) - `25-204`
+     retired that card (`loadChannelSwitcherCard`) outright; see `.ago-channel-switcher-banner` further
+     below for its floating replacement. The shared row rule the card's rows and every other
+     channel-switcher renderer's rows still carry follows immediately. */
 
-  /* 25-149: one row, whether a real anchor (a connected channel) or a button (the "stay here" row
-     below) - both need the identical layout, so this rule targets the shared class rather than each
-     element type. No brand colour here: ui/widget.ts sets color per row inline, a small,
-     widget-local per-kind constant deliberately independent of --ago-accent (this file's own remarks
-     on --ago-unread-badge-bg already give the identical "must read against whatever a tenant
-     configured" reasoning) - .ago-channel-switcher-row itself stays colour-neutral so the "stay here"
-     row (which never gets that inline colour) reads in the panel's own ordinary text colour instead. */
+  /* 25-149: one row, whether a real anchor (a connected channel) or a button (the final "open chat"
+     row `buildChannelSwitcherBanner`/`buildTouchRoutingSheet` each build) - both need the identical
+     layout, so this rule targets the shared class rather than each element type. No brand colour
+     here: ui/widget.ts sets color per row inline, a small, widget-local per-kind constant
+     deliberately independent of --ago-accent (this file's own remarks on --ago-unread-badge-bg
+     already give the identical "must read against whatever a tenant configured" reasoning) -
+     .ago-channel-switcher-row itself stays colour-neutral so a row with no inline colour of its own
+     reads in the panel's own ordinary text colour instead. */
   .ago-channel-switcher-row {
     display: flex;
     align-items: center;
@@ -627,13 +618,48 @@
     cursor: pointer;
   }
 
-  /* 25-149: "visually distinct (no brand colour)" - the item's own words for the final row. The
-     divider is .ago-composer's own border-top literal (0.0625rem solid #e5e7eb), reused rather than a
-     second rule invented for one more horizontal line - and a lighter weight than the channel rows
-     above it, since it is the fallback action, not one more channel to pick. */
-  .ago-channel-switcher-row--dismiss {
+  /* `25-204`: the `AboveComposer` banner's own final row - `buildChannelSwitcherBanner`'s "Онлайн
+     чат"/`channelSwitcherOnlineChat` row, reusing `.ago-touch-routing-row--chat`'s own accent-colour
+     treatment (`ui/widget.ts`'s remarks on that row explain why: it is the one row here that is not a
+     channel link but a real call to open the chat, the identical fact that row already marks with
+     colour) rather than the retired card's neutral "stay here" row - a divider line borrowed from the
+     identical `.ago-composer` border-top literal every other row-separator in this file already
+     reuses. */
+  .ago-channel-switcher-row--open-chat {
     border-top: 0.0625rem solid #e5e7eb;
-    font-weight: 500;
+    color: var(--ago-accent);
+  }
+
+  /* `25-204`: the `AboveComposer` banner itself - a sibling of `.ago-toggle`, never a child of
+     `.ago-panel` (the defect this item fixes: the console's own label, "Banners above the chat
+     window," was true of nothing the retired card built). Positioned exactly where `.ago-panel`
+     itself sits when open - the identical `bottom: 4.25rem` offset and width - rather than invented
+     fresh, since the two are never visible at once (`ui/widget.ts`'s
+     `updateChannelSwitcherLauncherVisibility` hides this the instant `open()` runs) and a real bottom
+     margin matching the panel's own is exactly what the author asked for: "снизу тоже отступ, а не
+     'до самой нижней границы' как у телефонного тапа" - not flush to the viewport edge the way
+     `.ago-touch-routing-sheet` below is. `hidden` starts `true` (`ui/widget.ts` builds it that way) -
+     the `[hidden]` override is the identical pattern `.ago-panel[hidden]`/
+     `.ago-channel-switcher-launcher[hidden]` already need for the same reason (this rule's own
+     unconditional `display: flex` would otherwise outrank the attribute). */
+  .ago-channel-switcher-banner {
+    position: absolute;
+    right: 0;
+    bottom: 4.25rem;
+    width: min(22rem, calc(100vw - 2.5rem));
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+  .ago-channel-switcher-banner[hidden] {
+    display: none;
+  }
+  .ago-root.ago-position-left .ago-channel-switcher-banner {
+    right: auto;
+    left: 0;
   }
 
   .ago-channel-switcher-launcher {
@@ -715,8 +741,9 @@
 
   /* Every row here - a real channel link, "Онлайн чат", "Отмена" - also carries
      .ago-channel-switcher-row (ui/widget.ts), reused wholesale for its flex layout/reset rather
-     than duplicated; only the divider and sizing are this sheet's own, matching
-     .ago-channel-switcher-row--dismiss's own precedent for a row-separator line.
+     than duplicated; only the divider and sizing are this sheet's own, matching the row-separator
+     precedent `.ago-channel-switcher-row--open-chat` (`25-204`) still carries - `25-149`'s original
+     `--dismiss` modifier this comment used to point at was retired along with the card it belonged to.
 
      `25-200`: found live on `golyakov.net`, mobile - confirmed via `getComputedStyle` before writing
      this rule, not assumed from the `rem` math (Shadow DOM does not create a new `rem` context; this
@@ -745,12 +772,14 @@
      100%` overrides that shrink-to-fit directly. Scoped to `.ago-touch-routing-row` - not the bare
      `.ago-channel-switcher-row` every placement's row shares - because the two other placements do
      not have this bug: confirmed live that `AboveComposer`'s own `<button>` row (`ago-channel-
-     switcher-row--dismiss`) already measures full width (328px alongside its two 328px `<a>`
-     siblings) with no fix at all, because its parent `.ago-channel-switcher` is itself `display: flex;
-     flex-direction: column` - each row there is a flex *item*, not a plain block child, and the
-     container's own default `align-items: stretch` fills every item to the container's cross-axis
-     width regardless of the button's own shrink-to-fit UA default. `BelowLauncher`'s row carries no
-     `<button>` at all (`25-173`), so it was never a candidate. */
+     switcher-row--dismiss`, at the time - `25-204` later renamed it `--open-chat` when it retired the
+     card this row lived in, moving it into `.ago-channel-switcher-banner` instead) already measures
+     full width (328px alongside its two 328px `<a>` siblings) with no fix at all, because its parent
+     (`.ago-channel-switcher` then, `.ago-channel-switcher-banner` now - both `display: flex;
+     flex-direction: column`) is itself a flex column - each row there is a flex *item*, not a plain
+     block child, and the container's own default `align-items: stretch` fills every item to the
+     container's cross-axis width regardless of the button's own shrink-to-fit UA default.
+     `BelowLauncher`'s row carries no `<button>` at all (`25-173`), so it was never a candidate. */
   .ago-touch-routing-row {
     padding: 0.75rem 1rem;
     border-top: 0.0625rem solid #e5e7eb;
@@ -772,7 +801,7 @@
      `.ago-attach[hidden]` rules already rely on the sibling case, an author rule outranking a
      same-specificity *user-agent* one, for the identical reason). Scoped to `.ago-touch-routing-row`
      specifically, not the bare `.ago-channel-switcher-row` every row-icon in this file already
-     shares, so the `AboveComposer` card and the `BelowLauncher` row's own
+     shares, so the `AboveComposer` banner and the `BelowLauncher` row's own
      `.ago-channel-switcher-launcher-icon` are untouched - this item's own "Out of scope". Fixed pixel
      values rather than a new `em` multiplier keep the icon's own size structurally independent of
      whatever the row's font-size does next, which is the whole shape "decoupled" asks for. */

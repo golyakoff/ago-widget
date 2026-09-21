@@ -201,8 +201,9 @@ interface IconNode {
 
 /**
  * `25-199`: one higher than the last call, so two icon trees built into the same shadow root -
- * `loadChannelSwitcherCard`'s `AboveComposer` card and `openTouchRoutingSheet`'s own sheet are the
- * real case this exists for, both able to hold a `Max` row at once - never mint the same suffix
+ * `buildChannelSwitcherBanner`'s `AboveComposer` banner (`25-204`, replacing `25-149`'s original card
+ * of the same name) and `openTouchRoutingSheet`'s own sheet are the real case this exists for, both
+ * able to hold a `Max` row at once - never mint the same suffix
  * twice. Module-scope rather than passed in from a caller: every `buildBrandIcon` call anywhere in
  * this file needs the identical guarantee, and a counter is the plain, deterministic way to get it
  * without reaching for `crypto.randomUUID` for what is, underneath, just "a number nobody has used
@@ -662,16 +663,23 @@ export class ChatWidget {
    * stays `readonly` in spirit (`loadBookingModuleChip` is the one place that ever assigns it, at
    * most once, mirroring how the constructor used to be the one place that did). */
   private moduleChip: HTMLButtonElement | null = null;
-  /** `25-149`: `null` until `loadChannelSwitcherCard` has decided the card should exist at all
-   * (`session.channelLinks` non-empty and not already dismissed for this visitor identity) - a site
-   * with nothing connected, or a returning visitor who already dismissed it, builds no element here,
-   * the identical "pays nothing" property `moduleChip` above already gives its own feature. Once built
-   * it is never removed, only ever hidden (`dismissChannelSwitcher`) - `open()`/`openForAutoGreeting()`
-   * need no reveal logic of their own for it, since it is an ordinary child of `this.panel` on the
-   * identical footing `this.messages`/`composer` already are. */
-  private channelSwitcherCard: HTMLDivElement | null = null;
+  /** `25-149`: introduced as the above-composer card, `null` until built. `25-204`: the card itself
+   * (`loadChannelSwitcherCard`, and its permanent `storage.getChannelSwitcherDismissed()` memory) is
+   * retired outright - the console's own label for this placement ("Banners above the chat window")
+   * was true only of a card that never actually rendered outside the panel, which is the defect this
+   * item fixes. This field now holds the floating banner `buildChannelSwitcherBanner` builds instead:
+   * `null` until that method decides one should exist at all (`session.channelLinks` non-empty - the
+   * identical "pays nothing" property `moduleChip` above already gives its own feature), a sibling of
+   * `this.toggle` on the identical footing `channelSwitcherLauncherRow` below already has, not a
+   * child of `this.panel` the way the retired card was. No persisted dismissal: this banner is purely
+   * a function of live hover state (`isHoverRegionActive`), matching `BelowLauncher` and the mobile
+   * touch sheet - both already stateless - rather than "seen once, never again" for a visitor
+   * identity. Once built it is never removed, only ever hidden by
+   * `updateChannelSwitcherLauncherVisibility` on the identical hover/open rule that row already
+   * follows. */
+  private channelSwitcherBanner: HTMLDivElement | null = null;
   /** `25-191`/`25-192`: `null` until `buildChannelSwitcherLauncherRow` decides the row should exist
-   * at all - the identical "pays nothing" property `channelSwitcherCard` above already gives its own
+   * at all - the identical "pays nothing" property `channelSwitcherBanner` above already gives its own
    * placement. Unlike that card, this element's own visibility is not fixed at build time and is not
    * a plain function of `this.panel.hidden` either: it is a sibling of `this.toggle`, not a child of
    * `this.panel`, so nothing about the panel's own state hides it for free, and `25-192`'s own
@@ -711,7 +719,7 @@ export class ChatWidget {
   /** `25-197`: the session's own connected channels, captured once in `loadChannelSwitcher`
    * regardless of which placement renderer runs - `toggleOpen` needs to know whether there is
    * anything to route to *synchronously*, at the moment of a click, which neither
-   * `channelSwitcherCard`/`channelSwitcherLauncherRow` (placement-specific, built lazily, and
+   * `channelSwitcherBanner`/`channelSwitcherLauncherRow` (placement-specific, built lazily, and
    * `null` for a site on the other placement) can answer on their own. Empty until the handshake
    * resolves - a click before then falls through to opening the chat directly, the same honest
    * degradation this widget already accepts for `loadBookingModuleChip`'s own chip. */
@@ -1409,7 +1417,7 @@ export class ChatWidget {
    * with a hover-capable pointer) never trigger `toggleOpen`'s own gate for it at all, so building
    * it eagerly alongside the two placement-specific switcher renderers would be pure waste for
    * them, the identical "pays nothing" instinct this widget already applies to `moduleChip`/
-   * `channelSwitcherCard`. */
+   * `channelSwitcherBanner`. */
   private openTouchRoutingSheet(): void {
     if (this.touchRoutingSheet === null) {
       this.touchRoutingSheet = this.buildTouchRoutingSheet();
@@ -1420,8 +1428,9 @@ export class ChatWidget {
 
   /** `25-197`: the sheet's own three ways to leave it - a channel row's own click, the "Отмена"
    * row, and the "Онлайн чат" row (after that row's own `open()` call) - all converge here. No
-   * dismissed-forever memory, unlike `dismissChannelSwitcher`: this sheet is a routing step, not
-   * an offer a visitor accepts or declines once - it reappears on the very next tap, by design. */
+   * dismissed-forever memory - like every channel-switcher renderer left in this file since `25-204`
+   * retired the one that had it, this sheet is a routing step, not an offer a visitor accepts or
+   * declines once - it reappears on the very next tap, by design. */
   private closeTouchRoutingSheet(): void {
     if (this.touchRoutingSheet !== null) {
       this.touchRoutingSheet.hidden = true;
@@ -1431,7 +1440,7 @@ export class ChatWidget {
   /**
    * `25-197`: the routing sheet itself - a question, one real row per connected channel (reusing
    * `buildChannelSwitcherRow` wholesale: the identical real `<a target="_blank"
-   * rel="noopener noreferrer">` the above-composer card already builds, so a channel row here
+   * rel="noopener noreferrer">` the above-composer banner already builds, so a channel row here
    * opens exactly the way every other channel row in this codebase already does, plus one extra
    * listener that closes the sheet without touching the anchor's own navigation), an "Онлайн чат"
    * row that is the only row calling `open()`, and a "Отмена" row that closes the sheet with no
@@ -1563,11 +1572,24 @@ export class ChatWidget {
    * own matching pair in `buildChannelSwitcherLauncherRow`) call it on every hover change. The rule
    * itself, restated by `25-192`: visible only while the chat is closed *and* the hover region is
    * currently hovered - open always wins over hover, and neither fact alone is enough. A no-op when
-   * the row was never built - a site with nothing connected, or one left on the card placement
-   * instead. */
+   * the row was never built - a site with nothing connected, or one left on the other placement.
+   *
+   * `25-204`: also the one place `channelSwitcherBanner`'s own `hidden` is written, on the identical
+   * rule - `buildChannelSwitcherBanner` wires the same `pointerenter`/`pointerleave` pair
+   * `buildChannelSwitcherLauncherRow` already does, into the same `enterHoverRegion`/
+   * `scheduleHoverRegionLeave` pair, so both hover-revealed elements share one visibility rule rather
+   * than each carrying its own copy. `parseChannelSwitcherPlacement` only ever builds one of the two
+   * per site (never both), so in practice this only ever finds one of these two fields non-null at
+   * once - confirmed by reading that parser rather than assumed - but writing both unconditionally is
+   * simpler than a placement-specific branch here, and stays correct even if a future placement ever
+   * did need both hoverable at once. */
   private updateChannelSwitcherLauncherVisibility(): void {
+    const hidden = this.isOpen || !this.isHoverRegionActive;
     if (this.channelSwitcherLauncherRow) {
-      this.channelSwitcherLauncherRow.hidden = this.isOpen || !this.isHoverRegionActive;
+      this.channelSwitcherLauncherRow.hidden = hidden;
+    }
+    if (this.channelSwitcherBanner) {
+      this.channelSwitcherBanner.hidden = hidden;
     }
   }
 
@@ -1954,13 +1976,11 @@ export class ChatWidget {
   /**
    * `25-173`: the one place `ChannelSwitcherPlacement` is actually read - kicked off from the
    * constructor at the identical `loadBookingModuleChip` timing (`await this.sessionPromise`, so an
-   * auto-opened panel gets whichever renderer applies too), and the only caller of either one.
-   * `loadChannelSwitcherCard` below is `25-149`'s own pre-existing renderer, untouched - this method's
-   * whole job is choosing between it and `buildChannelSwitcherLauncherRow` without either renderer
-   * needing to know the other exists. A site left on the default placement (`"AboveComposer"`, or a
-   * session cached before this field existed - `parseChannelSwitcherPlacement`'s own fallback) still
-   * reaches `loadChannelSwitcherCard` by exactly the same call this constructor made before this item,
-   * so its own output is pixel-for-pixel unaffected.
+   * auto-opened panel gets whichever renderer applies too), and the only caller of either one. This
+   * method's whole job is choosing between `buildChannelSwitcherLauncherRow` and (`25-204`)
+   * `buildChannelSwitcherBanner` without either renderer needing to know the other exists. A site
+   * left on the default placement (`"AboveComposer"`, or a session cached before this field existed -
+   * `parseChannelSwitcherPlacement`'s own fallback) reaches `buildChannelSwitcherBanner`.
    */
   private async loadChannelSwitcher(): Promise<void> {
     const session = await this.sessionPromise;
@@ -1985,72 +2005,94 @@ export class ChatWidget {
       return;
     }
 
-    await this.loadChannelSwitcherCard();
+    this.buildChannelSwitcherBanner(session);
   }
 
   /**
-   * `25-149`: a Jivo-style card offering the tenant's own connected channels, built once the
-   * handshake resolves `session.channelLinks` - the identical timing `loadBookingModuleChip` above
-   * already established (`await this.sessionPromise`, so an auto-opened panel gets it too) and the
-   * identical anchor (`this.composer.parentElement`, `insertBefore(..., this.composer)`) - "directly
-   * above the composer," the item's own words, not a second floating surface the panel's own focus
-   * trap and Escape handler would each need teaching about a second time.
+   * `25-204`: the `AboveComposer` renderer's own replacement for `25-149`'s original
+   * `loadChannelSwitcherCard` (retired outright by this item, along with its permanent
+   * `storage.getChannelSwitcherDismissed()`/`dismissChannelSwitcher()` memory) - a floating banner,
+   * a sibling of `this.toggle` inside `this.container`, never a child of `this.panel`. The console's
+   * own label for this placement, "Banners above the chat window," was true of nothing the retired
+   * card ever built (a card spliced directly above the composer, *inside* the open panel); this is
+   * what makes that label true.
    *
-   * A site with nothing connected (`channelLinks.length === 0`) never builds this element at all -
-   * "a session with an empty `channelLinks` shows no card at all, never an empty or single-row husk"
-   * (the item's own Scope), the identical "pays nothing" property `loadBookingModuleChip` already
-   * gives a shop with no grant. Nor does a returning visitor who already dismissed the card for this
-   * identity: `storage.getChannelSwitcherDismissed()` is read here, once, so a dismissed identity gets
-   * no channel-switcher DOM at all on a later page load, rather than a card built and immediately kept
-   * hidden.
+   * <b>Position</b>: `.ago-channel-switcher-banner` (`ui/styles.css`) anchors it exactly where
+   * `.ago-panel` itself sits when open - the identical `bottom: 4.25rem` offset and
+   * `.ago-position-left` flip - a real bottom margin rather than flush to the viewport edge the way
+   * the mobile touch sheet is (the author's own words: "снизу тоже отступ... как у телефонного
+   * тапа" is what this banner must *not* look like). The banner and the panel are never both visible
+   * at once (`updateChannelSwitcherLauncherVisibility` hides this the instant `open()` runs), so
+   * sharing that anchor point causes no overlap.
    *
-   * The item's own cadence, "shows on every panel open until dismissed," needs no per-open reveal of
-   * its own: this card sets `hidden = false` exactly once, right here, and is never re-hidden except by
-   * `dismissChannelSwitcher`. It is an ordinary child of `this.panel` on the identical footing
-   * `this.messages`/`composer` already are, so `open()`/`openForAutoGreeting()` revealing the whole
-   * panel is what makes it visible again on every later open, for free - the same reason neither method
-   * has to remember to re-reveal the transcript or the composer either.
+   * <b>Content</b>: `buildChannelSwitcherRow` verbatim, one real `<a target="_blank"
+   * rel="noopener noreferrer">` per connected channel - the identical row every other placement
+   * already builds, reused rather than re-invented a third time - plus one final row that calls
+   * `open()` for real, unlike the retired card's own "stay here" row (`this.input.focus()`, never
+   * connecting): the panel is closed while this banner is showing, so there is no composer to focus
+   * yet. No "Отмена"/cancel row - dismissal is purely the pointer leaving the hover region, matching
+   * `BelowLauncher`'s own model, not a click target (nothing in the Jivo reference or the author's own
+   * description shows one).
    *
-   * `25-173`: this method's own body is untouched by that item - `loadChannelSwitcher` above is the
-   * only thing that changed, and only to decide *whether* to call this at all.
+   * <b>Hover mechanism</b>: `25-203`'s own `isHoverRegionActive`/`enterHoverRegion`/
+   * `scheduleHoverRegionLeave` pair, reused by name rather than re-implemented - this banner carries
+   * the identical `pointerenter`/`pointerleave` listeners `buildChannelSwitcherLauncherRow` already
+   * wires to those two methods, and `updateChannelSwitcherLauncherVisibility` now hides whichever of
+   * the two hover-revealed elements it finds built (that method's own doc comment has the reasoning
+   * for why one shared rule, not two parallel ones).
+   *
+   * <b>No dismiss-persistence</b>: explicitly decided, not left implicit - this banner keeps no
+   * `storage.getChannelSwitcherDismissed()`-style memory at all. It is purely a function of live hover
+   * state, matching `BelowLauncher` and the mobile touch sheet (both already stateless) rather than
+   * the retired card's "seen once, never again" - the author's own repeated comparison to both of
+   * those is the reasoning this decision follows, stated here rather than silently picked.
+   *
+   * A site with nothing connected (`channelLinks.length === 0`) never builds this element at all - the
+   * identical "pays nothing" property every other channel-switcher renderer in this file already
+   * gives itself.
    */
-  private async loadChannelSwitcherCard(): Promise<void> {
-    const session = await this.sessionPromise;
-    if (session.channelLinks.length === 0 || this.storage.getChannelSwitcherDismissed()) {
+  private buildChannelSwitcherBanner(session: VisitorSession): void {
+    if (session.channelLinks.length === 0) {
       return;
     }
 
-    const card = document.createElement("div");
-    card.className = "ago-channel-switcher";
-    card.setAttribute("role", "group");
-    card.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
+    const banner = document.createElement("div");
+    banner.className = "ago-channel-switcher-banner";
+    banner.hidden = true;
+    banner.setAttribute("role", "group");
+    banner.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
+    // `25-203`'s own pair, verbatim - see `buildChannelSwitcherLauncherRow`'s identical listeners for
+    // the full reasoning: the toggle and this banner sit across a real gap, and one shared flag plus
+    // grace period is what turns them into one continuously hoverable region rather than two
+    // independently reacting elements.
+    banner.addEventListener("pointerenter", () => this.enterHoverRegion());
+    banner.addEventListener("pointerleave", () => this.scheduleHoverRegionLeave());
 
     for (const link of session.channelLinks) {
-      card.append(this.buildChannelSwitcherRow(link));
+      banner.append(this.buildChannelSwitcherRow(link));
     }
 
-    const writeInChatRow = document.createElement("button");
-    writeInChatRow.type = "button";
-    writeInChatRow.className = "ago-channel-switcher-row ago-channel-switcher-row--dismiss";
-    writeInChatRow.textContent = this.strings.channelSwitcherWriteInChat;
-    // `adr/0148`: focuses the composer - never `connect()`. `completeSend`'s own lazy
-    // connect-on-first-send is what actually opens the hub; a control that sends nothing itself must
-    // not undo that laziness, which is exactly the regression the backlog item names by pointing at
-    // `adr/0148` here.
-    //
-    // `25-191`: no longer dismisses the card. The author's own correction - two independent
-    // dismissal triggers (this click, and `dispatchSend`'s own call for "the visitor's first sent
-    // message") read as one condition doing double duty; the single one that should survive is the
-    // visitor actually sending a message. Choosing to type instead of picking a channel is not the
-    // same fact as having sent something - the card stays exactly as visible after this click as
-    // before it, and `dispatchSend` remains the one place `dismissChannelSwitcher` is ever called.
-    writeInChatRow.addEventListener("click", () => {
-      this.input.focus();
-    });
-    card.append(writeInChatRow);
+    // `25-197`'s own "Онлайн чат" row, reused wholesale (identical icon, identical string) rather than
+    // a second "open chat" row invented for this banner - the only difference from the touch sheet's
+    // own copy is what happens on click: there is no sheet here to close first, only `open()` itself.
+    const openChatRow = document.createElement("button");
+    openChatRow.type = "button";
+    openChatRow.className = "ago-channel-switcher-row ago-channel-switcher-row--open-chat";
+    const chatIcon = createSvgIcon(CHAT_BUBBLE_ICON_PATH);
+    chatIcon.setAttribute("aria-hidden", "true");
+    openChatRow.append(chatIcon);
+    const chatLabel = document.createElement("span");
+    chatLabel.textContent = this.strings.channelSwitcherOnlineChat;
+    openChatRow.append(chatLabel);
+    openChatRow.addEventListener("click", () => this.open());
+    banner.append(openChatRow);
 
-    this.composer.parentElement?.insertBefore(card, this.composer);
-    this.channelSwitcherCard = card;
+    this.container.append(banner);
+    this.channelSwitcherBanner = banner;
+    // `25-192`'s own reasoning, restated for this element: in case the toggle is already hovered by
+    // the time this async build finishes (a slow handshake settling while the pointer sits over a
+    // toggle that had nothing to show yet).
+    this.updateChannelSwitcherLauncherVisibility();
   }
 
   /**
@@ -2089,17 +2131,18 @@ export class ChatWidget {
 
   /**
    * `25-173`: the "below launcher" renderer - `loadChannelSwitcher`'s other branch, chosen instead of
-   * `loadChannelSwitcherCard` when `ChannelSwitcherPlacement` is `"BelowLauncher"`. A horizontal row
+   * `buildChannelSwitcherBanner` when `ChannelSwitcherPlacement` is `"BelowLauncher"`. A horizontal row
    * of small circular icons, one per connected channel, vertically centred on `this.toggle`
    * (`.ago-toggle`, 56px/`3.5rem`) - `ui/styles.css`'s own `.ago-channel-switcher-launcher` rule
    * positions it, starting right after the toggle and growing toward whichever side the panel already
    * opens from (the same `.ago-position-left` class `bootstrapSession` toggles on `this.container` for
    * the toggle/panel themselves - this row follows it rather than choosing a side of its own).
    *
-   * Still no dismiss concept, unlike `loadChannelSwitcherCard` - there is no
-   * `storage.getChannelSwitcherDismissed()` check here, and nothing for `dismissChannelSwitcher`/
-   * `dispatchSend` to hide permanently. A site with nothing connected still builds nothing, the
-   * identical "pays nothing" property the card gives itself.
+   * `25-204`: no dismiss concept either, and now neither does the other placement - `25-149`'s
+   * original above-composer card, the one renderer that ever had
+   * `storage.getChannelSwitcherDismissed()`/`dismissChannelSwitcher`, was retired outright by that
+   * item. A site with nothing connected still builds nothing, the identical "pays nothing" property
+   * `buildChannelSwitcherBanner` gives itself.
    *
    * `25-191`: no longer a persistent row. `25-173`'s own original design showed this row whether
    * the panel was open or closed, on the reasoning that a sibling of `this.toggle` (not a child of
@@ -2163,7 +2206,7 @@ export class ChatWidget {
    * it still reads as one of the row's own circles rather than a glyph floating with no badge under
    * it. A real `<a target="_blank" rel="noopener noreferrer">`, the identical reasoning
    * `buildChannelSwitcherRow`'s own remarks give for why this is never a JS-driven navigation - and,
-   * since this row carries no visible text label the way the card's own rows do, the accessible name
+   * since this row carries no visible text label the way the banner's own rows do, the accessible name
    * lives entirely on this anchor's own `aria-label`.
    */
   private buildChannelSwitcherLauncherIcon(link: { kind: string; url: string }): HTMLAnchorElement {
@@ -2188,26 +2231,6 @@ export class ChatWidget {
     icon.setAttribute("aria-hidden", "true");
     item.append(icon);
     return item;
-  }
-
-  /**
-   * `25-149`: dismisses the card, permanently for this visitor identity. `25-191`: `dispatchSend`'s
-   * own call below - "the visitor's first sent message" - is now the *only* caller; the «Написать в
-   * чат» row's own click used to trigger this identically and no longer does (that handler's own
-   * remarks have the reasoning). Idempotent by construction regardless: a second send once the card
-   * is already dismissed writes the identical stored value and hides an already-hidden or
-   * already-absent element, never a throw.
-   *
-   * Reuses `WidgetStorage`'s own per-identity clearing (`VisitorSessionManager.start`'s `17-07`
-   * branch, alongside `clearAutoOpenGreetingShown`/`clearHasKnownContactDetail`) rather than a second,
-   * parallel mechanism - the item's own explicit "Where this is likely to go wrong" - so a freshly
-   * minted visitor identity is never silently born "already dismissed."
-   */
-  private dismissChannelSwitcher(): void {
-    this.storage.setChannelSwitcherDismissed();
-    if (this.channelSwitcherCard) {
-      this.channelSwitcherCard.hidden = true;
-    }
   }
 
   /**
@@ -2620,12 +2643,10 @@ export class ChatWidget {
    * arguments to the one function every visitor-authored message already goes through.
    */
   private dispatchSend(body: string, attachmentId?: string, contentKind?: string, content?: string): void {
-    // `25-149`: "the visitor's first sent message" is the card's own second, independent dismissal
-    // trigger, alongside the «Написать в чат» row's own click - every visitor-authored send, typed or
-    // a module's own trigger phrase (`invokeModule`), goes through this one function, which is what
-    // makes this the single place to observe that fact rather than a second copy of the check at each
-    // of this method's own callers.
-    this.dismissChannelSwitcher();
+    // `25-149`/`25-191`: used to also dismiss the above-composer card here - "the visitor's first
+    // sent message" was that card's own second, independent dismissal trigger. `25-204` retired the
+    // card (and its permanent dismissal memory) outright, so this method no longer has anything to
+    // observe on send; nothing replaces the removed call.
 
     // `23-64`/`adr/0148`: the optimistic bubble still renders synchronously, before any connection
     // exists or not - a visitor typing into an auto-opened panel gets the identical instant feedback

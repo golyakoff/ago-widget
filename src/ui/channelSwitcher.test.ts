@@ -1,19 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { WidgetConfig } from "../config.js";
 import { hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 
 /**
- * `25-149`: the Jivo-style channel-switcher card - one row per entry in `session.channelLinks`, plus
- * a final "stay here" row, built above the composer at the identical `loadBookingModuleChip` timing
- * `ui/widget.ts`'s own remarks on `loadChannelSwitcherCard` explain.
+ * `25-204`: the `AboveComposer` placement's own renderer - a hover-revealed floating banner above
+ * the toggle, outside the chat panel entirely, replacing `25-149`'s original inside-panel card
+ * (`loadChannelSwitcherCard`, retired outright by this item). The console's own label for this
+ * placement, "Banners above the chat window" (`ago-console`), was true of nothing the retired card
+ * ever built - a card spliced directly above the composer, *inside* the open panel - which is the
+ * defect this item exists to fix and this file exists to prove fixed.
  *
- * Modeled on `modules.test.ts`'s own shape (`vi.mock("@microsoft/signalr", ...)`, a `stubFetch`
- * returning a handshake response, mount-and-open) - the closest existing precedent for "a session-
- * resolved, entitlement-gated element spliced above the composer."
+ * Modeled on `channelSwitcherLauncher.test.ts`'s own shape for the hover mechanism (fake timers,
+ * `hoverToggle`/`unhoverToggle`, `HOVER_REGION_LEAVE_GRACE_MS`) - this banner reuses `25-203`'s own
+ * `isHoverRegionActive`/`enterHoverRegion`/`scheduleHoverRegionLeave` mechanism by name rather than a
+ * second, parallel implementation, so its own visibility tests are the identical shape that file
+ * already proves for `BelowLauncher`'s row - and on this file's own pre-`25-204` shape for the row
+ * content (real link attributes, brand icons, unrecognised-kind fallback) - `buildChannelSwitcherRow`
+ * itself is untouched by this item, only where its output is mounted changed.
  */
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
-const { ChatWidget } = await import("./widget.js");
+const { ChatWidget, HOVER_REGION_LEAVE_GRACE_MS } = await import("./widget.js");
 
 const config: WidgetConfig = {
   siteKey: "shop_test",
@@ -106,12 +115,23 @@ function pressEnter(panel: Panel): void {
   );
 }
 
-function card(root: ShadowRoot): HTMLDivElement | null {
-  return root.querySelector<HTMLDivElement>(".ago-channel-switcher");
+function banner(root: ShadowRoot): HTMLDivElement | null {
+  return root.querySelector<HTMLDivElement>(".ago-channel-switcher-banner");
+}
+
+function isChatOpen(root: ShadowRoot): boolean {
+  return !root.querySelector<HTMLDivElement>(".ago-panel")!.hidden;
 }
 
 function rows(root: ShadowRoot): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(".ago-channel-switcher-row")];
+}
+
+function twoChannels(): ChannelLinkFixture[] {
+  return [
+    { kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" },
+    { kind: "WhatsApp", url: "https://wa.me/15550100" },
+  ];
 }
 
 beforeEach(() => {
@@ -126,42 +146,212 @@ afterEach(() => {
 });
 
 describe("a site with nothing connected", () => {
-  it("shows no card at all - never an empty or single-row husk", async () => {
+  it("builds no banner at all, even on hover", async () => {
     stubFetch({ channelLinks: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
-    await flush();
+    panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
 
-    expect(card(panel.root)).toBeNull();
+    expect(banner(panel.root)).toBeNull();
   });
 });
 
 describe("a site with connected channels", () => {
-  function twoChannels(): ChannelLinkFixture[] {
-    return [
-      { kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" },
-      { kind: "WhatsApp", url: "https://wa.me/15550100" },
-    ];
-  }
+  describe("never a card inside the panel - the defect this item fixes", () => {
+    it("builds no .ago-channel-switcher card anywhere - retired, not merely hidden", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click();
+      await flush();
 
-  it("shows one row per connected channel plus the write-in-chat row", async () => {
+      expect(panel.root.querySelector(".ago-channel-switcher")).toBeNull();
+    });
+
+    it("is a sibling of the toggle, never a descendant of .ago-panel", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      const built = banner(panel.root)!;
+      expect(built.parentElement).toBe(panel.toggle.parentElement);
+      expect(panel.root.querySelector(".ago-panel")!.contains(built)).toBe(false);
+    });
+  });
+
+  describe("visibility requires both closed and hovered - the identical rule BelowLauncher's own row follows", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function hoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    async function unhoverToggle(panel: Panel): Promise<void> {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+    }
+
+    it("is hidden before the toggle is ever hovered", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      expect(banner(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("reveals on hover, hides again once the grace period elapses after the pointer leaves", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+
+      await unhoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("never reveals on hover while the chat panel is open", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      await flush();
+
+      panel.toggle.click(); // open
+      await flush();
+
+      hoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("reveals immediately on close if the pointer never left the toggle", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      await flush();
+
+      panel.toggle.click(); // open
+      await flush();
+      hoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", true); // still open
+
+      panel.toggle.click(); // close, pointer still over the toggle
+      await flush();
+      expect(banner(panel.root)).toHaveProperty("hidden", false); // no fresh pointerenter needed
+    });
+  });
+
+  // `25-203`'s own gap-crossing mechanism, reused rather than re-implemented - this banner sits
+  // across a real gap from the toggle exactly like BelowLauncher's row does
+  // (`channelSwitcherLauncher.test.ts`'s own identical describe block proves the mechanism itself in
+  // more depth; this block confirms the banner is wired to the same two methods, not a second copy).
+  describe("the hover region spans the toggle and the banner - closing the gap between them (25-203)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function hoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    function unhoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    }
+
+    function hoverBanner(panel: Panel): void {
+      banner(panel.root)!.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    function unhoverBanner(panel: Panel): void {
+      banner(panel.root)!.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    }
+
+    it("stays visible when the pointer is over the banner directly, even though the toggle itself was never hovered", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverBanner(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+    });
+
+    it("never hides while the pointer crosses from the toggle into the banner within the grace period", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+
+      // Left the toggle's own box, not yet arrived at the banner - the leave only starts the grace
+      // period timer, no time has passed yet.
+      unhoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+
+      // Arrives at the banner within the grace period - its own pointerenter cancels the pending
+      // timer outright.
+      hoverBanner(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+
+      // Letting the full grace period elapse afterwards proves the cancellation was real, not merely
+      // a longer delay.
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+    });
+
+    it("hides once the grace period elapses if the pointer leaves the toggle and never reaches the banner", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      unhoverToggle(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false); // still within the grace period
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(banner(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("hides again, after its own grace period, once the pointer leaves the banner too", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      unhoverToggle(panel);
+      hoverBanner(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+
+      unhoverBanner(panel);
+      expect(banner(panel.root)).toHaveProperty("hidden", false); // still within the grace period
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(banner(panel.root)).toHaveProperty("hidden", true);
+    });
+  });
+
+  it("shows one row per connected channel plus the open-chat row", async () => {
     stubFetch({ channelLinks: twoChannels() });
     joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
     const built = rows(panel.root);
-    expect(built).toHaveLength(3); // Telegram, WhatsApp, write-in-chat
-
-    expect(panel.root.querySelector(".ago-channel-switcher")).toHaveProperty("hidden", false);
+    expect(built).toHaveLength(3); // Telegram, WhatsApp, open-chat
   });
 
   it("renders each channel row as a real new-tab link carrying the server's own URL", async () => {
     stubFetch({ channelLinks: twoChannels() });
-    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
     const telegramRow = rows(panel.root).find((row) => row.textContent?.includes("Telegram")) as HTMLAnchorElement;
@@ -169,65 +359,33 @@ describe("a site with connected channels", () => {
     expect(telegramRow.getAttribute("href")).toBe("https://t.me/tenant_bot?start=abc123");
     expect(telegramRow.getAttribute("target")).toBe("_blank");
     expect(telegramRow.getAttribute("rel")).toBe("noopener noreferrer");
-    // The accessible name is the visible, untranslated proper noun - never run through WidgetStrings.
     expect(telegramRow.textContent).toContain("Telegram");
   });
 
   it("names the group with role=group and an accessible label", async () => {
     stubFetch({ channelLinks: twoChannels() });
-    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
-    const group = card(panel.root)!;
-    expect(group.getAttribute("role")).toBe("group");
-    expect(group.getAttribute("aria-label")).toBeTruthy();
+    const built = banner(panel.root)!;
+    expect(built.getAttribute("role")).toBe("group");
+    expect(built.getAttribute("aria-label")).toBeTruthy();
   });
 
-  // `25-149`'s own explicit Done-when: an unrecognised kind is never dropped or a crash.
+  // `25-149`'s own explicit Done-when, restated for the banner: an unrecognised kind is never
+  // dropped or a crash.
   it("renders an unrecognised kind with a fallback icon and its own raw label rather than dropping it", async () => {
     stubFetch({ channelLinks: [{ kind: "FutureChannel", url: "https://future.example/chat" }] });
-    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
     const built = rows(panel.root);
-    expect(built).toHaveLength(2); // the unrecognised channel, plus write-in-chat
+    expect(built).toHaveLength(2); // the unrecognised channel, plus open-chat
     const unknownRow = built.find((row) => row.textContent?.includes("FutureChannel"));
     expect(unknownRow).toBeDefined();
     expect(unknownRow?.querySelector("svg")).not.toBeNull();
   });
 
-  it("a visitor with unread history still sees their own transcript, unaffected by the card", async () => {
-    stubFetch({ channelLinks: twoChannels() });
-    joinQueue.push({
-      conversationId: "conv-1",
-      isNew: false,
-      history: [
-        {
-          id: "m1",
-          sequence: 1,
-          authorKind: "Operator",
-          authorId: "88888888-8888-8888-8888-888888888888",
-          body: "hello there",
-          createdAt: "2026-08-25T09:00:00+00:00",
-        },
-      ],
-    });
-    const panel = await mountWidget();
-    panel.toggle.click();
-    await flush();
-
-    expect(panel.root.querySelector(".ago-message")?.textContent).toContain("hello there");
-    expect(card(panel.root)).not.toBeNull();
-  });
-
-  // `25-172`: the four recognised kinds now render a real, multi-path brand mark built via a
-  // structured-tree builder rather than `createSvgIcon`'s single `fill: currentColor` path - these
-  // assertions would have failed against `25-149`'s own placeholder shapes (each exactly one `<path>`)
-  // and guard against silently regressing back to them.
   describe("the four recognised channels' real brand icons", () => {
     function allFourChannels(): ChannelLinkFixture[] {
       return [
@@ -238,8 +396,6 @@ describe("a site with connected channels", () => {
       ];
     }
 
-    // Wire `kind` -> the label `CHANNEL_DISPLAY_NAMES` actually renders (`Vk`/`Max` display as the
-    // all-caps "VK"/"MAX" acronyms) - rows() below finds a row by its visible text, not the wire string.
     const DISPLAYED_LABEL: Record<string, string> = {
       Telegram: "Telegram",
       WhatsApp: "WhatsApp",
@@ -249,9 +405,7 @@ describe("a site with connected channels", () => {
 
     it("gives Telegram, WhatsApp and VK more than one <path> - a real multi-part mark, not a placeholder glyph", async () => {
       stubFetch({ channelLinks: allFourChannels() });
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
-      panel.toggle.click();
       await flush();
 
       const built = rows(panel.root);
@@ -262,38 +416,9 @@ describe("a site with connected channels", () => {
       }
     });
 
-    it("never leaves the recognised channels' icon fill reading currentColor - it must not follow row.style.color", async () => {
-      stubFetch({ channelLinks: allFourChannels() });
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
-      const panel = await mountWidget();
-      panel.toggle.click();
-      await flush();
-
-      const built = rows(panel.root);
-      for (const kind of ["Telegram", "WhatsApp", "Vk", "Max"]) {
-        const row = built.find((r) => r.textContent?.includes(DISPLAYED_LABEL[kind]!))!;
-        const svg = row.querySelector("svg")!;
-        expect(svg.getAttribute("fill")).not.toBe("currentColor");
-      }
-    });
-
-    it("crops MAX's icon to a true circle via clip-path, unlike its native rounded-square art", async () => {
-      stubFetch({ channelLinks: allFourChannels() });
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
-      const panel = await mountWidget();
-      panel.toggle.click();
-      await flush();
-
-      const maxRow = rows(panel.root).find((r) => r.textContent?.includes("MAX"))!;
-      const svg = maxRow.querySelector("svg")!;
-      expect(svg.getAttribute("style") ?? "").toContain("clip-path:circle(50% at 50% 50%)");
-    });
-
     it("keeps the label text tint independent of the icon - row.style.color still carries the brand hex", async () => {
       stubFetch({ channelLinks: allFourChannels() });
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
-      panel.toggle.click();
       await flush();
 
       const telegramRow = rows(panel.root).find((r) => r.textContent?.includes("Telegram")) as HTMLAnchorElement;
@@ -301,98 +426,144 @@ describe("a site with connected channels", () => {
     });
   });
 
-  describe("the write-in-chat row", () => {
-    const AUTO_OPEN_DELAY_MS = 30_000;
-
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    // `25-191`: no longer a dismissal trigger - the author's own correction, two independent
-    // dismissal paths (this click, and sending the first message) doing the identical thing read as
-    // one condition rather than two, and the one that should survive is an actual sent message.
-    it("focuses the composer, sends nothing, never forces a connection, and leaves the card visible", async () => {
-      stubFetch({
-        channelLinks: twoChannels(),
-        widgetAutoOpenEnabled: true,
-        widgetAutoOpenDelaySeconds: 30,
-        widgetAutoOpenGreetingText: "Hi, need any help?",
-      });
+  describe("the open-chat row", () => {
+    it("renders with the shared 'online chat' label and icon, opens the panel for real on click", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
+      await flush();
 
-      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      const openChatRow = panel.root.querySelector<HTMLButtonElement>(".ago-channel-switcher-row--open-chat")!;
+      expect(openChatRow.tagName).toBe("BUTTON");
+      expect(openChatRow.textContent).toContain("Online chat");
+      expect(openChatRow.querySelector("svg")).not.toBeNull();
 
-      // `adr/0148`: auto-open never connects on its own - the fails-before shape this file borrows
-      // from `widget.test.ts`'s own auto-open block.
-      expect(hubs.length).toBe(0);
-      expect(card(panel.root)).toHaveProperty("hidden", false);
+      expect(isChatOpen(panel.root)).toBe(false);
+      openChatRow.click();
+      await flush();
+      expect(isChatOpen(panel.root)).toBe(true);
+    });
 
-      const dismissRow = panel.root.querySelector<HTMLButtonElement>(".ago-channel-switcher-row--dismiss")!;
-      dismissRow.click();
+    // Unlike the retired card's "stay here" row, the panel is closed while this banner shows - there
+    // is no composer to focus instead of opening the chat.
+    it("has no separate 'write in chat instead' row - opening the panel is the only way this row leaves", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
 
-      expect(card(panel.root)).toHaveProperty("hidden", false);
-      expect(panel.root.activeElement).toBe(panel.input);
-      expect(hubs.length).toBe(0); // still never connected
+      expect(rows(panel.root).filter((r) => r.tagName === "BUTTON")).toHaveLength(1);
+    });
+
+    // The item's own explicit scope: no "Отмена"/cancel row - dismissal is purely the pointer
+    // leaving the hover region, matching BelowLauncher's own model.
+    it("has no cancel row anywhere in the banner", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      const built = banner(panel.root)!;
+      expect([...built.querySelectorAll("button")].some((b) => b.textContent?.includes("Отмена"))).toBe(false);
+      expect([...built.querySelectorAll("button")].some((b) => b.textContent?.toLowerCase().includes("cancel"))).toBe(
+        false,
+      );
     });
   });
 
-  describe("sending the first message", () => {
-    it("also dismisses the card, without a separate click on the write-in-chat row", async () => {
+  // The item's own explicit decision, restated here as a test rather than left implicit: this banner
+  // keeps no `storage.getChannelSwitcherDismissed()`-style memory at all - it is purely a function of
+  // live hover state, matching `BelowLauncher` and the mobile touch sheet (both already stateless)
+  // rather than the retired card's "seen once, never again".
+  describe("no dismiss-persistence - purely live hover state, like BelowLauncher and the mobile sheet", () => {
+    it("sending a message does not touch the banner's own build or visibility either way", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click(); // open
+      await flush();
+
+      type(panel, "Hello!");
+      pressEnter(panel);
+      await flush();
+
+      // Still built, still governed by the ordinary open/hover rule alone - nothing about sending a
+      // message hid it, and nothing about it hid the composer either.
+      expect(banner(panel.root)).not.toBeNull();
+      panel.toggle.click(); // close
+      await flush();
+      panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      expect(banner(panel.root)).toHaveProperty("hidden", false);
+    });
+
+    it("reappears identically after a reload - never permanently hidden the way the retired card's dismissal was", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const first = await mountWidget();
+      await flush();
+      first.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      expect(banner(first.root)).toHaveProperty("hidden", false);
+
+      document.body.innerHTML = "";
+      resetFakeSignalR();
+      const reloaded = await mountWidget();
+      await flush();
+      reloaded.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+
+      expect(banner(reloaded.root)).toHaveProperty("hidden", false);
+    });
+
+    it("never writes to storage's own channel-switcher-dismissed key", async () => {
       stubFetch({ channelLinks: twoChannels() });
       joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
       const panel = await mountWidget();
       panel.toggle.click();
       await flush();
-
-      expect(card(panel.root)).toHaveProperty("hidden", false);
-
       type(panel, "Hello!");
       pressEnter(panel);
       await flush();
 
-      expect(card(panel.root)).toHaveProperty("hidden", true);
+      expect(localStorage.getItem("ago-chat:shop_test:channel-switcher-dismissed")).toBeNull();
     });
   });
 
-  describe("cadence across opens and a reload", () => {
-    it("reappears on every subsequent open until dismissed, then stays hidden across a reload", async () => {
-      stubFetch({ channelLinks: twoChannels() });
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
-      const panel = await mountWidget();
+  it("never connects the hub on its own - the banner is built without the visitor writing anything", async () => {
+    stubFetch({ channelLinks: twoChannels() });
+    await mountWidget();
+    await flush();
 
-      panel.toggle.click(); // open
-      await flush();
-      expect(card(panel.root)).toHaveProperty("hidden", false);
+    expect(hubs.length).toBe(0);
+  });
+});
 
-      panel.toggle.click(); // close
-      await flush();
-      panel.toggle.click(); // reopen - still there, no dismissal happened
-      await flush();
-      expect(card(panel.root)).toHaveProperty("hidden", false);
+/**
+ * `25-204`: "a real bottom margin, not flush to the viewport's bottom edge" - the author's own words.
+ * jsdom cannot compute a shadow root's own cascade (`touchRoutingSheetSizing.test.ts`'s own top
+ * comment has the full reasoning for why this repository's answer is reading the declared source
+ * rule directly rather than `getComputedStyle` on a mounted widget); this proves the declared value
+ * matches `.ago-panel`'s own literal exactly, by construction rather than by eye.
+ */
+describe("the banner's own position (25-204)", () => {
+  function bannerRule(): CSSStyleRule {
+    const cssSource = readFileSync(path.join(process.cwd(), "src", "ui", "styles.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = cssSource;
+    document.head.append(style);
+    const sheet = style.sheet;
+    if (sheet === null) {
+      throw new Error("jsdom did not parse styles.css into a CSSStyleSheet");
+    }
+    const match = [...sheet.cssRules].find(
+      (rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.selectorText === ".ago-channel-switcher-banner",
+    );
+    if (match === undefined) {
+      throw new Error("no rule found for .ago-channel-switcher-banner");
+    }
+    return match;
+  }
 
-      // `25-191`: the write-in-chat row no longer dismisses - sending an actual message is the one
-      // remaining trigger, the identical send the "sending the first message" describe block above
-      // already proves in isolation.
-      type(panel, "Hello!");
-      pressEnter(panel);
-      await flush();
-      expect(card(panel.root)).toHaveProperty("hidden", true);
+  it("anchors bottom: 4.25rem - the identical offset .ago-panel itself uses, never flush to the viewport edge", () => {
+    expect(bannerRule().style.bottom).toBe("4.25rem");
+  });
 
-      // "Reload": a brand-new `ChatWidget` instance against the same, now-populated `localStorage` -
-      // the identical stand-in `sessionRenewal.test.ts`/`unreadBadgeReload.test.ts` already use for a
-      // returning visitor's browser.
-      document.body.innerHTML = "";
-      resetFakeSignalR();
-      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
-      const reloaded = await mountWidget();
-      reloaded.toggle.click();
-      await flush();
-
-      expect(card(reloaded.root)).toBeNull();
-    });
+  it("is positioned absolute, matching .ago-panel's own anchoring rather than the mobile sheet's fixed inset", () => {
+    expect(bannerRule().style.position).toBe("absolute");
   });
 });

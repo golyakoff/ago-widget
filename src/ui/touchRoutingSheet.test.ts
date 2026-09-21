@@ -280,15 +280,15 @@ describe("a touch-only device with connected channels", () => {
 
 /**
  * `25-198`: the routing sheet is a touch visitor's *only* channel-choice surface - `25-149`'s
- * above-composer card and `25-173`'s below-launcher row must both build nothing at all on such a
- * device, on either placement, so a visitor who already saw the sheet never sees the identical
- * choice again inside the panel. `loadChannelSwitcher` (`ui/widget.ts`) is where this is decided,
- * once, before either placement-specific renderer runs - proven here rather than by inspecting that
- * private method directly, the same "assert the built DOM, not the internals" approach every other
- * test in this file already takes.
+ * above-composer renderer (a floating banner since `25-204`) and `25-173`'s below-launcher row must
+ * both build nothing at all on such a device, on either placement, so a visitor who already saw the
+ * sheet never sees the identical choice again. `loadChannelSwitcher` (`ui/widget.ts`) is where this
+ * is decided, once, before either placement-specific renderer runs - proven here rather than by
+ * inspecting that private method directly, the same "assert the built DOM, not the internals"
+ * approach every other test in this file already takes.
  */
 describe("a touch-only device with connected channels (25-198)", () => {
-  it("builds no AboveComposer card - the sheet's own Online chat row opens a panel with nothing extra in it", async () => {
+  it("builds no AboveComposer banner - the sheet's own Online chat row opens a panel with nothing extra in it", async () => {
     stubHover(true);
     stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "AboveComposer" });
     joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
@@ -301,7 +301,7 @@ describe("a touch-only device with connected channels (25-198)", () => {
     await flush();
 
     expect(isOpen(panel.root)).toBe(true);
-    expect(panel.root.querySelector(".ago-channel-switcher")).toBeNull();
+    expect(panel.root.querySelector(".ago-channel-switcher-banner")).toBeNull();
   });
 
   it("builds no BelowLauncher row either, even before the panel is ever opened", async () => {

@@ -24,7 +24,7 @@ import path from "node:path";
  *
  * What this *can* prove: the exact declared values, and that the icon's sizing rule is scoped to
  * `.ago-touch-routing-row` and not the bare `.ago-channel-switcher-row` every other placement's row
- * also carries - which is what keeps `AboveComposer`'s card and `BelowLauncher`'s row untouched.
+ * also carries - which is what keeps `AboveComposer`'s banner and `BelowLauncher`'s row untouched.
  * What it cannot prove is that a real browser paints these numbers - that is `docs/backlog/25-200-
  * *.md`'s own explicit live-verification ask, done separately against `golyakov.net` and a local
  * build, not something jsdom can stand in for.
@@ -78,7 +78,7 @@ describe("the touch routing sheet's row sizing (25-200, revised by 25-201)", () 
   it("never applies the row's icon sizing to the bare .ago-channel-switcher-row every other placement's row also carries", () => {
     const rows = touchRoutingSheetRules();
 
-    // AboveComposer (buildChannelSwitcherRow's own <a class="ago-channel-switcher-row">, no
+    // AboveComposer's banner (buildChannelSwitcherRow's own <a class="ago-channel-switcher-row">, no
     // .ago-touch-routing-row) must not pick up a fixed pixel icon size meant for the sheet alone -
     // there is no rule at all for the bare class's own svg.
     const bareRowSvgRule = [...rows].find(
@@ -124,17 +124,18 @@ describe("the touch routing sheet's button rows fill the panel (25-202)", () => 
   it("scopes the fix to the sheet's own row class, not the bare .ago-channel-switcher-row every other placement's row also carries", () => {
     const rows = touchRoutingSheetRules();
 
-    // AboveComposer's own <button class="ago-channel-switcher-row ago-channel-switcher-row--dismiss">
-    // (writeInChatRow, ui/widget.ts) does not have this bug at all - confirmed live: its parent
-    // .ago-channel-switcher is itself `display: flex; flex-direction: column`, so every row there is
-    // a flex *item*, not a plain block child, and the container's own default `align-items: stretch`
-    // already fills it to the container's cross-axis width regardless of the button's shrink-to-fit
-    // UA default. Neither the bare class nor the --dismiss modifier should carry a width fix that
-    // belongs to the sheet alone.
+    // AboveComposer's own banner <button class="ago-channel-switcher-row ago-channel-switcher-row--open-chat">
+    // (openChatRow, ui/widget.ts - `25-204` renamed this from `--dismiss` when it replaced the
+    // above-composer card with the banner) does not have this bug at all - confirmed live: its parent
+    // .ago-channel-switcher-banner is itself `display: flex; flex-direction: column`, so every row
+    // there is a flex *item*, not a plain block child, and the container's own default
+    // `align-items: stretch` already fills it to the container's cross-axis width regardless of the
+    // button's shrink-to-fit UA default. Neither the bare class nor the --open-chat modifier should
+    // carry a width fix that belongs to the sheet alone.
     const bareRowRule = ruleFor(rows, ".ago-channel-switcher-row");
     expect(bareRowRule.style.width).toBe("");
 
-    const dismissRowRule = ruleFor(rows, ".ago-channel-switcher-row--dismiss");
-    expect(dismissRowRule.style.width).toBe("");
+    const openChatRowRule = ruleFor(rows, ".ago-channel-switcher-row--open-chat");
+    expect(openChatRowRule.style.width).toBe("");
   });
 });

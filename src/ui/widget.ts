@@ -485,34 +485,6 @@ const CHAT_BUBBLE_ICON_PATH =
   "M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z";
 
 /**
- * `25-149`: every colour here is a small, widget-local constant, deliberately independent of
- * `--ago-accent` - the identical "must read against whatever a tenant configured" reasoning
- * `--ago-unread-badge-bg` already states for itself (`ui/styles.css`). `25-172` narrowed this map's job:
- * since the four real brand icons above carry their own explicit fills (never `currentColor`), this
- * `row.style.color` value now only tints the row's *label text* (via `.ago-channel-switcher-row { color:
- * inherit }` in `ui/styles.css`) - it no longer doubles as an icon colour. `Telegram`/`WhatsApp`/`Vk`
- * were updated to the same authoritative brand hex the icons themselves now use (`#0088CC`/`#2AB540`/
- * `#345E90`), so the label text and the badge read as one colour again despite the two now being
- * independent mechanisms. `Max` is left at its pre-existing placeholder purple: MAX's real mark is a
- * gradient with no single flat hex to promote to text-tint duty, and inventing one is out of scope here.
- *
- * VK ships in this first version despite `25-147`'s own note that its whole integration has never
- * been exercised against a real token - the author's own explicit decision, 2026-09-18: a wrong URL
- * there is `25-147`'s own bug to fix, not a reason to withhold VK's row here.
- */
-const CHANNEL_BRAND_COLORS: Record<string, string> = {
-  Telegram: "#0088CC",
-  WhatsApp: "#2AB540",
-  Vk: "#345E90",
-  Max: "#6E56CF",
-};
-
-/** `25-149`: the neutral fallback colour, for the identical unrecognised-`kind` case
- * `CHANNEL_FALLBACK_ICON_PATH` covers - `#6b7280`, the same grey `.ago-status`/`.ago-message--system`
- * already use in `ui/styles.css`, not a new literal invented for this one case. */
-const CHANNEL_FALLBACK_COLOR = "#6b7280";
-
-/**
  * `25-149`: the proper noun a visitor actually reads - never run through `WidgetStrings`, never
  * translated, the same "the widget owns the frame, not the content" split this file's own remarks on
  * `channelSwitcherGroupLabel` already draw for a brand name rather than a tenant's own words. An
@@ -2102,13 +2074,28 @@ export class ChatWidget {
    * name is the visible label alone - a plain text node beside an `aria-hidden` icon, so a screen
    * reader announces the channel's own name exactly once rather than the glyph a second time as
    * meaningless "image" content. An unrecognised `kind` still gets a real, working row: the neutral
-   * fallback icon and colour, and the raw wire string itself as its label - never dropped, never a
+   * fallback icon, and the raw wire string itself as its label - never dropped, never a
    * throw (`25-149`'s own explicit Done-when).
    *
    * `25-172`: `buildBrandIcon` covers the four recognised kinds with their real, multi-colour marks;
    * anything else - including a future, unrecognised `kind` - falls through to exactly
    * `createSvgIcon(CHANNEL_FALLBACK_ICON_PATH)`, byte-for-byte the row this file has always built for
    * that case.
+   *
+   * `25-205`: this row no longer sets an inline `color` at all. It used to (`row.style.color =
+   * CHANNEL_BRAND_COLORS[link.kind] ?? CHANNEL_FALLBACK_COLOR`), but `25-172` had already narrowed
+   * that value to tinting the label `<span>` alone - the four real brand icons carry their own
+   * explicit fills and never read `currentColor`, so this line no longer touched the icon at all. The
+   * author found live that a colour chosen to work as a small icon accent (Telegram's pale `#0088CC`)
+   * is a washed-out, low-contrast choice for body-sized label text on a white background. The label
+   * now simply reads `.ago-channel-switcher-row`'s own `color: inherit` - the identical neutral every
+   * row without an inline colour of its own already falls back to (the "Онлайн чат" row, the retired
+   * card's old "stay here" row). One real side effect: the unrecognised-`kind` fallback icon below
+   * (`createSvgIcon`, unlike the four real brand icons `buildBrandIcon` returns) sets `fill:
+   * currentColor`, so it now inherits this same neutral colour instead of the removed
+   * `CHANNEL_FALLBACK_COLOR` grey - a reasonable outcome, since there is no real brand colour to
+   * preserve for a channel this build does not recognise. `CHANNEL_BRAND_COLORS`/
+   * `CHANNEL_FALLBACK_COLOR` themselves are gone - this line was their only reader.
    */
   private buildChannelSwitcherRow(link: { kind: string; url: string }): HTMLAnchorElement {
     const row = document.createElement("a");
@@ -2116,7 +2103,6 @@ export class ChatWidget {
     row.href = link.url;
     row.target = "_blank";
     row.rel = "noopener noreferrer";
-    row.style.color = CHANNEL_BRAND_COLORS[link.kind] ?? CHANNEL_FALLBACK_COLOR;
 
     const icon = buildBrandIcon(link.kind) ?? createSvgIcon(CHANNEL_FALLBACK_ICON_PATH);
     icon.setAttribute("aria-hidden", "true");
@@ -2202,9 +2188,12 @@ export class ChatWidget {
    * The four recognised brand marks already render as full circular badges with their own fill
    * (`CHANNEL_ICON_TREES`'s own remarks), so they only need resizing to the chosen diameter, no
    * wrapping background; an unrecognised `kind` gets the same neutral fallback glyph
-   * `buildChannelSwitcherRow` falls back to, laid over a solid circle of `CHANNEL_FALLBACK_COLOR` so
-   * it still reads as one of the row's own circles rather than a glyph floating with no badge under
-   * it. A real `<a target="_blank" rel="noopener noreferrer">`, the identical reasoning
+   * `buildChannelSwitcherRow` falls back to, laid over a solid grey circle
+   * (`.ago-channel-switcher-launcher-icon--fallback`, `ui/styles.css`) so it still reads as one of the
+   * row's own circles rather than a glyph floating with no badge under it - a CSS literal, independent
+   * of `buildChannelSwitcherRow`'s own text colour (`25-205` removed the JS constant this comment used
+   * to name here; this circle never read it, and is untouched by that change). A real `<a
+   * target="_blank" rel="noopener noreferrer">`, the identical reasoning
    * `buildChannelSwitcherRow`'s own remarks give for why this is never a JS-driven navigation - and,
    * since this row carries no visible text label the way the banner's own rows do, the accessible name
    * lives entirely on this anchor's own `aria-label`.

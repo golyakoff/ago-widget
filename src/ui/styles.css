@@ -597,12 +597,13 @@
 
   /* 25-149: one row, whether a real anchor (a connected channel) or a button (the final "open chat"
      row `buildChannelSwitcherBanner`/`buildTouchRoutingSheet` each build) - both need the identical
-     layout, so this rule targets the shared class rather than each element type. No brand colour
-     here: ui/widget.ts sets color per row inline, a small, widget-local per-kind constant
-     deliberately independent of --ago-accent (this file's own remarks on --ago-unread-badge-bg
-     already give the identical "must read against whatever a tenant configured" reasoning) -
-     .ago-channel-switcher-row itself stays colour-neutral so a row with no inline colour of its own
-     reads in the panel's own ordinary text colour instead. */
+     layout, so this rule targets the shared class rather than each element type. `25-205`: this rule
+     used to note that ui/widget.ts set a per-kind brand colour inline on the row's own `color`, tinting
+     this rule's label text away from `color: inherit` - found live to read as washed-out, low-contrast
+     body text (a colour picked to work as a small icon accent, not a paragraph). ui/widget.ts no longer
+     sets that inline colour at all, so a connected-channel row now simply reads this rule's own
+     `color: inherit` below - the "open chat" row still overrides it to `--ago-accent`, immediately
+     below, a deliberate, different decision this item leaves untouched. */
   .ago-channel-switcher-row {
     display: flex;
     align-items: center;

@@ -981,6 +981,14 @@
     user-select: none;
   }
 
+  /* `25-209`: `contactCapture.ts` toggles this chip's own `hidden` property once the visitor's typed
+     value leaves the RU-default shape (`isExplicitNonRussianPhoneValue`) - the identical `[hidden]`
+     override `.ago-panel[hidden]` above already needs, and for the same reason: the unconditional
+     `display: flex` two rules up outranks the browser's own `[hidden]` UA default. */
+  .ago-contact-capture-phone-prefix[hidden] {
+    display: none;
+  }
+
   .ago-contact-capture-phone-input {
     flex: 1;
     min-width: 0;

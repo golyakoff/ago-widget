@@ -135,17 +135,19 @@ describe("renderContactCaptureControl", () => {
     expect(control.textContent).not.toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
   });
 
-  // `25-28`: the +7 mask, wired via a live `input` listener - `phoneFormat.ts`'s own tests cover the
-  // formatting logic in isolation; this is the wiring proof that it actually runs as the visitor
-  // types, not just that the pure function is correct.
-  it("masks a bare digit into a +7 Russian shape as the visitor types", () => {
+  // `25-28`/`25-209`: the +7 mask, wired via a live `input` listener - `phoneFormat.ts`'s own tests
+  // cover the formatting logic in isolation; this is the wiring proof that it actually runs as the
+  // visitor types, not just that the pure function is correct. The value itself no longer repeats the
+  // `+7` the prefix chip beside it already shows (`25-209`) - `wraps the phone field...` below covers
+  // that chip.
+  it("masks a bare digit into the Russian shape as the visitor types, without repeating +7", () => {
     const control = renderContactCaptureControl(en, vi.fn());
     const input = phoneInput(control);
 
     setValue(input, "9");
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
-    expect(input.value).toBe("+7 (9");
+    expect(input.value).toBe("(9");
   });
 
   // `25-28`: the stated escape hatch - an explicit "+" followed by a country code other than 7 is
@@ -158,6 +160,59 @@ describe("renderContactCaptureControl", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
     expect(input.value).toBe("+1555");
+  });
+
+  // `25-209`: the resolution the backlog item states explicitly - once the visitor's own typed value
+  // leaves the RU-default shape, the "🇷🇺 +7" chip stops asserting a country the value contradicts.
+  describe("the 🇷🇺 +7 prefix hides once the non-Russian escape hatch engages", () => {
+    function phonePrefix(root: HTMLElement): HTMLElement {
+      const prefix = root.querySelector<HTMLElement>(".ago-contact-capture-phone-prefix");
+      if (prefix === null) {
+        throw new Error("no phone prefix");
+      }
+
+      return prefix;
+    }
+
+    it("is visible by default, before anything is typed", () => {
+      const control = renderContactCaptureControl(en, vi.fn());
+
+      expect(phonePrefix(control).hidden).toBe(false);
+    });
+
+    it("stays visible while the value is still Russian-shaped", () => {
+      const control = renderContactCaptureControl(en, vi.fn());
+      const input = phoneInput(control);
+
+      setValue(input, "9161234567");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+
+      expect(phonePrefix(control).hidden).toBe(false);
+    });
+
+    it("hides the moment an explicit non-Russian country code is typed", () => {
+      const control = renderContactCaptureControl(en, vi.fn());
+      const input = phoneInput(control);
+
+      setValue(input, "+1555");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+
+      expect(phonePrefix(control).hidden).toBe(true);
+    });
+
+    it("reappears if the visitor clears the field back to the RU-default shape", () => {
+      const control = renderContactCaptureControl(en, vi.fn());
+      const input = phoneInput(control);
+
+      setValue(input, "+1555");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      expect(phonePrefix(control).hidden).toBe(true);
+
+      setValue(input, "");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+
+      expect(phonePrefix(control).hidden).toBe(false);
+    });
   });
 
   // `25-186`: the flag+dialling-code prefix - `ago-console`'s own `PhoneInput.tsx` gets the identical
@@ -191,7 +246,7 @@ describe("renderContactCaptureControl", () => {
     setValue(input, "9");
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
-    expect(input.value).toBe("+7 (9");
+    expect(input.value).toBe("(9");
   });
 
   // `25-28`: a real, named regex check runs before submit - not just `type="email"`'s own loose

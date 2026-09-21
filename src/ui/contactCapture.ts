@@ -1,7 +1,7 @@
 import type { ConsentDocumentSummary, ConsentRequirement } from "../consent.js";
 import type { WidgetStrings } from "../i18n/strings.js";
 import { isValidEmail } from "./emailValidation.js";
-import { formatPhoneInput } from "./phoneFormat.js";
+import { formatPhoneInput, isExplicitNonRussianPhoneValue } from "./phoneFormat.js";
 
 /**
  * `23-09`/`docs/design/decisions.md` §4: the visitor's own name-and-phone control - a widget-native
@@ -132,9 +132,12 @@ export function renderContactCaptureControl(
   // visitor). Reformatting always moves the caret to the end; a hand-rolled mask this small does not
   // attempt to preserve a mid-string cursor position (see that file's own remarks on the trade-off).
   // `25-186` touches none of this - the mask's own input/output is unchanged, only what sits beside
-  // the field in the DOM changed.
+  // the field in the DOM changed. `25-209`: the mask's own Russian-shaped output no longer repeats
+  // the `+7` the prefix chip below already shows, and every reformat also re-checks whether that
+  // chip should still be showing at all - see `updatePhonePrefixVisibility` below.
   phoneInput.addEventListener("input", () => {
     phoneInput.value = formatPhoneInput(phoneInput.value);
+    updatePhonePrefixVisibility();
   });
 
   // `25-186`: the mask above already, functionally, locks this field to Russia by default - what was
@@ -144,6 +147,14 @@ export function renderContactCaptureControl(
   // is a parallel small piece of markup/CSS rather than a shared import. `aria-hidden` on the prefix:
   // it is decorative, and `phoneInput`'s own `aria-label` above already names the field for a screen
   // reader without it.
+  //
+  // `25-209`: the chip asserts "Russia" via `🇷🇺 +7`, which stops being true the moment a visitor
+  // engages `phoneFormat.ts`'s own non-Russian escape hatch - a value like `+1 555 019 4567` sitting
+  // next to a `🇷🇺 +7` chip would assert a country the typed number itself contradicts. So the chip
+  // hides (`.hidden`, the same toggle `errorNote` above already uses for a conditionally-shown
+  // element) the moment `isExplicitNonRussianPhoneValue` says the field's current value has left the
+  // RU-default shape; `updatePhonePrefixVisibility` re-runs that check after every reformat rather
+  // than re-deriving the escape-hatch condition here a second time.
   const phoneWrap = document.createElement("div");
   phoneWrap.className = "ago-contact-capture-phone-wrap";
   const phonePrefix = document.createElement("span");
@@ -151,6 +162,10 @@ export function renderContactCaptureControl(
   phonePrefix.setAttribute("aria-hidden", "true");
   phonePrefix.textContent = "🇷🇺 +7";
   phoneWrap.append(phonePrefix, phoneInput);
+
+  function updatePhonePrefixVisibility(): void {
+    phonePrefix.hidden = isExplicitNonRussianPhoneValue(phoneInput.value);
+  }
 
   // `23-58`: the third required field - `VisitorContactDetailKind.Email` on the wire
   // (`recordContactDetail(..., "Email", ...)`, `ui/widget.ts`'s `submitContactCapture`), a kind that

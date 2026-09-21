@@ -22,12 +22,19 @@
  * the stated, discoverable way to override the default - nothing is hidden behind a separate control.
  *
  * **What this does not attempt.** It shapes input, it does not validate it - a string that matches
- * `+7 (9XX) XXX-XX-XX` is not thereby proven to be a real, reachable number, and this file makes no
+ * `(9XX) XXX-XX-XX` is not thereby proven to be a real, reachable number, and this file makes no
  * claim otherwise (`VisitorContactDetail`'s own "unverified free text" nature is unchanged by this
  * item). It also does not preserve cursor position through a mid-string edit - the caller always
  * places the caret at the end after reformatting, a deliberate simplification a hand-rolled mask this
  * small is allowed to make; a visitor correcting a typo in the middle retypes the tail, which is a
  * real but small cost against the alternative of a much larger, general-purpose input-mask library.
+ *
+ * `25-209`: the Russian-shaped branch (`formatRussianDigits`) used to emit `+7 (9XX) XXX-XX-XX`,
+ * the leading `+7` included - which duplicated `contactCapture.ts`'s own non-interactive `🇷🇺 +7`
+ * prefix chip beside the field, showing the country code twice. It now emits only `(9XX) XXX-XX-XX`;
+ * the chip is this value's one remaining source of the country code. The non-Russian escape-hatch
+ * branch is unchanged - its own output was never duplicated by anything, since the chip hides the
+ * moment that branch engages (`isExplicitNonRussianPhoneValue`, exported below for that purpose).
  */
 
 /** E.164's own ceiling: a phone number is at most 15 digits, country code included. */
@@ -35,6 +42,19 @@ const E164_MAX_DIGITS = 15;
 
 /** Russian mobile/landline numbers, country code included, are 11 digits: `7` + 10. */
 const RU_TOTAL_DIGITS = 11;
+
+/**
+ * `25-209`: true once a value carries the non-Russian escape hatch's own shape - an explicit "+"
+ * followed by at least one digit whose country code is not Russia's. Exported so a caller holding
+ * only the input's own (already-formatted) value - `contactCapture.ts`'s `phonePrefix` chip is the one
+ * that exists today - can tell whether the escape hatch has engaged without re-deriving this same
+ * condition a second time; `formatPhoneInput` below is this function's own first caller.
+ */
+export function isExplicitNonRussianPhoneValue(value: string): boolean {
+  const hasExplicitPlus = value.includes("+");
+  const digits = value.replace(/\D/g, "");
+  return hasExplicitPlus && digits.length > 0 && !digits.startsWith("7");
+}
 
 export function formatPhoneInput(raw: string): string {
   const hasExplicitPlus = raw.includes("+");
@@ -46,7 +66,7 @@ export function formatPhoneInput(raw: string): string {
     return hasExplicitPlus ? "+" : "";
   }
 
-  if (hasExplicitPlus && !digits.startsWith("7")) {
+  if (isExplicitNonRussianPhoneValue(raw)) {
     // The stated override: an explicit country code that is not Russia's. Kept as digits only,
     // capped at E.164's own ceiling - no RU-shaped punctuation forced onto a shape it does not fit.
     return `+${digits.slice(0, E164_MAX_DIGITS)}`;
@@ -61,17 +81,21 @@ export function formatPhoneInput(raw: string): string {
 }
 
 /** `digits` always starts with the "7" country code here; formats the remaining up-to-10 subscriber
- * digits into `+7 (9XX) XXX-XX-XX`, growing the punctuation only as far as digits actually typed
- * reach - so a partial number never shows a placeholder character for a digit not yet entered. */
+ * digits into `(9XX) XXX-XX-XX`, growing the punctuation only as far as digits actually typed reach -
+ * so a partial number never shows a placeholder character for a digit not yet entered.
+ *
+ * `25-209`: this used to prepend the `+7` country code to that output too - redundant with
+ * `contactCapture.ts`'s own non-interactive `🇷🇺 +7` prefix chip sitting right beside the field, and
+ * exactly the doubled `🇷🇺 +7 | +7 (916)...` this item fixes. The country code is now asserted exactly
+ * once, by that chip; this function only ever produces the subscriber-number shape. */
 function formatRussianDigits(digits: string): string {
   const subscriber = digits.slice(1);
-  let out = "+7";
 
   if (subscriber.length === 0) {
-    return out;
+    return "";
   }
 
-  out += ` (${subscriber.slice(0, 3)}`;
+  let out = `(${subscriber.slice(0, 3)}`;
   if (subscriber.length >= 3) {
     out += ")";
   }

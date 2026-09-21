@@ -161,10 +161,17 @@ export function parseContactCaptureConfirmationText(value: string | null | undef
  * (`widgetChannelSwitcherPlacement` - `AuthEndpoints.VisitorSessionResponse`, `ago-chat`). The
  * identical "one non-default value, anything else falls back to the first member" shape
  * `parseWidgetPosition` already takes for `Ago.Chat.Domain.ChannelSwitcherPlacement`'s own sibling
- * enum: `"BelowLauncher"` is the one value that means anything other than `25-149`'s own pre-existing
- * card, so a missing, malformed, or not-yet-recognised value (a session cached before this field
- * existed, or a future server value this widget's build predates) renders exactly what every visitor
- * already sees today, never the new placement by accident.
+ * enum: `"BelowLauncher"` is the one value that means the icon row beside the toggle, so a missing,
+ * malformed, or not-yet-recognised value (a session cached before this field existed, or a future
+ * server value this widget's build predates) falls back to `"above-composer"`, never the other
+ * placement by accident.
+ *
+ * `25-204`: `"above-composer"` no longer names `25-149`'s original inside-panel card -
+ * `buildChannelSwitcherBanner` (`ui/widget.ts`) replaced that renderer outright with a hover-revealed
+ * banner floating above the toggle, outside the panel, making the console's own label for this value
+ * ("Banners above the chat window") true. This function's own return value is unchanged by that -
+ * `loadChannelSwitcher` is the one place that changed which renderer the `"above-composer"` branch
+ * calls.
  */
 export type ChannelSwitcherPlacement = "above-composer" | "below-launcher";
 

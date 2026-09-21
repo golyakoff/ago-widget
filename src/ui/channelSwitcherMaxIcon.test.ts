@@ -4,7 +4,7 @@ import { joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 
 /**
  * `25-199` - the touch routing sheet's MAX row rendered with no icon. `channelSwitcher.test.ts`
- * already proves the `AboveComposer` card renders MAX's icon correctly *in isolation* - this file's
+ * already proves the `AboveComposer` banner renders MAX's icon correctly *in isolation* - this file's
  * whole job is the case that isolation never covers: a second `buildBrandIcon("Max")` call landing
  * in the same shadow root while the first instance is still there.
  *
@@ -12,19 +12,20 @@ import { joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
  * is read directly below before any fix exists: it is the only brand tree with `<defs>` children
  * carrying fixed `id`s (`a`, `b`, `c`, `d`), referenced via `fill="url(#c)"`/`href="#a"` etc. Every
  * other recognised brand (`Telegram`/`WhatsApp`/`Vk`) is flat `fill="#hex"` paths with no `id`
- * anywhere in its own tree. `loadChannelSwitcherCard` (`25-149`) builds the `AboveComposer` card -
- * MAX icon included - the moment the handshake resolves, only when `isTouchRoutingDevice()`
- * (`25-198`) is false at that moment; `openTouchRoutingSheet` (`25-197`) builds the sheet - a second
- * MAX icon, if the tenant has one connected - lazily, on the visitor's first tap, gated by that same
- * live `matchMedia("(hover: none)")` read at click time.
+ * anywhere in its own tree. `buildChannelSwitcherBanner` (`25-149`, replaced by `25-204` - this file's
+ * scenario is unaffected by that rewrite since it only changed *where* the rows render, not this
+ * concurrency) builds the `AboveComposer` banner - MAX icon included - the moment the handshake
+ * resolves, only when `isTouchRoutingDevice()` (`25-198`) is false at that moment; `openTouchRoutingSheet`
+ * (`25-197`) builds the sheet - a second MAX icon, if the tenant has one connected - lazily, on the
+ * visitor's first tap, gated by that same live `matchMedia("(hover: none)")` read at click time.
  *
  * `25-198` closed the *steady-state* path to two concurrent instances - a touch device now never
- * builds the card at all, so it alone cannot see this bug once that item lands. The path this file
+ * builds the banner at all, so it alone cannot see this bug once that item lands. The path this file
  * exercises instead is the one `25-199`'s own "Out of scope" section names as surviving regardless:
  * `matchMedia` is a live, re-evaluatable query, not a fixed device fact, so a hover-capable device
  * that later "narrows" to touch mid-session - a hybrid 2-in-1 switching from mouse to touchscreen
  * between the handshake and the visitor's own tap, the exact case that section describes - still
- * gets the card built while hover-capable, then routes a later tap to the sheet once the live
+ * gets the banner built while hover-capable, then routes a later tap to the sheet once the live
  * read changes. Tests below reconstruct exactly that ordering (`stubHover(false)` before `mount`,
  * `stubHover(true)` before the click) rather than depending on both instances being reachable from a
  * single, unchanging device state - the real, still-live shape of the concurrency this item exists
@@ -138,11 +139,11 @@ function allIds(root: ShadowRoot): string[] {
 /**
  * A sheet row carries *both* `.ago-channel-switcher-row` (`buildChannelSwitcherRow`'s own class,
  * `25-149`) and `.ago-touch-routing-row` (`buildTouchRoutingSheet`'s own addition, `25-197`) -
- * `openTouchRoutingSheet` reuses the card's own row builder wholesale. A plain, unscoped
- * `.ago-channel-switcher-row` query therefore matches sheet rows too, and once the card is absent
+ * `openTouchRoutingSheet` reuses the banner's own row builder wholesale. A plain, unscoped
+ * `.ago-channel-switcher-row` query therefore matches sheet rows too, and once the banner is absent
  * (or simply not queried for) that query silently resolves to the sheet's own row - the exact
  * collapse-onto-one-element failure this helper exists to make structurally impossible: `container`
- * is always one of the two distinct wrapper elements (`.ago-channel-switcher` for the card,
+ * is always one of the two distinct wrapper elements (`.ago-channel-switcher-banner` for the banner,
  * `.ago-touch-routing-sheet` for the sheet), so a row can only ever be found within the one its own
  * `container` actually names, never the other.
  */
@@ -155,9 +156,9 @@ function maxRowWithin(container: Element, rowSelector: string): HTMLElement {
 }
 
 function cardContainer(root: ShadowRoot): Element {
-  const el = root.querySelector(".ago-channel-switcher");
+  const el = root.querySelector(".ago-channel-switcher-banner");
   if (el === null) {
-    throw new Error("the AboveComposer card was not built");
+    throw new Error("the AboveComposer banner was not built");
   }
   return el;
 }
@@ -171,9 +172,9 @@ function sheetContainer(root: ShadowRoot): Element {
 }
 
 /**
- * Reconstructs "the card is already built, then the sheet is built too" without depending on a
+ * Reconstructs "the banner is already built, then the sheet is built too" without depending on a
  * single unchanging device state - see the file's own top comment for why that matters after
- * `25-198`. Hover-capable at handshake time (the card builds via its ordinary `AboveComposer` path,
+ * `25-198`. Hover-capable at handshake time (the banner builds via its ordinary `AboveComposer` path,
  * untouched by `25-198`'s gate), then the device "narrows" to touch before the one tap this helper
  * makes, which `toggleOpen`'s own live `matchMedia` read routes to the sheet instead of opening chat.
  * Both wrapper elements are asserted present before returning, so a caller's own assertions never
@@ -184,7 +185,7 @@ async function mountWithBothPlacementsBuilt(channelLinks: ChannelLinkFixture[]):
   stubFetch({ channelLinks, widgetChannelSwitcherPlacement: "AboveComposer" });
   joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
   const panel = await mountWidget();
-  expect(panel.root.querySelector(".ago-channel-switcher")).not.toBeNull();
+  expect(panel.root.querySelector(".ago-channel-switcher-banner")).not.toBeNull();
 
   stubHover(true);
   panel.toggle.click();
@@ -205,7 +206,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("two MAX icons alive in the same shadow root at once (the AboveComposer card and the touch routing sheet)", () => {
+describe("two MAX icons alive in the same shadow root at once (the AboveComposer banner and the touch routing sheet)", () => {
   it("confirms the cause: every id the widget ever mints is unique - collides today, unique after the fix", async () => {
     const panel = await mountWithBothPlacementsBuilt([{ kind: "Max", url: "https://max.ru/tenant_bot" }]);
 
@@ -256,8 +257,8 @@ describe("two MAX icons alive in the same shadow root at once (the AboveComposer
     panel.toggle.click();
     await flush();
 
-    // No hover-none device here, so the sheet is never built - `.ago-channel-switcher` is the only
-    // MAX instance in the shadow root.
+    // No hover-none device here, so the sheet is never built - `.ago-channel-switcher-banner` is the
+    // only MAX instance in the shadow root.
     expect(panel.root.querySelector(".ago-touch-routing-sheet")).toBeNull();
     const icon = maxRowWithin(cardContainer(panel.root), ".ago-channel-switcher-row").querySelector("svg")!;
     // `CHANNEL_ICON_TREES.Max`'s own `<defs>`: linearGradient "b", linearGradient "a",

@@ -138,29 +138,29 @@ describe("a site with nothing connected", () => {
 });
 
 describe("a site on the default placement (AboveComposer)", () => {
-  it("never builds the below-launcher row - the card, not this renderer, applies", async () => {
+  // `25-204`: the above-composer placement no longer builds a card inside the panel at all - it
+  // builds `channelSwitcher.test.ts`'s own hover-revealed banner instead. This file's own job stays
+  // narrow: prove the below-launcher row never builds for this placement, not re-prove the banner's
+  // own shape (that file already does).
+  it("never builds the below-launcher row - the banner, not this renderer, applies", async () => {
     stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "AboveComposer" });
-    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
     expect(launcherRow(panel.root)).toBeNull();
-    expect(panel.root.querySelector(".ago-channel-switcher")).not.toBeNull();
+    expect(panel.root.querySelector(".ago-channel-switcher-banner")).not.toBeNull();
   });
 
   // A session cached before this field existed carries no widgetChannelSwitcherPlacement at all -
-  // parseChannelSwitcherPlacement's own fallback must still mean "the pre-existing card", never the
-  // new row, so an old cached session does not silently switch placement on its own.
+  // parseChannelSwitcherPlacement's own fallback must still mean "the above-composer renderer", never
+  // the new row, so an old cached session does not silently switch placement on its own.
   it("also applies when the field is entirely absent from the response", async () => {
     stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: undefined });
-    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
     const panel = await mountWidget();
-    panel.toggle.click();
     await flush();
 
     expect(launcherRow(panel.root)).toBeNull();
-    expect(panel.root.querySelector(".ago-channel-switcher")).not.toBeNull();
+    expect(panel.root.querySelector(".ago-channel-switcher-banner")).not.toBeNull();
   });
 });
 

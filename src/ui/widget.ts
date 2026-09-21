@@ -1295,12 +1295,24 @@ export class ChatWidget {
       return;
     }
 
-    if (this.channelLinks.length > 0 && (window.matchMedia?.("(hover: none)")?.matches ?? false)) {
+    if (this.isTouchRoutingDevice()) {
       this.openTouchRoutingSheet();
       return;
     }
 
     this.open();
+  }
+
+  /**
+   * `25-197`'s own gate for routing a tap to the sheet instead of straight into chat - factored out
+   * here (`25-198`) so `loadChannelSwitcher` can ask the identical question before building either
+   * placement-specific renderer, rather than restating the expression and risking the two drifting
+   * apart. `this.channelLinks` is read rather than a freshly-passed session, because both callers -
+   * `toggleOpen` at click time, `loadChannelSwitcher` at handshake time - already have it as the one
+   * source of truth `this.channelLinks`'s own doc comment describes.
+   */
+  private isTouchRoutingDevice(): boolean {
+    return this.channelLinks.length > 0 && (window.matchMedia?.("(hover: none)")?.matches ?? false);
   }
 
   /** `25-197`: reveals the touch routing sheet, building it on first use - most visitors (anyone
@@ -1827,6 +1839,17 @@ export class ChatWidget {
     // own doc comment for why toggleOpen needs this synchronously, independent of either
     // placement-specific renderer.
     this.channelLinks = session.channelLinks;
+
+    // `25-198`: a touch visitor is routed through `openTouchRoutingSheet` instead - the identical
+    // channel choice `isTouchRoutingDevice()` already gates there. Building either placement-specific
+    // renderer here too would offer the same choice a second time, inside the panel, once the sheet's
+    // own "Онлайн чат" row opens it - the crowding the author's own screenshot showed. Neither
+    // renderer below is told about the other; this is the one call site that decides whether either
+    // runs at all, so a touch device with connected channels now builds neither, and the panel is
+    // left exactly as it was before either placement existed.
+    if (this.isTouchRoutingDevice()) {
+      return;
+    }
 
     if (parseChannelSwitcherPlacement(session.widgetChannelSwitcherPlacement) === "below-launcher") {
       this.buildChannelSwitcherLauncherRow(session);

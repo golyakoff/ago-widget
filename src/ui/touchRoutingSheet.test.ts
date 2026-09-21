@@ -116,6 +116,15 @@ function isOpen(root: ShadowRoot): boolean {
   return !root.querySelector<HTMLDivElement>(".ago-panel")!.hidden;
 }
 
+/** `25-198`: the panel's own direct children, by class name, in order - the shape "nothing above
+ * the composer besides what was always there" reduces to: a touch visitor's panel must list exactly
+ * the same children a zero-channels session's panel lists, never an extra `.ago-channel-switcher`
+ * (or, on the other placement, a `.ago-channel-switcher-launcher` sitting outside the panel
+ * entirely) spliced in because the routing sheet already offered the identical choice. */
+function panelChildClasses(root: ShadowRoot): string[] {
+  return [...root.querySelector<HTMLDivElement>(".ago-panel")!.children].map((child) => child.className);
+}
+
 beforeEach(() => {
   resetFakeSignalR();
   document.body.innerHTML = "";
@@ -266,5 +275,71 @@ describe("a touch-only device with connected channels", () => {
     await flush();
 
     expect(hubs.length).toBe(0);
+  });
+});
+
+/**
+ * `25-198`: the routing sheet is a touch visitor's *only* channel-choice surface - `25-149`'s
+ * above-composer card and `25-173`'s below-launcher row must both build nothing at all on such a
+ * device, on either placement, so a visitor who already saw the sheet never sees the identical
+ * choice again inside the panel. `loadChannelSwitcher` (`ui/widget.ts`) is where this is decided,
+ * once, before either placement-specific renderer runs - proven here rather than by inspecting that
+ * private method directly, the same "assert the built DOM, not the internals" approach every other
+ * test in this file already takes.
+ */
+describe("a touch-only device with connected channels (25-198)", () => {
+  it("builds no AboveComposer card - the sheet's own Online chat row opens a panel with nothing extra in it", async () => {
+    stubHover(true);
+    stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "AboveComposer" });
+    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+    const panel = await mountWidget();
+
+    panel.toggle.click();
+    await flush();
+    const rows = [...panel.root.querySelectorAll<HTMLButtonElement>(".ago-touch-routing-row")];
+    rows.find((row) => row.textContent?.includes("Online chat"))!.click();
+    await flush();
+
+    expect(isOpen(panel.root)).toBe(true);
+    expect(panel.root.querySelector(".ago-channel-switcher")).toBeNull();
+  });
+
+  it("builds no BelowLauncher row either, even before the panel is ever opened", async () => {
+    stubHover(true);
+    stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "BelowLauncher" });
+    await mountWidget();
+    await flush();
+
+    expect(document.querySelector("[data-ago-chat-widget]")?.shadowRoot?.querySelector(".ago-channel-switcher-launcher")).toBeNull();
+  });
+
+  it("leaves the panel's own layout identical to a site with zero connected channels", async () => {
+    stubHover(true);
+    stubFetch({ channelLinks: [] });
+    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+    const bare = await mountWidget();
+    bare.toggle.click();
+    await flush();
+    const bareLayout = panelChildClasses(bare.root);
+
+    document.body.innerHTML = "";
+    resetFakeSignalR();
+    // `session.ts`'s own `start()` reuses a stored, not-yet-renewal-window session straight from
+    // `localStorage` rather than re-fetching - the identical short-circuit
+    // `channelSwitcher.test.ts`'s own "reload" test relies on to prove a dismissal survives. Here it
+    // is the opposite problem: without clearing it, this second widget would silently inherit the
+    // first widget's own empty `channelLinks` instead of ever reaching the new stub below.
+    localStorage.clear();
+    stubHover(true);
+    stubFetch({ channelLinks: twoChannels(), widgetChannelSwitcherPlacement: "AboveComposer" });
+    joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+    const withChannels = await mountWidget();
+    withChannels.toggle.click();
+    await flush();
+    const rows = [...withChannels.root.querySelectorAll<HTMLButtonElement>(".ago-touch-routing-row")];
+    rows.find((row) => row.textContent?.includes("Online chat"))!.click();
+    await flush();
+
+    expect(panelChildClasses(withChannels.root)).toEqual(bareLayout);
   });
 });

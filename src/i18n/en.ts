@@ -53,6 +53,9 @@ export const en: WidgetStrings = {
   processingNoticeLinkText: "Read more",
   channelSwitcherGroupLabel: "Other ways to reach us",
   channelSwitcherWriteInChat: "Message here instead",
+  channelSwitcherRoutingQuestion: "How would you like to reach us?",
+  channelSwitcherOnlineChat: "Online chat",
+  channelSwitcherCancel: "Cancel",
 
   unsupportedFileTypeSuffix: "isn't supported. Try an image or a PDF.",
   unknownFileType: "unknown type",

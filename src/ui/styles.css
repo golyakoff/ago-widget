@@ -716,11 +716,44 @@
   /* Every row here - a real channel link, "Онлайн чат", "Отмена" - also carries
      .ago-channel-switcher-row (ui/widget.ts), reused wholesale for its flex layout/reset rather
      than duplicated; only the divider and sizing are this sheet's own, matching
-     .ago-channel-switcher-row--dismiss's own precedent for a row-separator line. */
+     .ago-channel-switcher-row--dismiss's own precedent for a row-separator line.
+
+     `25-200`: found live on `golyakov.net`, mobile - confirmed via `getComputedStyle` before writing
+     this rule, not assumed from the `rem` math (Shadow DOM does not create a new `rem` context; this
+     value resolves against the *host document's* root, which happens to be the ordinary 16px default
+     here, but that is a fact about this one host, not something this file can rely on in general).
+     `0.9375rem` measured at exactly 15px. The author's own ask - text one and a half times its
+     current size, rounded to a whole pixel - is `15 * 1.5 = 22.5`, an exact tie; rounded up (the
+     ordinary "round half up" convention) to 23px, expressed as a plain whole-number `px` value
+     rather than another fractional `rem`, per the author's own "round to avoid fractions" reasoning
+     for this item. */
   .ago-touch-routing-row {
     padding: 0.75rem 1rem;
     border-top: 0.0625rem solid #e5e7eb;
-    font-size: 0.9375rem;
+    font-size: 23px;
+  }
+
+  /* `25-200`: every icon inside a row - the brand marks `buildChannelSwitcherRow` builds
+     (`buildBrandIcon`/`CHANNEL_ICON_TREES`) and the chat-bubble icon on the "Онлайн чат" row
+     (`createSvgIcon`) alike - carries `width="1em" height="1em"` as an inline SVG attribute
+     (`ui/widget.ts`), which resolves against the icon's own font-size - inherited from this row,
+     un-overridden until now, so an icon rendered at exactly the row's own text size. The row's own
+     font-size just above and this rule now scale by *different* factors (1.5x vs 2x), so the icon can
+     no longer rely on `1em` at all; measured live alongside the row's own font-size, the pre-existing
+     `1em` icon computed to the identical 15px, doubled and rounded to 30px (already a whole number,
+     no tie to break). A plain CSS rule beats the inline presentation attribute here with no
+     `!important` needed - an author-origin declaration always outranks a presentation attribute of
+     equal specificity, confirmed live rather than assumed (this file's own `.ago-panel[hidden]`/
+     `.ago-attach[hidden]` rules already rely on the sibling case, an author rule outranking a
+     same-specificity *user-agent* one, for the identical reason). Scoped to `.ago-touch-routing-row`
+     specifically, not the bare `.ago-channel-switcher-row` every row-icon in this file already
+     shares, so the `AboveComposer` card and the `BelowLauncher` row's own
+     `.ago-channel-switcher-launcher-icon` are untouched - this item's own "Out of scope". Fixed pixel
+     values rather than a new `em` multiplier keep the icon's own size structurally independent of
+     whatever the row's font-size does next, which is the whole shape "decoupled" asks for. */
+  .ago-touch-routing-row svg {
+    width: 30px;
+    height: 30px;
   }
   .ago-touch-routing-row--chat {
     color: var(--ago-accent);

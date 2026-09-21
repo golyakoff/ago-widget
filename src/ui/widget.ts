@@ -2046,6 +2046,16 @@ export class ChatWidget {
     banner.addEventListener("pointerenter", () => this.enterHoverRegion());
     banner.addEventListener("pointerleave", () => this.scheduleHoverRegionLeave());
 
+    // `25-211`: the banner's own header bar, always its first child - no close control of any kind
+    // (this banner has nothing to dismiss that the pointer leaving the hover region does not already
+    // handle). Its text is exactly `this.title`'s own resolved value - the real `.ago-header h1`'s
+    // configured-or-default greeting (`25-210`) - read here rather than re-derived, so this banner can
+    // never show different words than the real panel does for the identical setting.
+    const header = document.createElement("div");
+    header.className = "ago-channel-switcher-banner-header";
+    header.textContent = this.title.textContent ?? "";
+    banner.append(header);
+
     for (const link of session.channelLinks) {
       banner.append(this.buildChannelSwitcherRow(link));
     }

@@ -4,7 +4,10 @@ import path from "node:path";
 
 /**
  * `25-200`: the touch routing sheet's icons and text, at twice and one-and-a-half times their
- * previous size respectively.
+ * previous size respectively. `25-201`: the text size alone was revised again, from `25-200`'s own
+ * `23px` down to `16px` - the author's pick from a live comparison, after seeing 23px next to the
+ * icons at their new size and deciding it was still too big. The icon size (`30px`) is unchanged by
+ * `25-201` and stays covered by the second test below exactly as `25-200` wrote it.
  *
  * **Why this is not a `getComputedStyle` assertion against the mounted widget**, the way most of
  * this file's siblings work. Measured directly (see the throwaway script this item's own worker ran
@@ -46,14 +49,14 @@ function ruleFor(rules: CSSRuleList, selectorText: string): CSSStyleRule {
   return match;
 }
 
-describe("the touch routing sheet's row sizing (25-200)", () => {
-  it("sets the row's own text to 23px - 15px confirmed live on golyakov.net, times 1.5, rounded up from the exact 22.5 tie", () => {
+describe("the touch routing sheet's row sizing (25-200, revised by 25-201)", () => {
+  it("sets the row's own text to 16px - the author's own pick from a live 23px/20px/18px comparison, seen next to the real 30px icons (25-201)", () => {
     const rows = touchRoutingSheetRules();
     const row = ruleFor(rows, ".ago-touch-routing-row");
 
-    expect(row.style.fontSize).toBe("23px");
-    // The author's own explicit ask: no fractional unit left behind - not 1.4375rem, not any rem at
-    // all now that the value is not a multiple of the previous 0.9375rem shape.
+    expect(row.style.fontSize).toBe("16px");
+    // The author's own explicit ask, unchanged since `25-200`: no fractional unit left behind - not
+    // a `rem` value of any kind.
     expect(row.style.fontSize).not.toContain("rem");
   });
 

@@ -726,11 +726,16 @@
      current size, rounded to a whole pixel - is `15 * 1.5 = 22.5`, an exact tie; rounded up (the
      ordinary "round half up" convention) to 23px, expressed as a plain whole-number `px` value
      rather than another fractional `rem`, per the author's own "round to avoid fractions" reasoning
-     for this item. */
+     for this item.
+
+     `25-201`: seen live next to the actual 30px icons, 23px still read too big. Shown a comparison
+     (23px/20px/18px side by side, plus a live slider) to pick from without another round trip - the
+     author picked 16px, smaller than any of the three options offered. This rule now carries that
+     value; the derivation above is `25-200`'s own history and is left as-is. */
   .ago-touch-routing-row {
     padding: 0.75rem 1rem;
     border-top: 0.0625rem solid #e5e7eb;
-    font-size: 23px;
+    font-size: 16px;
   }
 
   /* `25-200`: every icon inside a row - the brand marks `buildChannelSwitcherRow` builds

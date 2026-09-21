@@ -601,9 +601,13 @@
      used to note that ui/widget.ts set a per-kind brand colour inline on the row's own `color`, tinting
      this rule's label text away from `color: inherit` - found live to read as washed-out, low-contrast
      body text (a colour picked to work as a small icon accent, not a paragraph). ui/widget.ts no longer
-     sets that inline colour at all, so a connected-channel row now simply reads this rule's own
-     `color: inherit` below - the "open chat" row still overrides it to `--ago-accent`, immediately
-     below, a deliberate, different decision this item leaves untouched. */
+     sets that inline colour at all, so a connected-channel row briefly read this rule's own
+     `color: inherit` (the panel's own near-black) - `25-206`: reviewed live and still called
+     "unstylish"; a dedicated colour-picker Artifact (a faithful replica of both surfaces, with a live
+     slider) settled on a fixed `#374151` instead of leaving it to inherit. The "open chat" row still
+     overrides it to `--ago-accent`, immediately below - a deliberate, different decision this item
+     leaves untouched, and it still wins by source order (declared after this rule, identical
+     specificity - confirmed, not assumed) after this change. */
   .ago-channel-switcher-row {
     display: flex;
     align-items: center;
@@ -615,7 +619,7 @@
     font-weight: 600;
     text-decoration: none;
     text-align: left;
-    color: inherit;
+    color: #374151;
     cursor: pointer;
   }
 
@@ -629,6 +633,23 @@
   .ago-channel-switcher-row--open-chat {
     border-top: 0.0625rem solid #e5e7eb;
     color: var(--ago-accent);
+  }
+
+  /* `25-206`: the mobile touch routing sheet's own `.ago-touch-routing-row` carries this identical
+     `border-top` unconditionally on every row, including its first (there is no `:first-child`
+     exception - a divider sits between the sheet's own question heading and its first channel row
+     too). The banner never had that: only its last row, "Онлайн чат" above, carried a divider at all,
+     borrowed for a different reason (marking it as the one row that is not a channel link). Reviewed
+     live and found the banner's other rows read as running together without one - this rule replicates
+     the sheet's own unconditional pattern here, deliberately including the first row (a line just
+     under the banner's own top rounded corner), scoped to the banner specifically (not the bare
+     `.ago-channel-switcher-row` every placement shares) because `BelowLauncher`'s icon-only row and the
+     touch sheet's own row - already unconditionally bordered above - are both out of this item's scope.
+     Two class selectors here (0,2,0,0) outrank `.ago-channel-switcher-row--open-chat`'s one (0,1,0,0),
+     so its own `border-top` above is now redundant on that row rather than conflicting - confirmed live
+     that an identical value from either rule paints as one line, not two. */
+  .ago-channel-switcher-banner .ago-channel-switcher-row {
+    border-top: 0.0625rem solid #e5e7eb;
   }
 
   /* `25-204`: the `AboveComposer` banner itself - a sibling of `.ago-toggle`, never a child of

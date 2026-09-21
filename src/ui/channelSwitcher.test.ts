@@ -418,10 +418,13 @@ describe("a site with connected channels", () => {
 
     // `25-205`: the row no longer sets an inline `color` at all - the author found live that a
     // colour picked to work as a small icon accent (Telegram's pale #0088CC) reads as washed-out,
-    // low-contrast body text. The label now falls back to `.ago-channel-switcher-row { color:
-    // inherit }`, never an inline style, while the icon's own brand fill is untouched (asserted
-    // separately below).
-    it("sets no inline colour on the row - the label reads the panel's own neutral colour, not the brand hex", async () => {
+    // low-contrast body text. `25-206`: what the label falls back to changed again, from
+    // `.ago-channel-switcher-row { color: inherit }` (the panel's own near-black, still called
+    // "unstylish" live) to a fixed `#374151` the author picked with a dedicated colour-picker
+    // Artifact - see `the shared row rule's colour and dividers (25-206)` below for the CSS-source
+    // assertion of that value. This test only proves the row still sets no inline style of its own,
+    // never an inline style, while the icon's own brand fill is untouched (asserted separately below).
+    it("sets no inline colour on the row - the label reads the shared rule's own colour, not the brand hex", async () => {
       stubFetch({ channelLinks: allFourChannels() });
       const panel = await mountWidget();
       await flush();
@@ -580,5 +583,103 @@ describe("the banner's own position (25-204)", () => {
 
   it("is positioned absolute, matching .ago-panel's own anchoring rather than the mobile sheet's fixed inset", () => {
     expect(bannerRule().style.position).toBe("absolute");
+  });
+});
+
+/**
+ * `25-206`: the label colour settled by a dedicated colour-picker Artifact (a faithful replica of
+ * both the `AboveComposer` banner and the mobile touch routing sheet, with a live slider) after the
+ * author found `25-205`'s own `color: inherit` fallback still read "unstylish" live. jsdom cannot
+ * compute a shadow root's own cascade (`touchRoutingSheetSizing.test.ts`'s own top comment has the
+ * full reasoning), so - exactly like the banner-position describe block above - this reads the
+ * declared source rules directly rather than asserting on a `getComputedStyle` jsdom cannot produce.
+ * The real, painted colour in both surfaces is confirmed separately, live, in a real browser (this
+ * item's own Done-when explicitly asks for that, not a unit test standing in for it).
+ */
+describe("the shared row rule's colour and dividers (25-206)", () => {
+  function styleSheet(): CSSStyleSheet {
+    const cssSource = readFileSync(path.join(process.cwd(), "src", "ui", "styles.css"), "utf8");
+    const style = document.createElement("style");
+    style.textContent = cssSource;
+    document.head.append(style);
+    const sheet = style.sheet;
+    if (sheet === null) {
+      throw new Error("jsdom did not parse styles.css into a CSSStyleSheet");
+    }
+    return sheet;
+  }
+
+  function ruleIndexFor(sheet: CSSStyleSheet, selectorText: string): number {
+    const rules = [...sheet.cssRules];
+    const index = rules.findIndex((rule) => rule instanceof CSSStyleRule && rule.selectorText === selectorText);
+    if (index === -1) {
+      throw new Error(`no rule found for selector ${selectorText}`);
+    }
+    return index;
+  }
+
+  function ruleFor(sheet: CSSStyleSheet, selectorText: string): CSSStyleRule {
+    return sheet.cssRules[ruleIndexFor(sheet, selectorText)] as CSSStyleRule;
+  }
+
+  it("sets the shared row's own colour to the fixed #374151 the author picked, not color: inherit any more", () => {
+    const row = ruleFor(styleSheet(), ".ago-channel-switcher-row");
+    expect(row.style.color).toBe("rgb(55, 65, 81)"); // #374151, as jsdom's CSSOM normalises it
+  });
+
+  it("still lets the 'Онлайн чат' row's accent colour win by source order over the new base colour", () => {
+    const sheet = styleSheet();
+    const openChat = ruleFor(sheet, ".ago-channel-switcher-row--open-chat");
+    expect(openChat.style.color).toBe("var(--ago-accent)");
+    // Same specificity (one class each) as the base rule, so source order alone decides the winner -
+    // this row's own override has to stay declared after `.ago-channel-switcher-row` for its accent
+    // colour to keep beating the new #374151.
+    expect(ruleIndexFor(sheet, ".ago-channel-switcher-row--open-chat")).toBeGreaterThan(
+      ruleIndexFor(sheet, ".ago-channel-switcher-row"),
+    );
+  });
+
+  it("still lets the touch sheet's 'Отмена' row keep its own grey by source order over the new base colour", () => {
+    const sheet = styleSheet();
+    const cancel = ruleFor(sheet, ".ago-touch-routing-row--cancel");
+    expect(cancel.style.color).toBe("rgb(107, 114, 128)"); // #6b7280
+    expect(ruleIndexFor(sheet, ".ago-touch-routing-row--cancel")).toBeGreaterThan(
+      ruleIndexFor(sheet, ".ago-channel-switcher-row"),
+    );
+  });
+
+  it("gives every row inside the AboveComposer banner a divider, including the first - the touch sheet's own unconditional pattern, replicated", () => {
+    // jsdom's CSSOM does not serialise the `border-top` shorthand getter reliably once a sibling
+    // rule also sets the bare `border` shorthand (`.ago-channel-switcher-row`'s own `border: none`) -
+    // asserting on the three longhands it decomposes into instead of the shorthand sidesteps that.
+    const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner .ago-channel-switcher-row");
+    expect(rule.style.borderTopWidth).toBe("0.0625rem");
+    expect(rule.style.borderTopStyle).toBe("solid");
+    expect(rule.style.borderTopColor).toBe("rgb(229, 231, 235)"); // #e5e7eb
+  });
+
+  it("declares the banner's divider at higher specificity than the 'Онлайн чат' row's own identical border-top, so nothing conflicts", () => {
+    const sheet = styleSheet();
+    const openChat = ruleFor(sheet, ".ago-channel-switcher-row--open-chat");
+    const bannerDivider = ruleFor(sheet, ".ago-channel-switcher-banner .ago-channel-switcher-row");
+    expect(openChat.style.borderTopWidth).toBe(bannerDivider.style.borderTopWidth);
+    expect(openChat.style.borderTopStyle).toBe(bannerDivider.style.borderTopStyle);
+    expect(openChat.style.borderTopColor).toBe(bannerDivider.style.borderTopColor);
+  });
+
+  it("leaves the bare shared row rule without a divider of its own - only the banner-scoped rule adds one", () => {
+    const sheet = styleSheet();
+    // `.ago-channel-switcher-row` sets `border: none`, so its own `border-top-style` reads `none` -
+    // no divider - unlike the two rules above, which both read `solid`.
+    expect(ruleFor(sheet, ".ago-channel-switcher-row").style.borderTopStyle).toBe("none");
+  });
+
+  it("leaves the touch sheet's own unconditional divider (.ago-touch-routing-row) untouched by this item", () => {
+    // Pre-existing, from `25-197`/`25-200` - this item only adds the banner's own equivalent above;
+    // it must not also reach the touch sheet's rows via the bare shared class.
+    const rule = ruleFor(styleSheet(), ".ago-touch-routing-row");
+    expect(rule.style.borderTopWidth).toBe("0.0625rem");
+    expect(rule.style.borderTopStyle).toBe("solid");
+    expect(rule.style.borderTopColor).toBe("rgb(229, 231, 235)"); // #e5e7eb
   });
 });

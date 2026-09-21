@@ -94,3 +94,47 @@ describe("the touch routing sheet's row sizing (25-200, revised by 25-201)", () 
     expect(launcherIconRule.style.height).toBe("3.5rem");
   });
 });
+
+/**
+ * `25-202`: confirmed live (mobile emulation, 375px panel, real build) before this fix - the sheet's
+ * two `<button>` rows ("Онлайн чат"/"Отмена") measured 156.95px/89.09px while their `<a>` siblings
+ * correctly filled the panel at 375px. `.ago-touch-routing-panel` is a plain block context, so every
+ * row is an ordinary in-flow child; `.ago-channel-switcher-row`'s own `display: flex` blockifies an
+ * `<a>` into a block box whose `width: auto` fills the container, but a `<button>`'s own UA-stylesheet
+ * sizing keeps it shrink-to-fit under `display: flex` regardless (a real, documented cross-browser
+ * quirk for form controls specifically) - so `border-top`'s divider read as "cut off" exactly where
+ * the button's own content ended.
+ *
+ * As with `25-200`'s own icon-sizing rule just above, jsdom cannot compute the shadow root's cascade
+ * (this file's own top comment), so this reads the declared source rule directly rather than a
+ * `getComputedStyle` on a mounted widget. The live pixel proof - both rows measuring the full 375px
+ * panel width after this change, alongside a real browser screenshot showing the divider spanning the
+ * full row - is this item's own explicit "not only a CSS rule read by eye" ask, done separately
+ * against a local build (recorded in this item's own worker report), not something jsdom stands in
+ * for.
+ */
+describe("the touch routing sheet's button rows fill the panel (25-202)", () => {
+  it("stretches every row in the sheet - <a> and <button> alike - to the panel's full width", () => {
+    const rows = touchRoutingSheetRules();
+    const row = ruleFor(rows, ".ago-touch-routing-row");
+
+    expect(row.style.width).toBe("100%");
+  });
+
+  it("scopes the fix to the sheet's own row class, not the bare .ago-channel-switcher-row every other placement's row also carries", () => {
+    const rows = touchRoutingSheetRules();
+
+    // AboveComposer's own <button class="ago-channel-switcher-row ago-channel-switcher-row--dismiss">
+    // (writeInChatRow, ui/widget.ts) does not have this bug at all - confirmed live: its parent
+    // .ago-channel-switcher is itself `display: flex; flex-direction: column`, so every row there is
+    // a flex *item*, not a plain block child, and the container's own default `align-items: stretch`
+    // already fills it to the container's cross-axis width regardless of the button's shrink-to-fit
+    // UA default. Neither the bare class nor the --dismiss modifier should carry a width fix that
+    // belongs to the sheet alone.
+    const bareRowRule = ruleFor(rows, ".ago-channel-switcher-row");
+    expect(bareRowRule.style.width).toBe("");
+
+    const dismissRowRule = ruleFor(rows, ".ago-channel-switcher-row--dismiss");
+    expect(dismissRowRule.style.width).toBe("");
+  });
+});

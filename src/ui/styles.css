@@ -731,11 +731,31 @@
      `25-201`: seen live next to the actual 30px icons, 23px still read too big. Shown a comparison
      (23px/20px/18px side by side, plus a live slider) to pick from without another round trip - the
      author picked 16px, smaller than any of the three options offered. This rule now carries that
-     value; the derivation above is `25-200`'s own history and is left as-is. */
+     value; the derivation above is `25-200`'s own history and is left as-is.
+
+     `25-202`: `width: 100%` added here - confirmed live (mobile emulation, 375px panel) that without
+     it the two `<button>` rows ("Онлайн чат"/"Отмена") measured 156.95px/89.09px while their `<a>`
+     siblings correctly filled the panel at 375px. `.ago-touch-routing-panel` is an ordinary block
+     context, not a flex container, so every row here is a plain in-flow child; `.ago-channel-
+     switcher-row`'s own `display: flex` blockifies each row into a block-level box, and an ordinary
+     block box's `width: auto` fills its container - which is exactly what happens for the `<a>` rows.
+     A `<button>`'s own UA-stylesheet sizing keeps it shrink-to-fit under `display: flex` in that same
+     situation regardless (a real, documented cross-browser quirk for form controls specifically), so
+     `border-top`'s divider read as "cut off" exactly where the button's own content ended. `width:
+     100%` overrides that shrink-to-fit directly. Scoped to `.ago-touch-routing-row` - not the bare
+     `.ago-channel-switcher-row` every placement's row shares - because the two other placements do
+     not have this bug: confirmed live that `AboveComposer`'s own `<button>` row (`ago-channel-
+     switcher-row--dismiss`) already measures full width (328px alongside its two 328px `<a>`
+     siblings) with no fix at all, because its parent `.ago-channel-switcher` is itself `display: flex;
+     flex-direction: column` - each row there is a flex *item*, not a plain block child, and the
+     container's own default `align-items: stretch` fills every item to the container's cross-axis
+     width regardless of the button's own shrink-to-fit UA default. `BelowLauncher`'s row carries no
+     `<button>` at all (`25-173`), so it was never a candidate. */
   .ago-touch-routing-row {
     padding: 0.75rem 1rem;
     border-top: 0.0625rem solid #e5e7eb;
     font-size: 16px;
+    width: 100%;
   }
 
   /* `25-200`: every icon inside a row - the brand marks `buildChannelSwitcherRow` builds

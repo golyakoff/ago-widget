@@ -177,13 +177,64 @@ interface IconNode {
   children?: IconNode[];
 }
 
-function buildIconTree(node: IconNode): SVGElement {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", node.tag);
-  for (const [key, value] of Object.entries(node.attrs ?? {})) {
-    el.setAttribute(key, value);
+/**
+ * `25-199`: one higher than the last call, so two icon trees built into the same shadow root -
+ * `loadChannelSwitcherCard`'s `AboveComposer` card and `openTouchRoutingSheet`'s own sheet are the
+ * real case this exists for, both able to hold a `Max` row at once - never mint the same suffix
+ * twice. Module-scope rather than passed in from a caller: every `buildBrandIcon` call anywhere in
+ * this file needs the identical guarantee, and a counter is the plain, deterministic way to get it
+ * without reaching for `crypto.randomUUID` for what is, underneath, just "a number nobody has used
+ * yet" - the same reasoning `sequence`-based ordering elsewhere in this project already applies
+ * instead of a clock.
+ */
+let nextIconInstanceId = 0;
+
+/** `25-199`: every `id` an icon tree declares, gathered up front so `buildIconTree` below knows
+ * which fragment references (`href="#a"`, `fill="url(#c)"`) are *internal* to this one tree - and
+ * therefore need the identical per-instance suffix its own `id` gets - as opposed to some unrelated
+ * `#`-containing string a future tree might carry (a URL fragment in an unrelated attribute, say)
+ * that must be left alone. */
+function collectDeclaredIds(node: IconNode, into: Set<string> = new Set()): Set<string> {
+  if (node.attrs?.id !== undefined) {
+    into.add(node.attrs.id);
   }
   for (const child of node.children ?? []) {
-    el.appendChild(buildIconTree(child));
+    collectDeclaredIds(child, into);
+  }
+  return into;
+}
+
+/** `25-199`: rewrites every `#<id>` occurrence inside `value` whose `<id>` is one this tree declares
+ * itself (`declaredIds`) to carry `suffix` too - covers both `href="#a"` (the whole value is the
+ * reference) and `fill="url(#c)"` (the reference sits inside a larger string) with one regex, since
+ * both are exactly `#` followed by the id and nothing about this widget's own icon trees needs a
+ * broader `url()` grammar than that. A value with no matching id (every attribute on `Telegram`/
+ * `WhatsApp`/`Vk`, and any non-reference attribute on `Max` itself) comes back unchanged. */
+function withUniqueIdReferences(value: string, declaredIds: ReadonlySet<string>, suffix: string): string {
+  return value.replace(/#([\w-]+)/g, (whole, id: string) => (declaredIds.has(id) ? `#${id}-${suffix}` : whole));
+}
+
+/**
+ * `25-199`: `id`/reference rewriting lives here, in the one place every node of a tree already
+ * passes through, rather than as a post-build DOM pass over the finished `SVGElement` - walking the
+ * source `IconNode` tree once, with a `Set` already telling it which strings are this tree's own
+ * ids, is simpler than re-deriving the same fact by walking the built SVG's attributes afterward.
+ * `Telegram`/`WhatsApp`/`Vk` declare no `id` anywhere in their own trees, so `declaredIds` is empty
+ * for them and every `setAttribute` call below is byte-for-byte what it always was - this only ever
+ * changes output for a tree that actually declares an `id`, `Max` today and whichever brand needs
+ * one next.
+ */
+function buildIconTree(node: IconNode, declaredIds: ReadonlySet<string>, suffix: string): SVGElement {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", node.tag);
+  for (const [key, value] of Object.entries(node.attrs ?? {})) {
+    if (key === "id" && declaredIds.has(value)) {
+      el.setAttribute("id", `${value}-${suffix}`);
+      continue;
+    }
+    el.setAttribute(key, withUniqueIdReferences(value, declaredIds, suffix));
+  }
+  for (const child of node.children ?? []) {
+    el.appendChild(buildIconTree(child, declaredIds, suffix));
   }
   return el;
 }
@@ -394,7 +445,7 @@ function buildBrandIcon(kind: string): SVGSVGElement | undefined {
   if (tree === undefined) {
     return undefined;
   }
-  return buildIconTree(tree) as SVGSVGElement;
+  return buildIconTree(tree, collectDeclaredIds(tree), `icon${nextIconInstanceId++}`) as SVGSVGElement;
 }
 
 /** `25-149`: an unrecognised `kind` on the wire (a future channel this build has not shipped an icon

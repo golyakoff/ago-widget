@@ -416,13 +416,28 @@ describe("a site with connected channels", () => {
       }
     });
 
-    it("keeps the label text tint independent of the icon - row.style.color still carries the brand hex", async () => {
+    // `25-205`: the row no longer sets an inline `color` at all - the author found live that a
+    // colour picked to work as a small icon accent (Telegram's pale #0088CC) reads as washed-out,
+    // low-contrast body text. The label now falls back to `.ago-channel-switcher-row { color:
+    // inherit }`, never an inline style, while the icon's own brand fill is untouched (asserted
+    // separately below).
+    it("sets no inline colour on the row - the label reads the panel's own neutral colour, not the brand hex", async () => {
       stubFetch({ channelLinks: allFourChannels() });
       const panel = await mountWidget();
       await flush();
 
       const telegramRow = rows(panel.root).find((r) => r.textContent?.includes("Telegram")) as HTMLAnchorElement;
-      expect(telegramRow.style.color).toBe("rgb(0, 136, 204)"); // #0088CC
+      expect(telegramRow.style.color).toBe("");
+    });
+
+    it("leaves each brand icon's own fill untouched by the row's text colour", async () => {
+      stubFetch({ channelLinks: allFourChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      const telegramRow = rows(panel.root).find((r) => r.textContent?.includes("Telegram"))!;
+      const fillEl = telegramRow.querySelector("[fill='#0088CC']");
+      expect(fillEl).not.toBeNull();
     });
   });
 

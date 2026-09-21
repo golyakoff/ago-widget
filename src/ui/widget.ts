@@ -83,6 +83,28 @@ export const ATTRACT_PULSE_INTERVAL_MS = 4_000;
 export const ATTRACT_PULSE_DURATION_MS = 700;
 
 /**
+ * `25-203`: how long `isHoverRegionActive` stays `true` after the pointer leaves both `this.toggle`
+ * and `this.channelSwitcherLauncherRow`, before `updateChannelSwitcherLauncherVisibility` actually
+ * hides the row. Confirmed live, against a real local build, before adding this: with no grace period
+ * at all (the ticket's own literally-worded fix - the row's own `pointerenter`/`pointerleave` writing
+ * the identical flag the toggle's pair already writes, nothing else), a real desktop pointer path
+ * moving from inside the toggle toward an icon still lost the row mid-crossing every time a sample
+ * landed in the real, physical gap between the two boxes (`ui/styles.css`'s own `--acsl-gap`) - the
+ * toggle's own `pointerleave` fires the instant the pointer leaves its box, `hidden` is written
+ * synchronously, and the row (now `display: none`) cannot receive the `pointerenter` that would have
+ * un-hidden it once the pointer actually arrives, because a `display: none` element takes no part in
+ * hit-testing at all. Two elements each independently reacting to their own hover, with no shared
+ * memory of "still in transit between them" bridging the gap, is not actually one hoverable region -
+ * this grace period is what makes it one: a `pointerleave` on either element only *schedules* the
+ * hide, and the matching `pointerenter` on either element (scheduled or not) cancels it outright, so a
+ * crossing that takes less than this many milliseconds - true of any realistic pointer speed over a
+ * gap measured in single-digit rem - never actually reaches the hidden state map to see it, `open()`
+ * always wins immediately regardless of this delay (`updateChannelSwitcherLauncherVisibility`'s own
+ * `isOpen` term is never debounced) - only the "still closed, hover genuinely gone" transition waits.
+ */
+export const HOVER_REGION_LEAVE_GRACE_MS = 150;
+
+/**
  * `25-61`: the literal prefix `VisitorHub.SendAsync` (`ago-chat`, `Ago.Chat.Api/Hubs/VisitorHub.cs`)
  * puts ahead of its own free-text message on exactly one rejection - a visitor's send failing because
  * the conversation they are sending into has already closed. Hardcoded here rather than referencing
@@ -661,8 +683,31 @@ export class ChatWidget {
    * own visibility also has to react to `open()`/`close()` themselves (a chat that closes while the
    * pointer never moved must reveal the row immediately, with no fresh `pointerenter` to trigger
    * it) - a single source of truth `updateChannelSwitcherLauncherVisibility` reads alongside
-   * `this.isOpen` covers both triggers with one function. */
-  private isToggleHovered = false;
+   * `this.isOpen` covers both triggers with one function.
+   *
+   * `25-203`: renamed from `isToggleHovered` and widened to cover a second element. The toggle and
+   * `channelSwitcherLauncherRow` sit side by side as one hoverable region (`ui/styles.css`'s own
+   * `.ago-channel-switcher-launcher` grows outward from `.ago-toggle`, with a real gap between the
+   * two boxes) - tracking only the toggle meant the pointer crossing that gap on its way to an icon
+   * read as "hover lost" the instant it left the toggle's own box, hiding the row before it could
+   * ever be reached (a classic "hover island": two adjacent elements where only one notices the
+   * pointer). Both elements now write this same flag, so hovering *either* one keeps the row
+   * visible - the two `pointerenter`/`pointerleave` listeners on the row below are the toggle's own
+   * pair's exact counterpart.
+   *
+   * Writing `true` happens immediately, on either element's own `pointerenter` - only the write back
+   * to `false` is ever delayed, and only by `hoverLeaveTimer` below (`HOVER_REGION_LEAVE_GRACE_MS`'s
+   * own doc comment has the reasoning: two elements each reacting to their own hover is not yet one
+   * region unless something bridges the real gap between them, and that something is time, not
+   * geometry). */
+  private isHoverRegionActive = false;
+  /** `25-203`: the in-flight grace-period timer scheduled by a `pointerleave` on either the toggle or
+   * the launcher row, or `null` when none is pending - the identical `ReturnType<typeof setTimeout> |
+   * null` shape `attentionTimer`/`autoOpenTimer` above already use. A fresh `pointerenter` on either
+   * element (`cancelHoverRegionLeaveTimer`) clears it before it ever fires, which is the whole
+   * mechanism: a crossing that completes within the grace period never reaches the timer callback that
+   * would have written `isHoverRegionActive = false`. */
+  private hoverLeaveTimer: ReturnType<typeof setTimeout> | null = null;
   /** `25-197`: the session's own connected channels, captured once in `loadChannelSwitcher`
    * regardless of which placement renderer runs - `toggleOpen` needs to know whether there is
    * anything to route to *synchronously*, at the moment of a click, which neither
@@ -868,14 +913,8 @@ export class ChatWidget {
     // Shadow DOM host across both input types without a second, mouse-specific listener pair.
     // Nothing here assumes a pointer type: touch's own synthetic hover (a tap-and-hold in some
     // browsers) is out of this item's scope, not specifically excluded.
-    this.toggle.addEventListener("pointerenter", () => {
-      this.isToggleHovered = true;
-      this.updateChannelSwitcherLauncherVisibility();
-    });
-    this.toggle.addEventListener("pointerleave", () => {
-      this.isToggleHovered = false;
-      this.updateChannelSwitcherLauncherVisibility();
-    });
+    this.toggle.addEventListener("pointerenter", () => this.enterHoverRegion());
+    this.toggle.addEventListener("pointerleave", () => this.scheduleHoverRegionLeave());
 
     this.panel = document.createElement("div");
     this.panel.className = "ago-panel";
@@ -1509,8 +1548,8 @@ export class ChatWidget {
     this.isOpen = false;
     this.panel.hidden = true;
     // `25-192`: closing while the pointer is still over the toggle must reveal the row right away -
-    // this call re-reads `this.isToggleHovered` fresh rather than assuming the pointer moved, which
-    // is exactly the case a `pointerleave`-only design would miss.
+    // this call re-reads `this.isHoverRegionActive` fresh rather than assuming the pointer moved,
+    // which is exactly the case a `pointerleave`-only design would miss.
     this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "false");
     this.toggle.setAttribute("aria-label", this.strings.openChat);
@@ -1520,14 +1559,53 @@ export class ChatWidget {
 
   /** `25-191`/`25-192`: the one place this row's own `hidden` is written - `open()`/`close()`/
    * `openForAutoGreeting()` each call it exactly where they already set `this.panel.hidden`, and
-   * the two `pointerenter`/`pointerleave` listeners above call it on every hover change. The rule
-   * itself, restated by `25-192`: visible only while the chat is closed *and* the toggle is
+   * the toggle's own `pointerenter`/`pointerleave` listeners above (and, since `25-203`, the row's
+   * own matching pair in `buildChannelSwitcherLauncherRow`) call it on every hover change. The rule
+   * itself, restated by `25-192`: visible only while the chat is closed *and* the hover region is
    * currently hovered - open always wins over hover, and neither fact alone is enough. A no-op when
    * the row was never built - a site with nothing connected, or one left on the card placement
    * instead. */
   private updateChannelSwitcherLauncherVisibility(): void {
     if (this.channelSwitcherLauncherRow) {
-      this.channelSwitcherLauncherRow.hidden = this.isOpen || !this.isToggleHovered;
+      this.channelSwitcherLauncherRow.hidden = this.isOpen || !this.isHoverRegionActive;
+    }
+  }
+
+  /** `25-203`: the one place `isHoverRegionActive` is ever set `true` - called from a `pointerenter`
+   * on either `this.toggle` or `this.channelSwitcherLauncherRow`. Cancels any pending
+   * `hoverLeaveTimer` first: a fresh hover on either element, however it arrived, always wins over a
+   * leave that has not yet actually taken effect. */
+  private enterHoverRegion(): void {
+    this.cancelHoverRegionLeaveTimer();
+    this.isHoverRegionActive = true;
+    this.updateChannelSwitcherLauncherVisibility();
+  }
+
+  /** `25-203`: the one place a `hoverLeaveTimer` is ever started - called from a `pointerleave` on
+   * either `this.toggle` or `this.channelSwitcherLauncherRow`. Does not write `isHoverRegionActive`
+   * itself; it schedules the write, `HOVER_REGION_LEAVE_GRACE_MS` later, and only if nothing cancels
+   * it first. `enterHoverRegion` above is that cancellation - a pointer that reaches the *other*
+   * element (or returns to this one) within the grace period never lets this timer fire at all, which
+   * is what turns two elements with a real gap between them into one continuously hoverable region.
+   * `open()`/`close()` do not touch this timer: `updateChannelSwitcherLauncherVisibility`'s own
+   * `isOpen` term already wins unconditionally and immediately, whatever this timer is doing. */
+  private scheduleHoverRegionLeave(): void {
+    this.cancelHoverRegionLeaveTimer();
+    this.hoverLeaveTimer = setTimeout(() => {
+      this.hoverLeaveTimer = null;
+      this.isHoverRegionActive = false;
+      this.updateChannelSwitcherLauncherVisibility();
+    }, HOVER_REGION_LEAVE_GRACE_MS);
+  }
+
+  /** `25-203`: shared by `enterHoverRegion` (a fresh hover always cancels a pending leave) and
+   * `scheduleHoverRegionLeave` itself (a second `pointerleave` - e.g. the toggle's, then the row's,
+   * while the pointer never actually re-entered either - restarts the same grace period rather than
+   * stacking a second timer). Safe to call whether or not one is actually pending. */
+  private cancelHoverRegionLeaveTimer(): void {
+    if (this.hoverLeaveTimer !== null) {
+      clearTimeout(this.hoverLeaveTimer);
+      this.hoverLeaveTimer = null;
     }
   }
 
@@ -2028,13 +2106,22 @@ export class ChatWidget {
    * `this.panel`) gets no reveal/hide behaviour from the panel's own `hidden` for free.
    *
    * `25-192`: and revealing it on open was itself wrong - the author's own second correction. The
-   * real rule is hover, not open: visible only while the chat is closed *and* the toggle is
+   * real rule is hover, not open: visible only while the chat is closed *and* the hover region is
    * currently hovered, never while open regardless of hover.
    * `updateChannelSwitcherLauncherVisibility` is the one place that rule is evaluated, called from
-   * here, from both `pointerenter`/`pointerleave` on `this.toggle`, and from
+   * here, from `pointerenter`/`pointerleave` on both `this.toggle` and this row itself, and from
    * `open()`/`close()`/`openForAutoGreeting()`. Built already hidden - hover is a live signal this
    * method cannot know anything about at build time, so there is no snapshot worth taking here the
    * way `25-191` briefly did for `this.isOpen`.
+   *
+   * `25-203`: this row sits beside `this.toggle`, not touching it (`ui/styles.css`'s own
+   * `.ago-channel-switcher-launcher` grows outward across a real gap) - the toggle's own
+   * `pointerenter`/`pointerleave` listeners alone left a "hover island" the instant the pointer
+   * crossed that gap on its way to one of the icons below: `pointerleave` fired on the toggle before
+   * the pointer ever reached this row, hiding it mid-crossing. This row now carries the identical
+   * pair of listeners, writing the same `isHoverRegionActive` flag the toggle's own pair writes -
+   * hovering *either* element keeps the row visible, closing the gap between them as one continuous
+   * hoverable region.
    */
   private buildChannelSwitcherLauncherRow(session: VisitorSession): void {
     if (session.channelLinks.length === 0) {
@@ -2047,6 +2134,13 @@ export class ChatWidget {
     row.hidden = true;
     row.setAttribute("role", "group");
     row.setAttribute("aria-label", this.strings.channelSwitcherGroupLabel);
+    // `25-203`: the toggle's own pair's exact counterpart (see `isHoverRegionActive`'s own doc
+    // comment) - without this, moving the pointer from the toggle toward any icon here crosses a gap
+    // where neither element is hovered, and the toggle's `pointerleave` alone would hide the row
+    // before the pointer ever arrives. `enterHoverRegion`/`scheduleHoverRegionLeave` are the same two
+    // methods the toggle's own pair calls - one flag, one grace period, two writers.
+    row.addEventListener("pointerenter", () => this.enterHoverRegion());
+    row.addEventListener("pointerleave", () => this.scheduleHoverRegionLeave());
 
     for (const link of session.channelLinks) {
       row.append(this.buildChannelSwitcherLauncherIcon(link));

@@ -12,7 +12,7 @@ import { hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
  */
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
-const { ChatWidget } = await import("./widget.js");
+const { ChatWidget, HOVER_REGION_LEAVE_GRACE_MS } = await import("./widget.js");
 
 const config: WidgetConfig = {
   siteKey: "shop_test",
@@ -195,12 +195,27 @@ describe("a site on the new placement (BelowLauncher)", () => {
   // - `updateChannelSwitcherLauncherVisibility` requires both "closed" and "hovered" together,
   // reversing `25-173`'s original "persistent regardless of open/closed" design a second time.
   describe("visibility requires both closed and hovered", () => {
+    // `25-203`: leaving now schedules the hide rather than writing it immediately (`widget.ts`'s own
+    // `HOVER_REGION_LEAVE_GRACE_MS`) - fake timers make that deterministic rather than making this
+    // file's own runtime depend on a real 150ms wait passing before an assertion.
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     function hoverToggle(panel: Panel): void {
       panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
     }
 
-    function unhoverToggle(panel: Panel): void {
+    async function unhoverToggle(panel: Panel): Promise<void> {
       panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      // The write to `isHoverRegionActive = false` is deferred behind the grace period - advancing
+      // past it here is this file's own stand-in for "the pointer stayed away long enough to count as
+      // genuinely gone", the same fact `25-203`'s own live verification proves against a real clock.
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
     }
 
     it("is hidden before the panel is ever opened and before any hover", async () => {
@@ -221,7 +236,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
       hoverToggle(panel);
       expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
 
-      unhoverToggle(panel);
+      await unhoverToggle(panel);
       expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
     });
 
@@ -265,8 +280,150 @@ describe("a site on the new placement (BelowLauncher)", () => {
 
         hoverToggle(panel);
         expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
-        unhoverToggle(panel);
+        await unhoverToggle(panel);
       }
+    });
+  });
+
+  // `25-203`: the row sits beside the toggle across a real gap (`ui/styles.css`'s own
+  // `.ago-channel-switcher-launcher` grows outward from `.ago-toggle`) - before this item, only the
+  // toggle carried pointerenter/pointerleave listeners, so a pointer crossing that gap on its way to
+  // an icon lost hover the instant it left the toggle's own box, hiding the row before it could ever
+  // be reached.
+  //
+  // Matching listeners on the row alone were tried first and confirmed live, against a real local
+  // build, to be *insufficient*: a `<button class="ago-channel-switcher-launcher">`'s own
+  // `pointerleave` still fired the moment the pointer left it, writing `hidden = true` synchronously -
+  // and a `display: none` element takes no further part in hit-testing, so the row's own
+  // `pointerenter` could never fire once the pointer actually reached where the row used to be. Two
+  // elements each independently reacting to their own hover, with no shared memory of "still in
+  // transit between them", is not actually one hoverable region. `HOVER_REGION_LEAVE_GRACE_MS` (see
+  // its own doc comment in `widget.ts`) is the correction: a `pointerleave` on either element only
+  // *schedules* the hide, and a `pointerenter` on either element cancels it outright, so a crossing
+  // that completes within the grace period never reaches the hidden write at all.
+  //
+  // jsdom has no real layout/hit-testing, so this file - like `25-192`'s own tests just above - proves
+  // the flag/timer logic via directly dispatched events and fake timers, one element at a time; a
+  // real, physically continuous pointer path (a browser automation drag from the toggle across the gap
+  // into an icon, watching `hidden` the whole way) is this item's own separate live-verification ask,
+  // done against a local build - recorded in this item's own worker report, not something jsdom can
+  // stand in for.
+  describe("the hover region spans the toggle and the row - closing the gap between them (25-203)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function hoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    function unhoverToggle(panel: Panel): void {
+      panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    }
+
+    function hoverRow(panel: Panel): void {
+      launcherRow(panel.root)!.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    }
+
+    function unhoverRow(panel: Panel): void {
+      launcherRow(panel.root)!.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    }
+
+    it("stays visible when the pointer is over the row directly, even though the toggle itself was never hovered", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+    });
+
+    it("never actually hides while the pointer crosses from the toggle into the row within the grace period - the gap-crossing case this item exists for", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      // The pointer has left the toggle's own box but has not yet reached the row - exactly the
+      // instant the bug report described. Unlike before this item, the row does not hide here: the
+      // leave only starts the grace-period timer, and no time has actually passed yet.
+      unhoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      // ...and now the pointer arrives at the row, within the grace period - its own pointerenter
+      // cancels the pending timer outright.
+      hoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      // Letting the full grace period elapse afterwards proves the cancellation was real, not just a
+      // longer delay - there is no stale timer left to fire late and hide the row out from under a
+      // pointer that is still sitting on it.
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+    });
+
+    it("hides once the grace period elapses if the pointer leaves the toggle and never reaches the row - genuinely leaving, not crossing", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      unhoverToggle(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false); // still within the grace period
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("hides again, after its own grace period, once the pointer leaves the row too - genuinely leaving the region, not just crossing within it", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      unhoverToggle(panel);
+      hoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      unhoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false); // still within the grace period
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    // `25-192`'s own "open always wins over hover" rule, re-confirmed here for the row's own hover
+    // signal specifically, and unaffected by the grace period: `updateChannelSwitcherLauncherVisibility`'s
+    // own `isOpen` term is never debounced.
+    it("still hides immediately if the chat is opened while the row itself (not the toggle) is hovered", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", false);
+
+      panel.toggle.click(); // open
+      await flush();
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("does not reveal on hovering the row while the panel is open, the same rule the toggle's own hover already follows", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });
+      const panel = await mountWidget();
+      panel.toggle.click(); // open
+      await flush();
+
+      hoverRow(panel);
+      expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
     });
   });
 

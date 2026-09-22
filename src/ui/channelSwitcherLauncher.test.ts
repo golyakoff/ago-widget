@@ -240,7 +240,7 @@ describe("a site on the new placement (BelowLauncher)", () => {
       expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
     });
 
-    it("bubbles the icons in on reveal, nearest the toggle first", async () => {
+    it("bubbles the icons in on reveal, nearest the toggle first (default position)", async () => {
       stubFetch({ channelLinks: twoChannels() });
       const panel = await mountWidget();
       await flush();
@@ -249,12 +249,42 @@ describe("a site on the new placement (BelowLauncher)", () => {
 
       const icons = launcherIcons(panel.root);
       expect(icons).toHaveLength(2);
-      // `.ago-channel-switcher-launcher`'s own right edge sits against the toggle, so the *last* DOM
-      // child is nearest it - it plays with no delay, and each one further away waits one more step.
+      // `.ago-channel-switcher-launcher`'s own right edge sits against the toggle in this position, so
+      // the *last* DOM child is nearest it - it plays with no delay, and each one further away waits
+      // one more step. Confirmed live for `25-223` (a real widget instance, a real hover, `getBoundingClientRect`
+      // and the actual resulting `animationDelay` read back in a real Chromium browser): this
+      // position's own expectation was already correct before that fix - only `.ago-position-left`,
+      // asserted below, was ever actually backwards.
       expect(icons[1]!.classList.contains("ago-entering")).toBe(true);
       expect(icons[1]!.style.animationDelay).toBe("0ms");
       expect(icons[0]!.classList.contains("ago-entering")).toBe(true);
       expect(icons[0]!.style.animationDelay).toBe(`${CHANNEL_SWITCHER_BUBBLE_STAGGER_MS}ms`);
+    });
+
+    // `25-223`: `.ago-position-left` mirrors `.ago-channel-switcher-launcher` onto the toggle's other
+    // side (`ui/styles.css`'s own `left: calc(100% + gap)` there, vs. `right: calc(100% + gap)` for the
+    // default position) - the flex row's own left-to-right child order does not flip along with it, so
+    // the *first* DOM child ends up nearest the toggle here instead of the last. Live reproduction
+    // against the pre-fix code (real widget, real hover, real Chromium `getBoundingClientRect`) showed
+    // the unconditional "last child is nearest" formula played every icon in this position exactly
+    // backwards - farthest first, nearest last - which is what this test would have caught: it fails
+    // against that code and passes against the position-aware fix.
+    it("bubbles the icons in on reveal, nearest the toggle first (.ago-position-left)", async () => {
+      stubFetch({ channelLinks: twoChannels(), widgetPosition: "BottomLeft" });
+      const panel = await mountWidget();
+      await flush();
+
+      const root = panel.root.querySelector(".ago-root")!;
+      expect(root.classList.contains("ago-position-left")).toBe(true);
+
+      hoverToggle(panel);
+
+      const icons = launcherIcons(panel.root);
+      expect(icons).toHaveLength(2);
+      expect(icons[0]!.classList.contains("ago-entering")).toBe(true);
+      expect(icons[0]!.style.animationDelay).toBe("0ms");
+      expect(icons[1]!.classList.contains("ago-entering")).toBe(true);
+      expect(icons[1]!.style.animationDelay).toBe(`${CHANNEL_SWITCHER_BUBBLE_STAGGER_MS}ms`);
     });
 
     it("prefers-reduced-motion skips the bubble-in entrance", async () => {

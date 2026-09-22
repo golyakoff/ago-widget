@@ -86,8 +86,9 @@ export const ATTRACT_PULSE_DURATION_MS = 700;
 /** `25-222`: the delay between one channel-launcher icon's own bubble-in entrance and the next -
  * chosen live, in the same rehearsal Artifact `ui/styles.css`'s own `ago-slide-up`/`ago-bubble-in`
  * durations were. Counted from the icon nearest the round toggle outward (`updateChannelSwitcher
- * LauncherVisibility`'s own remarks on why "nearest" is the row's *last* DOM child), so the icon
- * right beside the button gets no delay at all and each one further away waits one more step. */
+ * LauncherVisibility`'s own remarks on which DOM child that is - `25-223`: it depends on the
+ * widget's position, not just DOM order), so the icon right beside the button gets no delay at all
+ * and each one further away waits one more step. */
 export const CHANNEL_SWITCHER_BUBBLE_STAGGER_MS = 50;
 
 /**
@@ -1578,17 +1579,28 @@ export class ChatWidget {
       const becomingVisible = this.channelSwitcherLauncherRow.hidden && !hidden;
       this.channelSwitcherLauncherRow.hidden = hidden;
       if (becomingVisible) {
-        // `25-222`: bubbles in, nearest the round toggle first. The icons are the row's own last DOM
-        // children that appear closest to the button - `ui/styles.css`'s own `.ago-channel-switcher-
-        // launcher` sits with its *right* edge against the toggle (`right: calc(100% + gap)`), and an
+        // `25-222`/`25-223`: bubbles in, nearest the round toggle first. `25-222`'s own version of
+        // this assumed one unconditional rule - "the *last* DOM child is always nearest the toggle" -
+        // reasoned from the default position's own CSS (`ui/styles.css`'s `.ago-channel-switcher-
+        // launcher` sits with its *right* edge against the toggle, `right: calc(100% + gap)`, and an
         // ordinary left-to-right flex row lays its content out from that box's own left edge, so the
-        // *last* child is the one nearest the toggle, not the first - the stagger below counts down
-        // from the end for exactly that reason, not up from the start.
+        // last child ends up flush with the row's right edge). That rule is only half true: a real,
+        // live reproduction for `25-223` (a real widget instance, a real hover, `getBoundingClientRect`
+        // and the resulting `animationDelay` read back in an actual browser - not assumed from the CSS
+        // alone) confirmed it for this default position, but `.ago-root.ago-position-left` mirrors the
+        // row the other way (`left: calc(100% + gap)`, growing from the toggle's other side), which
+        // flips *which* DOM child ends up nearest without flipping the flex row's own left-to-right
+        // child order - so the *first* child is nearest there instead, and the old unconditional
+        // formula played every icon in that position backwards. Reading `.ago-position-left` off
+        // `this.container` (the same class `bootstrapSession` toggles, and this row's own doc comment
+        // already points to for its anchor side) picks the right end to count down from for whichever
+        // position actually applies.
+        const isPositionLeft = this.container.classList.contains("ago-position-left");
         const icons = [
           ...this.channelSwitcherLauncherRow.querySelectorAll<HTMLElement>(".ago-channel-switcher-launcher-icon"),
         ];
         icons.forEach((icon, index) => {
-          const stepsFromToggle = icons.length - 1 - index;
+          const stepsFromToggle = isPositionLeft ? index : icons.length - 1 - index;
           this.triggerEnterAnimation(icon, stepsFromToggle * CHANNEL_SWITCHER_BUBBLE_STAGGER_MS);
         });
       }

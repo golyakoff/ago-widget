@@ -690,6 +690,26 @@ export class ChatWidget {
    * region unless something bridges the real gap between them, and that something is time, not
    * geometry). */
   private isHoverRegionActive = false;
+  /** `25-224`: a second, deliberately separate reason the channel-switcher can be visible -
+   * `updateChannelSwitcherLauncherVisibility`'s own `hidden` expression reads
+   * `this.isHoverRegionActive || this.autoRevealed` rather than folding this into
+   * `isHoverRegionActive` itself. `triggerAutoOpen` is the one place this is ever set `true`: a
+   * real hover and an automatic reveal are different facts about the world (one observed a pointer,
+   * the other observed a timer), and conflating them would make `enterHoverRegion`/
+   * `scheduleHoverRegionLeave` - which reason about *hover* specifically, including the grace-period
+   * bridge across the gap between the toggle and the row - operate on a signal they never actually
+   * observed. The same "second flag, not a repurposed one" shape this codebase already uses on the
+   * backend for `RoutingSuppressedAt` vs `IsBlocked`.
+   *
+   * Cleared back to `false` the moment a *real* hover arrives (`enterHoverRegion`, the one place a
+   * genuine `pointerenter` lands) - the backlog item's own "a real interaction graduates the reveal
+   * into ordinary hover behaviour": from that point on `isHoverRegionActive` alone already keeps the
+   * channel-switcher visible, and the existing grace-period leave (`scheduleHoverRegionLeave`) owns
+   * dismissal exactly as it already does for an organically-hovered reveal, with no separate timer or
+   * auto-hide of its own. The other way this ever clears is `this.isOpen` simply winning outright in
+   * the same `hidden` expression - a visitor who opens the panel for real needs no further signal to
+   * hide a channel-switcher that is about to be hidden anyway. */
+  private autoRevealed = false;
   /** `25-203`: the in-flight grace-period timer scheduled by a `pointerleave` on either the toggle or
    * the launcher row, or `null` when none is pending - the identical `ReturnType<typeof setTimeout> |
    * null` shape `attentionTimer`/`autoOpenTimer` above already use. A fresh `pointerenter` on either
@@ -744,8 +764,10 @@ export class ChatWidget {
    * the tab was closed. Live increments while the panel stays closed this same page load
    * (`handleIncoming` below) still add to whatever the seed produced, rather than replacing it - the
    * two mechanisms answer the same question for two non-overlapping windows (before this page load
-   * existed, and during it) and are simply summed. Reset to zero by `open()` and `openForAutoGreeting()`
-   * alike, since both put the transcript in front of the visitor - never read directly outside
+   * existed, and during it) and are simply summed. Reset to zero by `open()` and `triggerAutoOpen()`'s
+   * own fallback branch alike, since both put the transcript in front of the visitor - `25-224`'s
+   * channel-switcher branch does not touch this, since nothing about the transcript is shown there -
+   * never read directly outside
    * `renderUnreadBadge`, which is the one place that turns this number into what the visitor (and a
    * screen reader) sees.
    */
@@ -854,8 +876,8 @@ export class ChatWidget {
   private drawnGreetingBubble: HTMLDivElement | null = null;
 
   /**
-   * `23-64`/`adr/0148`: `true` from the moment `openForAutoGreeting` reveals the panel until the
-   * visitor's first send resolves (or the panel is closed and reopened through the ordinary
+   * `23-64`/`adr/0148`: `true` from the moment `triggerAutoOpen`'s fallback branch reveals the panel
+   * until the visitor's first send resolves (or the panel is closed and reopened through the ordinary
    * `open()`, which connects immediately and makes this moot) - the signal that lets the composer
    * accept input, and a send succeed, on a panel this widget deliberately never connected the hub
    * for (`adr/0148`'s "nothing reaches the server until the visitor writes"). `isConnected` alone
@@ -1522,8 +1544,9 @@ export class ChatWidget {
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-label", this.strings.closeChat);
     // `25-141`: "read" happens here, not on a later render pass - the transcript is in front of the
-    // visitor from this line onward, which is the same fact `openForAutoGreeting` marks "read" for its
-    // own reveal.
+    // visitor from this line onward, which is the same fact `triggerAutoOpen`'s own fallback branch
+    // marks "read" for its own reveal (its channel-switcher branch does not - the transcript is not
+    // shown there).
     this.unreadCount = 0;
     this.renderUnreadBadge();
     // `25-143`: advances the on-disk read watermark on the identical event - see
@@ -1557,12 +1580,15 @@ export class ChatWidget {
   }
 
   /** `25-191`/`25-192`: the one place this row's own `hidden` is written - `open()`/`close()`/
-   * `openForAutoGreeting()` each call it exactly where they already set `this.panel.hidden`, and
-   * the toggle's own `pointerenter`/`pointerleave` listeners above (and, since `25-203`, the row's
-   * own matching pair in `buildChannelSwitcherLauncherRow`) call it on every hover change. The rule
-   * itself, restated by `25-192`: visible only while the chat is closed *and* the hover region is
-   * currently hovered - open always wins over hover, and neither fact alone is enough. A no-op when
-   * the row was never built - a site with nothing connected, or one left on the other placement.
+   * `triggerAutoOpen()` each call it exactly where they already set `this.panel.hidden` (or, for
+   * `triggerAutoOpen`'s channel-switcher branch, exactly where it sets `this.autoRevealed` instead of
+   * touching the panel at all), and the toggle's own `pointerenter`/`pointerleave` listeners above
+   * (and, since `25-203`, the row's own matching pair in `buildChannelSwitcherLauncherRow`) call it on
+   * every hover change. The rule itself, restated by `25-192` and widened by `25-224`: visible only
+   * while the chat is closed *and* (the hover region is currently hovered *or* `triggerAutoOpen` has
+   * revealed it automatically) - open always wins over both, and neither reveal reason alone needs the
+   * other to be present. A no-op when the row was never built - a site with nothing connected, or one
+   * left on the other placement.
    *
    * `25-204`: also the one place `channelSwitcherBanner`'s own `hidden` is written, on the identical
    * rule - `buildChannelSwitcherBanner` wires the same `pointerenter`/`pointerleave` pair
@@ -1574,7 +1600,7 @@ export class ChatWidget {
    * simpler than a placement-specific branch here, and stays correct even if a future placement ever
    * did need both hoverable at once. */
   private updateChannelSwitcherLauncherVisibility(): void {
-    const hidden = this.isOpen || !this.isHoverRegionActive;
+    const hidden = this.isOpen || !(this.isHoverRegionActive || this.autoRevealed);
     if (this.channelSwitcherLauncherRow) {
       const becomingVisible = this.channelSwitcherLauncherRow.hidden && !hidden;
       this.channelSwitcherLauncherRow.hidden = hidden;
@@ -1617,10 +1643,20 @@ export class ChatWidget {
   /** `25-203`: the one place `isHoverRegionActive` is ever set `true` - called from a `pointerenter`
    * on either `this.toggle` or `this.channelSwitcherLauncherRow`. Cancels any pending
    * `hoverLeaveTimer` first: a fresh hover on either element, however it arrived, always wins over a
-   * leave that has not yet actually taken effect. */
+   * leave that has not yet actually taken effect.
+   *
+   * `25-224`: also the one place `autoRevealed` is ever cleared. A real `pointerenter` here is a
+   * genuine interaction - the visitor actually reached for the toggle or the row/banner, whether or
+   * not `triggerAutoOpen` had already revealed it automatically - so it "graduates" the reveal into
+   * ordinary hover-driven behaviour: `isHoverRegionActive` alone is now enough to keep it visible,
+   * and `scheduleHoverRegionLeave`'s existing grace-period dismissal owns what happens next, exactly
+   * as it already does for a reveal nobody automated. No separate timer or auto-hide is introduced
+   * for the automated case - clearing the flag here just lets the mechanism that already exists for
+   * a real hover take over. */
   private enterHoverRegion(): void {
     this.cancelHoverRegionLeaveTimer();
     this.isHoverRegionActive = true;
+    this.autoRevealed = false;
     this.updateChannelSwitcherLauncherVisibility();
   }
 
@@ -1801,14 +1837,14 @@ export class ChatWidget {
   }
 
   /**
-   * `23-64`/`adr/0148`: schedules the one-shot timer that draws the tenant's greeting and reveals
-   * the panel - and nothing else. No hub connection, no `JoinAsync`, no HTTP call beyond the
-   * handshake this widget already made at mount (`bootstrapSession`'s own `POST
+   * `23-64`/`adr/0148`, widened by `25-224`: schedules the one-shot timer that invites the visitor
+   * into a conversation - and nothing else. No hub connection, no `JoinAsync`, no HTTP call beyond
+   * the handshake this widget already made at mount (`bootstrapSession`'s own `POST
    * /api/v1/visitor-sessions`, which happens regardless of auto-open and mints no conversation) -
    * `adr/0148`'s own words, "nothing reaches the server until the visitor writes." A visitor who
-   * ignores the panel or closes it before writing leaves exactly the trace they would have left
-   * without this feature: none. `ui/widget.test.ts`'s own fails-before test asserts this directly by
-   * spying on `VisitorConnection` and `fetch`.
+   * ignores the invitation or dismisses it before writing leaves exactly the trace they would have
+   * left without this feature: none. `ui/widget.test.ts`'s own fails-before test asserts this
+   * directly by spying on `VisitorConnection` and `fetch`.
    *
    * <b>Three one-way gates, checked once, at the moment scheduling is attempted:</b>
    * <ul>
@@ -1820,11 +1856,12 @@ export class ChatWidget {
    * feature.</li>
    * <li><b>A coarse-pointer (touch-primary) device.</b> This item's own required, stated mobile
    * decision - the backlog item's "Where this is likely to go wrong" section asks for one rather
-   * than an accident discovered in production. A panel that opens itself over somebody's phone is a
-   * far larger interruption than one that opens in the corner of a desktop tab a visitor can glance
-   * past without losing their place on the page, so auto-open simply never fires here - the identical
-   * `window.matchMedia?.(...)` feature-detection shape `scheduleAttractAttention`'s own
-   * `prefers-reduced-motion` gate already uses, applied to a different media feature.</li>
+   * than an accident discovered in production. A panel (or channel-switcher) that reveals itself
+   * over somebody's phone is a far larger interruption than one that appears in the corner of a
+   * desktop tab a visitor can glance past without losing their place on the page, so auto-open
+   * simply never fires here - the identical `window.matchMedia?.(...)` feature-detection shape
+   * `scheduleAttractAttention`'s own `prefers-reduced-motion` gate already uses, applied to a
+   * different media feature.</li>
    * <li><b>The panel is already open.</b> A visitor who opened it themselves before the timer fired
    * needs no invitation.</li>
    * </ul>
@@ -1838,33 +1875,87 @@ export class ChatWidget {
       return;
     }
 
-    this.autoOpenTimer = setTimeout(() => this.openForAutoGreeting(greetingText), delaySeconds * 1000);
+    this.autoOpenTimer = setTimeout(() => this.triggerAutoOpen(greetingText), delaySeconds * 1000);
   }
 
   /**
-   * `23-64`/`adr/0148`: the auto-open panel reveal - deliberately not a call to `open()`.
-   * `open()` connects the hub (`connect()`, which mints a real conversation the instant it joins),
-   * steals focus into the panel (`focusTrap.activate()`, `closeButton.focus()` - this item's own
-   * "focus is not stolen" scope), and counts as a deliberate open for `23-07`'s own beacon - every
-   * one of those is exactly what a visitor did not do by having a timer fire on their own page. This
-   * method does only what a self-opened panel needs: reveal it, keep the toggle's own accessible
-   * state honest about what the DOM now shows, mark this identity as shown, and draw the greeting.
+   * `23-64`/`adr/0148`: named for what it schedules, not for what it draws - `25-224` retired this
+   * method's original name (`openForAutoGreeting`) once it stopped always drawing a greeting or
+   * always opening the panel. What it actually does now is choose between two invitations:
+   *
+   * <b>25-224's own preferred outcome - reveal the channel-switcher.</b> If this site actually built
+   * one (`this.channelSwitcherLauncherRow`/`this.channelSwitcherBanner`, whichever
+   * `widgetChannelSwitcherPlacement` this site is configured for), auto-open invites a channel
+   * choice rather than dropping the visitor straight into the chat panel - the author's own stated
+   * intent for this item. It does this through `this.autoRevealed`, a second, deliberately separate
+   * flag from `isHoverRegionActive` (see that field's own doc comment for why not just faking a
+   * hover), and the identical `updateChannelSwitcherLauncherVisibility` reveal path a real hover
+   * already drives - which is also why this reveal gets `25-222`'s own entrance animation for free,
+   * with no extra code here. `widgetAutoOpenGreetingText` plays no role on this branch: it is never
+   * drawn anywhere. <b>This is a real, user-facing consequence worth stating plainly</b> - a tenant
+   * who configured both a greeting text and connected channels stops seeing that text on auto-open
+   * once this branch applies; redesigning the channel-switcher's own UI to carry that text instead
+   * is a bigger change nobody has asked for here.
+   *
+   * <b>The fallback - the original panel-opening behaviour, unchanged.</b> A site with no
+   * channel-switcher built at all (`session.channelLinks` empty, or the handshake resolved to a
+   * touch-routing device that never builds either placement renderer, `loadChannelSwitcher`'s own
+   * `isTouchRoutingDevice()` gate) still gets an invitation - the whole point of auto-open - just
+   * through the one channel it actually has: the embedded chat itself. This is `23-64`/`adr/0148`'s
+   * original reveal, kept verbatim as this method's second branch rather than replaced, deliberately
+   * not a call to `open()`: `open()` connects the hub (`connect()`, which mints a real conversation
+   * the instant it joins), steals focus into the panel (`focusTrap.activate()`, `closeButton.focus()`
+   * - this item's own "focus is not stolen" scope), and counts as a deliberate open for `23-07`'s own
+   * beacon - every one of those is exactly what a visitor did not do by having a timer fire on their
+   * own page.
+   *
+   * <b>The ordering hazard between these two branches</b> (`loadChannelSwitcher()` builds
+   * `channelSwitcherLauncherRow`/`channelSwitcherBanner` fire-and-forget from the constructor,
+   * unawaited by `scheduleAutoOpen`, off the same handshake `sessionPromise` both chains share): the
+   * check below is a plain `!== null` read of whichever field the other async chain may or may not
+   * have written by now. Confirmed, not assumed, to be practically unreachable - both chains hang off
+   * the identical `sessionPromise`, `loadChannelSwitcher` does only synchronous DOM-building work
+   * once that promise resolves (`isTouchRoutingDevice()`/`parseChannelSwitcherPlacement()` touch
+   * nothing async), and the shortest configurable delay
+   * (`parseAutoOpenDelaySeconds`/`AUTO_OPEN_DELAY_SECONDS`, `ui/appearance.ts`) is fifteen real
+   * seconds - so `loadChannelSwitcher` finishes within a handful of microtask turns of
+   * `scheduleAutoOpen` even being called, let alone this timer firing. Handled anyway, deliberately
+   * simply: neither field being built *yet* is treated identically to neither ever existing at all
+   * (this method's own fallback branch), rather than a wait-and-retry mechanism this item's own scope
+   * does not ask for - if the channel-switcher build finishes later, `buildChannelSwitcherLauncherRow`/
+   * `buildChannelSwitcherBanner`'s own trailing `updateChannelSwitcherLauncherVisibility()` call
+   * re-evaluates visibility against `this.isOpen`, which the fallback branch below has by then
+   * already set `true`, so the channel-switcher simply stays hidden rather than appearing beside an
+   * already-open panel.
    *
    * <b>Re-checks `isOpen` at the moment it actually runs</b>, not only when it was scheduled - the
    * timer can fire after the visitor has already opened the panel themselves in the interim, and
    * `open()`'s own `stopAttractAttention`-style cancellation does not reach this timer (see
    * `stopAutoOpen`, called from `open()` for exactly this reason).
    *
-   * <b>Enables the composer without a live connection.</b> `autoOpenedWithoutConnecting` is what
-   * lets the visitor type and send from a panel this widget has not connected the hub for -
-   * `dispatchSend`'s own remarks explain the lazy-connect-on-first-send this makes possible.
+   * <b>Enables the composer without a live connection</b>, on the fallback branch only.
+   * `autoOpenedWithoutConnecting` is what lets the visitor type and send from a panel this widget has
+   * not connected the hub for - `dispatchSend`'s own remarks explain the lazy-connect-on-first-send
+   * this makes possible.
    */
-  private openForAutoGreeting(greetingText: string): void {
+  private triggerAutoOpen(greetingText: string): void {
     this.autoOpenTimer = null;
     if (this.isOpen) {
       return;
     }
 
+    if (this.channelSwitcherLauncherRow !== null || this.channelSwitcherBanner !== null) {
+      // `25-224`: the preferred outcome - invite a channel choice, not the chat panel. One-shot per
+      // visitor identity, exactly like the fallback branch below: `setAutoOpenGreetingShown` marks
+      // this identity "shown" regardless of which invitation it actually got.
+      this.autoRevealed = true;
+      this.updateChannelSwitcherLauncherVisibility();
+      this.storage.setAutoOpenGreetingShown();
+      return;
+    }
+
+    // `25-224`: the fallback - a site with nothing to switch between still gets an invitation,
+    // through its only channel. `23-64`/`adr/0148`'s original reveal, unchanged.
     this.isOpen = true;
     this.panel.hidden = false;
     // `25-222`: slides up from the bottom - the identical `.ago-entering` mechanism the launcher's
@@ -2223,7 +2314,7 @@ export class ChatWidget {
    * currently hovered, never while open regardless of hover.
    * `updateChannelSwitcherLauncherVisibility` is the one place that rule is evaluated, called from
    * here, from `pointerenter`/`pointerleave` on both `this.toggle` and this row itself, and from
-   * `open()`/`close()`/`openForAutoGreeting()`. Built already hidden - hover is a live signal this
+   * `open()`/`close()`/`triggerAutoOpen()`. Built already hidden - hover is a live signal this
    * method cannot know anything about at build time, so there is no snapshot worth taking here the
    * way `25-191` briefly did for `this.isOpen`.
    *
@@ -2465,7 +2556,7 @@ export class ChatWidget {
    * `23-64`: `autoOpenedWithoutConnecting` joins `isConnected` on the same terms a real connection
    * would - the one exception to "connected" gating this widget has, and it exists for exactly one
    * panel state: auto-opened, composer visible, hub deliberately not yet connected
-   * (`openForAutoGreeting`'s own remarks). `completeSend` is what turns a click here into a real
+   * (`triggerAutoOpen`'s own remarks). `completeSend` is what turns a click here into a real
    * connection the moment it is actually needed. */
   private updateSendButtonEnabled(): void {
     this.sendButton.disabled =
@@ -2482,7 +2573,7 @@ export class ChatWidget {
 
   /** `25-120`: mirrors `updateSendButtonEnabled`/`updateSaveButtonEnabled` above - re-evaluated on
    * every connection-state change and once more when an auto-greeted panel enables the composer
-   * without a live connection (`openForAutoGreeting`). Inserting an emoji is a local edit to
+   * without a live connection (`triggerAutoOpen`). Inserting an emoji is a local edit to
    * `this.input`, not a call to the server, so it tracks the same "can the visitor type at all"
    * signal `updateSendButtonEnabled` uses (`isConnected || autoOpenedWithoutConnecting`) rather than
    * `attachButton`'s stricter connection-only gate. Closes the picker the moment it goes disabled -
@@ -2740,9 +2831,9 @@ export class ChatWidget {
    * `23-64`/`adr/0148`: the network half of `dispatchSend`, split out so the optimistic bubble above
    * can render before any of this runs. `materializeAutoGreeting` is decided *before* anything else
    * here - `this.connectPromise === null` is true only ever for the first send on a panel this
-   * widget auto-opened without connecting (`openForAutoGreeting` never starts `connectPromise`; every
-   * other way the panel opens does, in `open()`, before a visitor could ever reach the composer at
-   * all). Once decided, this method starts the connection lazily if it has not already started -
+   * widget auto-opened without connecting (`triggerAutoOpen`'s fallback branch never starts
+   * `connectPromise`; every other way the panel opens does, in `open()`, before a visitor could ever
+   * reach the composer at all). Once decided, this method starts the connection lazily if it has not already started -
    * `open()`'s own `if (this.connectPromise === null)` check, reused rather than duplicated, since a
    * lazy connect-on-first-interaction is exactly what `open()` already does for the ordinary path,
    * just deferred one step further for this one.

@@ -12,7 +12,7 @@ import { hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
  */
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
-const { ChatWidget, HOVER_REGION_LEAVE_GRACE_MS } = await import("./widget.js");
+const { ChatWidget, HOVER_REGION_LEAVE_GRACE_MS, CHANNEL_SWITCHER_BUBBLE_STAGGER_MS } = await import("./widget.js");
 
 const config: WidgetConfig = {
   siteKey: "shop_test",
@@ -238,6 +238,39 @@ describe("a site on the new placement (BelowLauncher)", () => {
 
       await unhoverToggle(panel);
       expect(launcherRow(panel.root)).toHaveProperty("hidden", true);
+    });
+
+    it("bubbles the icons in on reveal, nearest the toggle first", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+
+      const icons = launcherIcons(panel.root);
+      expect(icons).toHaveLength(2);
+      // `.ago-channel-switcher-launcher`'s own right edge sits against the toggle, so the *last* DOM
+      // child is nearest it - it plays with no delay, and each one further away waits one more step.
+      expect(icons[1]!.classList.contains("ago-entering")).toBe(true);
+      expect(icons[1]!.style.animationDelay).toBe("0ms");
+      expect(icons[0]!.classList.contains("ago-entering")).toBe(true);
+      expect(icons[0]!.style.animationDelay).toBe(`${CHANNEL_SWITCHER_BUBBLE_STAGGER_MS}ms`);
+    });
+
+    it("prefers-reduced-motion skips the bubble-in entrance", async () => {
+      // Query-aware, not a blanket `{ matches: true }` - see channelSwitcher.test.ts's identical
+      // remark on why answering `(hover: none)` `true` too would skip building this row at all.
+      const matchMedia = vi.fn((query: string) => ({ matches: query === "(prefers-reduced-motion: reduce)" }));
+      vi.stubGlobal("matchMedia", matchMedia);
+
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+
+      const icons = launcherIcons(panel.root);
+      expect(icons.some((icon) => icon.classList.contains("ago-entering"))).toBe(false);
     });
 
     it("never reveals on hover while the panel is open", async () => {

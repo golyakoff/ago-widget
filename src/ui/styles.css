@@ -106,8 +106,48 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .ago-panel {
-      transition: opacity 120ms ease-out, transform 120ms ease-out;
+    /* `25-222`: the panel and the channel-switcher banner both slide up from the bottom on open -
+       chosen live, against this exact geometry, in a rehearsal Artifact (duration/easing tried at
+       several speeds before settling here). `ui/widget.ts`'s own `triggerEnterAnimation` is what
+       actually applies `.ago-entering` - a `[hidden]` element cannot transition (there is no "from"
+       state to animate out of across a `display: none` boundary), so this is a `@keyframes`
+       triggered by a class the moment `hidden` is cleared, not a `transition` on the element itself
+       (that plain approach sat here inert for years - nothing ever changed `.ago-panel`'s own
+       opacity/transform outside `[hidden]`, so the old `transition` declaration never once ran). */
+    @keyframes ago-slide-up {
+      from {
+        opacity: 0;
+        transform: translateY(1.5rem);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .ago-panel.ago-entering,
+    .ago-channel-switcher-banner.ago-entering {
+      animation: ago-slide-up 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* `25-222`: the channel launcher's own round icons "bubble" in - the identical
+       `triggerEnterAnimation` mechanism, applied per icon rather than once per container, because
+       each icon needs its own `animation-delay` (`ui/widget.ts`'s own remarks on why that delay is
+       set in JS, not CSS: the icon count is per-site and unbounded, so no fixed `:nth-child` ladder
+       could cover it). */
+    @keyframes ago-bubble-in {
+      from {
+        opacity: 0;
+        transform: scale(0.4);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .ago-channel-switcher-launcher-icon.ago-entering {
+      animation: ago-bubble-in 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     /* 23-63: the keyframe itself. Nested in this same media query as a second, independent line of

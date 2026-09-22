@@ -675,16 +675,24 @@
   /* `25-211`: the banner's own header bar - a sibling of the channel rows, always the banner's first
      child (`ui/widget.ts`'s `buildChannelSwitcherBanner`), with nothing to dismiss (clicking outside or
      the pointer leaving the hover region already closes this banner - `25-203`'s own hover mechanism).
-     `#374151` - not a new colour, the exact value `.ago-channel-switcher-row`'s own `color` a few lines
-     up already settled on (`25-205`/`25-206`'s own colour-picker Artifact) - reused rather than a
-     close-but-different neighbour so this file names one dark neutral, not two. Rounded top corners
-     only, matching the banner's own `border-radius: 0.75rem` - the banner's own `overflow: hidden`
-     clips the rest, so the bottom corners need no rule here. */
+     Rounded top corners only, matching the banner's own `border-radius: 0.75rem` - the banner's own
+     `overflow: hidden` clips the rest, so the bottom corners need no rule here.
+
+     `25-219`: this bar used to be a flat `#374151` at `font-weight: 700` - found live to read as a
+     second, disconnected brand surface next to `.ago-header`'s own tenant-coloured gradient. The
+     background is now the identical `radial-gradient(...) + color-mix(...)` expression `.ago-header`
+     declares (copied, not referenced by variable - CSS custom properties can hold a colour but not a
+     whole background shorthand, and duplicating four lines here is cheaper than factoring out a
+     `--ago-header-bg` custom property for two call sites), so the banner reads as the same chrome as
+     the panel it stands in for rather than a different one. `font-weight: 400` replaces `700` for the
+     same reason - `.ago-header h1` itself is only `600`. */
   .ago-channel-switcher-banner-header {
     padding: 0.75rem;
-    background: #374151;
+    background:
+      radial-gradient(140% 140% at 100% 0%, color-mix(in srgb, var(--ago-accent) 65%, white 25%), transparent 60%),
+      color-mix(in srgb, var(--ago-accent) 82%, black);
     color: #fff;
-    font-weight: 700;
+    font-weight: 400;
     border-radius: 0.75rem 0.75rem 0 0;
   }
 

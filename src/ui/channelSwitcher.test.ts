@@ -221,6 +221,31 @@ describe("a site with connected channels", () => {
       expect(banner(panel.root)).toHaveProperty("hidden", true);
     });
 
+    it("plays its slide-up entrance when it reveals on hover", async () => {
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(banner(panel.root)!.classList.contains("ago-entering")).toBe(true);
+    });
+
+    it("prefers-reduced-motion skips the banner's entrance", async () => {
+      // Query-aware, not a blanket `{ matches: true }` - a mock that answers every query the same way
+      // also answers `(hover: none)` `true`, which would make `isTouchRoutingDevice()` skip building
+      // this hover-revealed banner at all (`loadChannelSwitcher`'s own touch-routing gate), leaving
+      // nothing here to assert against.
+      const matchMedia = vi.fn((query: string) => ({ matches: query === "(prefers-reduced-motion: reduce)" }));
+      vi.stubGlobal("matchMedia", matchMedia);
+
+      stubFetch({ channelLinks: twoChannels() });
+      const panel = await mountWidget();
+      await flush();
+
+      hoverToggle(panel);
+      expect(banner(panel.root)!.classList.contains("ago-entering")).toBe(false);
+    });
+
     it("never reveals on hover while the chat panel is open", async () => {
       stubFetch({ channelLinks: twoChannels() });
       joinQueue.push({ conversationId: "conv-1", isNew: false, history: [] });

@@ -83,6 +83,13 @@ export const ATTRACT_PULSE_INTERVAL_MS = 4_000;
  * number as a CSS `animation-iteration-count` a `setTimeout` could drift out of step with. */
 export const ATTRACT_PULSE_DURATION_MS = 700;
 
+/** `25-222`: the delay between one channel-launcher icon's own bubble-in entrance and the next -
+ * chosen live, in the same rehearsal Artifact `ui/styles.css`'s own `ago-slide-up`/`ago-bubble-in`
+ * durations were. Counted from the icon nearest the round toggle outward (`updateChannelSwitcher
+ * LauncherVisibility`'s own remarks on why "nearest" is the row's *last* DOM child), so the icon
+ * right beside the button gets no delay at all and each one further away waits one more step. */
+export const CHANNEL_SWITCHER_BUBBLE_STAGGER_MS = 50;
+
 /**
  * `25-203`: how long `isHoverRegionActive` stays `true` after the pointer leaves both `this.toggle`
  * and `this.channelSwitcherLauncherRow`, before `updateChannelSwitcherLauncherVisibility` actually
@@ -1505,6 +1512,10 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
+    // `25-222`: slides up from the bottom - the identical `.ago-entering` mechanism the launcher's
+    // own icons and the channel-switcher banner use below, restarted here rather than left to a
+    // class that stays on (an open, close, reopen cycle needs to play this every time, not once).
+    this.triggerEnterAnimation(this.panel);
     // `25-192`: re-evaluates to hidden regardless of hover - opening always wins.
     this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "true");
@@ -1564,10 +1575,30 @@ export class ChatWidget {
   private updateChannelSwitcherLauncherVisibility(): void {
     const hidden = this.isOpen || !this.isHoverRegionActive;
     if (this.channelSwitcherLauncherRow) {
+      const becomingVisible = this.channelSwitcherLauncherRow.hidden && !hidden;
       this.channelSwitcherLauncherRow.hidden = hidden;
+      if (becomingVisible) {
+        // `25-222`: bubbles in, nearest the round toggle first. The icons are the row's own last DOM
+        // children that appear closest to the button - `ui/styles.css`'s own `.ago-channel-switcher-
+        // launcher` sits with its *right* edge against the toggle (`right: calc(100% + gap)`), and an
+        // ordinary left-to-right flex row lays its content out from that box's own left edge, so the
+        // *last* child is the one nearest the toggle, not the first - the stagger below counts down
+        // from the end for exactly that reason, not up from the start.
+        const icons = [
+          ...this.channelSwitcherLauncherRow.querySelectorAll<HTMLElement>(".ago-channel-switcher-launcher-icon"),
+        ];
+        icons.forEach((icon, index) => {
+          const stepsFromToggle = icons.length - 1 - index;
+          this.triggerEnterAnimation(icon, stepsFromToggle * CHANNEL_SWITCHER_BUBBLE_STAGGER_MS);
+        });
+      }
     }
     if (this.channelSwitcherBanner) {
+      const becomingVisible = this.channelSwitcherBanner.hidden && !hidden;
       this.channelSwitcherBanner.hidden = hidden;
+      if (becomingVisible) {
+        this.triggerEnterAnimation(this.channelSwitcherBanner);
+      }
     }
   }
 
@@ -1736,6 +1767,27 @@ export class ChatWidget {
     this.toggle.classList.remove("ago-toggle--attract");
   }
 
+  /** `25-222`: restarts a CSS `@keyframes` entrance by toggling `.ago-entering` off then back on - a
+   * `[hidden]` element has no "from" state a plain `transition` could animate out of across the
+   * `display: none` boundary, so the animation lives in `ui/styles.css` behind this class instead,
+   * replayed here rather than trusted to a class merely being present (added once and left on, it
+   * would never replay on a second open). The forced reflow (`el.offsetWidth`) is what makes
+   * remove-then-add actually restart the animation rather than being coalesced into a no-op by the
+   * browser's own style-recalculation batching. A no-op under `prefers-reduced-motion: reduce` -
+   * `.ago-entering` has no rule at all outside `ui/styles.css`'s own `no-preference` media query, so
+   * adding it there would already animate nothing; skipped here anyway, the identical "checking
+   * twice" double-guard `scheduleAttractAttention`'s own remarks give for the same media feature. */
+  private triggerEnterAnimation(el: HTMLElement, delayMs = 0): void {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    el.classList.remove("ago-entering");
+    el.style.animationDelay = `${delayMs}ms`;
+    void el.offsetWidth;
+    el.classList.add("ago-entering");
+  }
+
   /**
    * `23-64`/`adr/0148`: schedules the one-shot timer that draws the tenant's greeting and reveals
    * the panel - and nothing else. No hub connection, no `JoinAsync`, no HTTP call beyond the
@@ -1803,6 +1855,10 @@ export class ChatWidget {
 
     this.isOpen = true;
     this.panel.hidden = false;
+    // `25-222`: slides up from the bottom - the identical `.ago-entering` mechanism the launcher's
+    // own icons and the channel-switcher banner use below, restarted here rather than left to a
+    // class that stays on (an open, close, reopen cycle needs to play this every time, not once).
+    this.triggerEnterAnimation(this.panel);
     // `25-192`: re-evaluates to hidden regardless of hover - opening always wins.
     this.updateChannelSwitcherLauncherVisibility();
     this.toggle.setAttribute("aria-expanded", "true");

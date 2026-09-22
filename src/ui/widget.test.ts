@@ -1444,6 +1444,48 @@ describe("the funnel beacon", () => {
 });
 
 /**
+ * `25-222`: the panel slides up on open rather than merely appearing - `triggerEnterAnimation`'s own
+ * doc comment explains why a class toggle is what plays the CSS `@keyframes`. jsdom runs no real CSS
+ * animation, so what these tests can prove is exactly what the JS side controls: the class lands,
+ * and it does not land at all when the visitor's OS asks for reduced motion (the identical
+ * `matchMedia` stub `"the launcher's attract-attention animation"` block below already establishes
+ * for the identical media feature).
+ */
+describe("the panel's slide-up entrance", () => {
+  it("plays on open", async () => {
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    const panel = panelOf(host!.shadowRoot!);
+    panel.toggle.click();
+    await flush();
+
+    const panelEl = panel.root.querySelector(".ago-panel")!;
+    expect(panelEl.classList.contains("ago-entering")).toBe(true);
+  });
+
+  it("prefers-reduced-motion skips it", async () => {
+    const matchMedia = vi.fn((query: string) => ({ matches: query === "(prefers-reduced-motion: reduce)" }));
+    vi.stubGlobal("matchMedia", matchMedia);
+
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    const host = document.querySelector("[data-ago-chat-widget]");
+    const panel = panelOf(host!.shadowRoot!);
+    panel.toggle.click();
+    await flush();
+
+    const panelEl = panel.root.querySelector(".ago-panel")!;
+    expect(panelEl.classList.contains("ago-entering")).toBe(false);
+    expect(matchMedia).toHaveBeenCalledWith("(prefers-reduced-motion: reduce)");
+  });
+});
+
+/**
  * `23-63`: the launcher drawing attention to itself while the panel is closed. Every test here uses
  * real (fake-clocked) timers rather than `flush`'s microtask draining alone - the animation is
  * orchestrated by `setTimeout` deliberately (`scheduleAttractAttention`'s own doc comment explains

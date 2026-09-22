@@ -758,19 +758,22 @@ describe("the banner's own sizing and header bar (25-211)", () => {
   });
 
   describe("the header bar's own declared style", () => {
-    it("gives the header bar a dark background, white bold text, and rounded top corners matching the banner's own", () => {
+    it("gives the header bar white, regular-weight text and rounded top corners matching the banner's own", () => {
       const rule = ruleFor(styleSheet(), ".ago-channel-switcher-banner-header");
-      expect(rule.style.background).toBe("rgb(55, 65, 81)"); // #374151, the same value .ago-channel-switcher-row's own `color` already uses
       expect(rule.style.color).toBe("rgb(255, 255, 255)");
-      expect(rule.style.fontWeight).toBe("700");
+      expect(rule.style.fontWeight).toBe("400");
       expect(rule.style.borderRadius).toBe("0.75rem 0.75rem 0 0");
     });
 
-    it("reuses the exact #374151 the shared row rule already settled on, not a close-but-different neighbour", () => {
+    // `25-219`: this bar used to be a flat #374151, found live to read as a second, disconnected
+    // brand surface next to `.ago-header`'s own tenant-coloured gradient - it now reuses that exact
+    // gradient expression instead, so the banner reads as the same chrome as the panel it stands in
+    // for.
+    it("reuses the exact tenant-coloured gradient .ago-header itself declares, not a flat neutral", () => {
       const sheet = styleSheet();
       const header = ruleFor(sheet, ".ago-channel-switcher-banner-header");
-      const row = ruleFor(sheet, ".ago-channel-switcher-row");
-      expect(header.style.background).toBe(row.style.color);
+      const agoHeader = ruleFor(sheet, ".ago-header");
+      expect(header.style.background).toBe(agoHeader.style.background);
     });
   });
 

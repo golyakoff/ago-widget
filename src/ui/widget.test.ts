@@ -17,8 +17,14 @@ import { en } from "../i18n/en.js";
  */
 vi.mock("@microsoft/signalr", () => import("../testing/fakeSignalR.js"));
 
-const { ChatWidget, MAX_ATTRACT_ATTEMPTS, ATTRACT_INITIAL_DELAY_MS, ATTRACT_PULSE_INTERVAL_MS, ATTRACT_PULSE_DURATION_MS } =
-  await import("./widget.js");
+const {
+  ChatWidget,
+  MAX_ATTRACT_ATTEMPTS,
+  ATTRACT_INITIAL_DELAY_MS,
+  ATTRACT_PULSE_INTERVAL_MS,
+  ATTRACT_PULSE_DURATION_MS,
+  HOVER_REGION_LEAVE_GRACE_MS,
+} = await import("./widget.js");
 
 const CONVERSATION_ID = "77777777-7777-7777-7777-777777777777";
 
@@ -252,7 +258,7 @@ describe("the panel while the connection is gone and after it returns", () => {
 });
 
 /**
- * `25-140`: proves the fix stays scoped to `openForAutoGreeting` alone. A visitor who opens the panel
+ * `25-140`: proves the fix stays scoped to `triggerAutoOpen` alone. A visitor who opens the panel
  * themselves still calls `open()`, which still calls `connect()` immediately - a real connection
  * attempt is genuinely underway, so "Подключение…" is the true thing to show, unlike the auto-open
  * window this item's other tests (`ui/widget.test.ts`'s "the widget auto-open panel" describe) cover.
@@ -1658,6 +1664,13 @@ describe("the launcher's attract-attention animation", () => {
  * feature this one shares a settings screen with but not a promise.
  */
 describe("the widget auto-open panel", () => {
+  /**
+   * `25-224`: `channelLinks`/`widgetChannelSwitcherPlacement` are deliberately absent from the
+   * default payload here - `session.ts`'s own `body.channelLinks ?? []` resolves that to an empty
+   * array, so neither channel-switcher renderer builds anything and every test in this file's outer
+   * scope exercises `triggerAutoOpen`'s fallback branch (the original panel-opening behaviour)
+   * unless a nested describe below overrides `channelLinks` with a real fixture.
+   */
   function stubHandshake(overrides: Record<string, unknown> = {}): void {
     vi.stubGlobal(
       "fetch",
@@ -1698,6 +1711,22 @@ describe("the widget auto-open panel", () => {
     return panelOf(host.shadowRoot);
   }
 
+  function launcherRow(panel: Panel): HTMLDivElement | null {
+    return panel.root.querySelector<HTMLDivElement>(".ago-channel-switcher-launcher");
+  }
+
+  function switcherBanner(panel: Panel): HTMLDivElement | null {
+    return panel.root.querySelector<HTMLDivElement>(".ago-channel-switcher-banner");
+  }
+
+  function hoverToggle(panel: Panel): void {
+    panel.toggle.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+  }
+
+  function unhoverToggle(panel: Panel): void {
+    panel.toggle.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+  }
+
   const AUTO_OPEN_DELAY_MS = 30_000;
 
   beforeEach(() => {
@@ -1727,228 +1756,451 @@ describe("the widget auto-open panel", () => {
   });
 
   /**
-   * This item's own Done-when, asserted directly rather than by inspection: "nothing exists
-   * server-side after the auto-open delay fires and the visitor never writes." `hubs.length` is
-   * this file's own proof that `VisitorConnection` - and therefore `JoinAsync`, and therefore
-   * `StartConversationHandler`, and therefore a real `Conversation` row - was never even
-   * constructed (`VisitorConnection`'s constructor is where `HubConnectionBuilder.build()` runs,
-   * `fakeSignalR.ts`'s own remarks). `fetch` is asserted at an unchanged call count - the handshake
-   * this widget always makes at mount regardless of auto-open (`bootstrapSession`'s own `POST
-   * /api/v1/visitor-sessions`, which mints a token and nothing else) - so this also proves the timer
-   * firing did not trigger a second HTTP call of any kind.
-   *
-   * This is the fails-before test named in this item's report: inverting `scheduleAutoOpen`'s own
-   * `isOpen`/`getAutoOpenGreetingShown` guard to unconditionally call `openForAutoGreeting` (or,
-   * worse, wiring the timer to `open()` itself) makes this test fail on the `hubs.length`
-   * assertion - `open()` calls `connect()`, which builds a real `VisitorConnection` the instant the
-   * timer fires, exactly the server-side trace this feature exists to avoid.
+   * `25-224`: a site with no channel-switcher built at all - `channelLinks` empty (this describe
+   * block's own default handshake, above) - still gets an invitation, through the one channel it
+   * actually has. This is `23-64`/`adr/0148`'s original behaviour, verbatim, now living in
+   * `triggerAutoOpen`'s fallback branch rather than being the method's only branch - see that
+   * method's own doc comment for the full reasoning, including why `widgetAutoOpenGreetingText`
+   * still matters here but nowhere else.
    */
-  it("opens itself and draws the greeting after the delay, without connecting or calling the server again", async () => {
-    stubHandshake();
-    const panel = await mountWidget();
-    const fetchMock = fetch as unknown as { mock: { calls: unknown[] } };
-    const fetchCallsAtMount = fetchMock.mock.calls.length;
+  describe("a site with no channel-switcher configured - the fallback", () => {
+    /**
+     * This item's own Done-when, asserted directly rather than by inspection: "nothing exists
+     * server-side after the auto-open delay fires and the visitor never writes." `hubs.length` is
+     * this file's own proof that `VisitorConnection` - and therefore `JoinAsync`, and therefore
+     * `StartConversationHandler`, and therefore a real `Conversation` row - was never even
+     * constructed (`VisitorConnection`'s constructor is where `HubConnectionBuilder.build()` runs,
+     * `fakeSignalR.ts`'s own remarks). `fetch` is asserted at an unchanged call count - the handshake
+     * this widget always makes at mount regardless of auto-open (`bootstrapSession`'s own `POST
+     * /api/v1/visitor-sessions`, which mints a token and nothing else) - so this also proves the
+     * timer firing did not trigger a second HTTP call of any kind.
+     *
+     * This is the fails-before test named in this item's report: inverting `scheduleAutoOpen`'s own
+     * `isOpen`/`getAutoOpenGreetingShown` guard to unconditionally call `triggerAutoOpen` (or,
+     * worse, wiring the timer to `open()` itself) makes this test fail on the `hubs.length`
+     * assertion - `open()` calls `connect()`, which builds a real `VisitorConnection` the instant the
+     * timer fires, exactly the server-side trace this feature exists to avoid.
+     */
+    it("opens itself and draws the greeting after the delay, without connecting or calling the server again", async () => {
+      stubHandshake();
+      const panel = await mountWidget();
+      const fetchMock = fetch as unknown as { mock: { calls: unknown[] } };
+      const fetchCallsAtMount = fetchMock.mock.calls.length;
 
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
-    expect(panel.bubbleTexts()).toContain("Hi, need any help finding something?");
-    expect(hubs.length).toBe(0);
-    expect(fetchMock.mock.calls.length).toBe(fetchCallsAtMount);
-  });
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+      expect(panel.bubbleTexts()).toContain("Hi, need any help finding something?");
+      expect(hubs.length).toBe(0);
+      expect(fetchMock.mock.calls.length).toBe(fetchCallsAtMount);
+    });
 
-  it("does not steal focus into the panel", async () => {
-    stubHandshake();
-    const panel = await mountWidget();
-    const activeBefore = panel.root.activeElement;
+    it("does not steal focus into the panel", async () => {
+      stubHandshake();
+      const panel = await mountWidget();
+      const activeBefore = panel.root.activeElement;
 
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
-    // Nothing inside the panel took focus - the caret did not jump in, matching this item's own
-    // "focus is not stolen" scope.
-    expect(panel.root.activeElement).toBe(activeBefore);
-  });
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+      // Nothing inside the panel took focus - the caret did not jump in, matching this item's own
+      // "focus is not stolen" scope.
+      expect(panel.root.activeElement).toBe(activeBefore);
+    });
 
-  it("shows the greeting only once for the same visitor identity, even across a fresh page load", async () => {
-    stubHandshake();
-    await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+    it("shows the greeting only once for the same visitor identity, even across a fresh page load", async () => {
+      stubHandshake();
+      await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    // A second page load, same browser, same stored visitor identity (localStorage was never
-    // cleared) - "the visitor's own session already has a lifetime and reusing it is the obvious
-    // answer" (the backlog item's own words).
-    document.body.innerHTML = "";
-    const secondPanel = await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      // A second page load, same browser, same stored visitor identity (localStorage was never
+      // cleared) - "the visitor's own session already has a lifetime and reusing it is the obvious
+      // answer" (the backlog item's own words).
+      document.body.innerHTML = "";
+      const secondPanel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(secondPanel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
-  });
+      expect(secondPanel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+    });
 
-  it("never fires on a coarse-pointer (touch-primary) device - this item's own stated mobile decision", async () => {
-    const matchMedia = vi.fn().mockReturnValue({ matches: true });
-    vi.stubGlobal("matchMedia", matchMedia);
+    it("never fires on a coarse-pointer (touch-primary) device - this item's own stated mobile decision", async () => {
+      const matchMedia = vi.fn().mockReturnValue({ matches: true });
+      vi.stubGlobal("matchMedia", matchMedia);
 
-    stubHandshake();
-    const panel = await mountWidget();
+      stubHandshake();
+      const panel = await mountWidget();
 
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
-    expect(matchMedia).toHaveBeenCalledWith("(pointer: coarse)");
-  });
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+      expect(matchMedia).toHaveBeenCalledWith("(pointer: coarse)");
+    });
 
-  it("does not resume after the visitor opens and closes the panel themselves before the timer fires", async () => {
-    stubHandshake();
-    joinQueue.push(joinResult([]));
-    const panel = await mountWidget();
+    it("does not resume after the visitor opens and closes the panel themselves before the timer fires", async () => {
+      stubHandshake();
+      joinQueue.push(joinResult([]));
+      const panel = await mountWidget();
 
-    panel.toggle.click(); // open, manually, before the timer ever fires
-    await flush();
-    panel.toggle.click(); // close
-    await flush();
+      panel.toggle.click(); // open, manually, before the timer ever fires
+      await flush();
+      panel.toggle.click(); // close
+      await flush();
 
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
-    expect(panel.bubbleTexts()).not.toContain("Hi, need any help finding something?");
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+      expect(panel.bubbleTexts()).not.toContain("Hi, need any help finding something?");
+    });
+
+    /**
+     * The write path: the visitor types into the auto-opened, not-yet-connected panel and sends -
+     * this is where `adr/0148`'s door opens. `SendMessageWithAutoGreetingAsync` (not the ordinary
+     * `SendMessageAsync`) is the one fact that proves the widget asked the server to materialise the
+     * greeting, and a join invocation being present at all proves the connection really was deferred
+     * until this exact moment, not created ahead of time by `triggerAutoOpen`.
+     */
+    it("connects and sends through the auto-greeting hub method on the visitor's first write", async () => {
+      stubHandshake();
+      joinQueue.push(joinResult([]));
+      const panel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(hubs.length).toBe(0); // still nothing, right up to the moment of writing
+
+      type(panel, "Yes, do you have this in blue?");
+      pressEnter(panel);
+      await flush();
+
+      expect(hubs.length).toBe(1);
+      const hub = currentHub();
+      expect(hub.invocationsOf("JoinWithTrafficSourceAsync").length + hub.invocationsOf("JoinAsync").length).toBe(1);
+      const sendInvocation = hub.invocationAt("SendMessageWithAutoGreetingAsync", 0);
+      expect(sendInvocation.args[1]).toBe("Yes, do you have this in blue?");
+      expect(hub.invocationsOf("SendMessageAsync")).toHaveLength(0);
+    });
+
+    it("lets the visitor type into the auto-opened panel before any connection exists", async () => {
+      stubHandshake();
+      const panel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      expect(panel.input.disabled).toBe(false);
+      type(panel, "hello");
+      expect(panel.send.disabled).toBe(false);
+    });
+
+    /**
+     * `25-140`: the bug report itself - the status line was born with `this.strings.connecting`
+     * ("Подключение…") as its construction-time text, and nothing ever corrected it on this path
+     * because `triggerAutoOpen`'s fallback branch deliberately never calls `connect()` (this
+     * describe block's own "without connecting or calling the server again" test, above, proves that
+     * half already). Nothing is actually trying to connect here, so the fix clears the text rather
+     * than leaving it lying.
+     */
+    it("25-140: shows no status text at all right after auto-opening, since nothing is trying to connect yet", async () => {
+      stubHandshake();
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+      expect(panel.status.textContent).toBe("");
+    });
+
+    /**
+     * `25-140`'s own "Where this is likely to go wrong": confirms the fix does not also suppress the
+     * later, *true* "Подключение…" the visitor's first send triggers - `completeSend`'s lazy
+     * `connect()` call, `adr/0148`. The join answer is a deferred promise so this test can observe
+     * the connecting state before it resolves, the same technique `25-140: connecting text only
+     * where a connection is actually happening` uses for the ordinary `open()` path.
+     */
+    it("25-140: still shows the real \"Connecting…\" once the visitor's first send triggers the real connect", async () => {
+      stubHandshake();
+      let resolveJoin: (value: VisitorJoinResult) => void = () => {
+        throw new Error("resolveJoin called before it was assigned");
+      };
+      const joinPromise = new Promise<VisitorJoinResult>((resolve) => {
+        resolveJoin = resolve;
+      });
+      joinQueue.push(() => joinPromise);
+
+      const panel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(panel.status.textContent).toBe("");
+
+      type(panel, "Yes, do you have this in blue?");
+      pressEnter(panel);
+      await flush();
+
+      expect(panel.status.textContent).toBe(en.connecting);
+
+      resolveJoin(joinResult([]));
+      await flush();
+
+      expect(panel.status.textContent).toBe("");
+    });
+
+    it("25-141: the auto-open reveal counts as read too, same as the ordinary open() path", async () => {
+      stubHandshake();
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      const badge = panel.root.querySelector<HTMLElement>(".ago-unread-badge");
+      if (badge === null) {
+        throw new Error("the toggle has no .ago-unread-badge");
+      }
+
+      expect(badge.hidden).toBe(true);
+      expect(panel.toggle.getAttribute("aria-label")).toBe(en.closeChat);
+    });
+
+    /**
+     * `23-53`'s own cautionary tale, proven directly: the real, materialised greeting arriving over
+     * the connection must replace the drawn placeholder in place - never a duplicate, and never at
+     * the bottom of the transcript merely because it happened to arrive after the visitor's own
+     * local echo (`appendMessageBubble`'s own remarks on why arrival order alone is not enough).
+     */
+    it("replaces the drawn greeting with the real one in place, never as a duplicate or out of order", async () => {
+      stubHandshake();
+      joinQueue.push(joinResult([]));
+      const panel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      type(panel, "Yes please");
+      pressEnter(panel);
+      await flush();
+
+      // The real, server-materialised greeting arrives over the connection, after the visitor's own
+      // local echo already rendered - the exact ordering hazard this widget has to defend against.
+      currentHub().push({
+        id: "aaaaaaaa-0000-0000-0000-000000000001",
+        sequence: 1,
+        authorKind: "AutoGreeting",
+        authorId: "00000000-0000-0000-0000-000000000000",
+        body: "Hi, need any help finding something?",
+        createdAt: "2026-08-25T09:00:00+00:00",
+      });
+      await flush();
+
+      const texts = panel.bubbleTexts();
+      // Exactly one greeting bubble - the drawn placeholder was removed, not left beside the real one.
+      expect(texts.filter((t) => t === "Hi, need any help finding something?")).toHaveLength(1);
+      // And it is first, ahead of the visitor's own message, whatever order the two arrived in.
+      expect(texts[0]).toBe("Hi, need any help finding something?");
+      expect(texts).toContain("Yes please");
+      expect(texts.indexOf("Hi, need any help finding something?")).toBeLessThan(texts.indexOf("Yes please"));
+    });
   });
 
   /**
-   * The write path: the visitor types into the auto-opened, not-yet-connected panel and sends -
-   * this is where `adr/0148`'s door opens. `SendMessageWithAutoGreetingAsync` (not the ordinary
-   * `SendMessageAsync`) is the one fact that proves the widget asked the server to materialise the
-   * greeting, and a join invocation being present at all proves the connection really was deferred
-   * until this exact moment, not created ahead of time by `openForAutoGreeting`.
+   * `25-224`: the item's own preferred outcome - a site that actually has somewhere else to route a
+   * visitor invites a channel choice instead of dropping them straight into the chat panel. Both
+   * placements are exercised (`BelowLauncher`'s row, `AboveComposer`'s banner - the console's own
+   * "Круглые значки под окном диалога"/"Баннеры над окном диалога") since `triggerAutoOpen`'s own
+   * check (`channelSwitcherLauncherRow !== null || channelSwitcherBanner !== null`) has to be
+   * correct for whichever one this site actually built.
    */
-  it("connects and sends through the auto-greeting hub method on the visitor's first write", async () => {
-    stubHandshake();
-    joinQueue.push(joinResult([]));
-    const panel = await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
-    expect(hubs.length).toBe(0); // still nothing, right up to the moment of writing
+  describe("a site with a channel-switcher configured", () => {
+    const CHANNEL_LINKS = [{ kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" }];
 
-    type(panel, "Yes, do you have this in blue?");
-    pressEnter(panel);
-    await flush();
+    it("reveals the below-launcher row instead of opening the panel", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      const panel = await mountWidget();
 
-    expect(hubs.length).toBe(1);
-    const hub = currentHub();
-    expect(hub.invocationsOf("JoinWithTrafficSourceAsync").length + hub.invocationsOf("JoinAsync").length).toBe(1);
-    const sendInvocation = hub.invocationAt("SendMessageWithAutoGreetingAsync", 0);
-    expect(sendInvocation.args[1]).toBe("Yes, do you have this in blue?");
-    expect(hub.invocationsOf("SendMessageAsync")).toHaveLength(0);
-  });
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-  it("lets the visitor type into the auto-opened panel before any connection exists", async () => {
-    stubHandshake();
-    const panel = await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+      // Never drawn - `widgetAutoOpenGreetingText` plays no role once a channel-switcher exists.
+      // `25-224`'s own stated, real user-facing consequence: a tenant with both configured stops
+      // seeing this text on auto-open.
+      expect(panel.bubbleTexts()).not.toContain("Hi, need any help finding something?");
+    });
 
-    expect(panel.input.disabled).toBe(false);
-    type(panel, "hello");
-    expect(panel.send.disabled).toBe(false);
+    it("reveals the above-composer banner instead of opening the panel, on that placement", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "AboveComposer" });
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+      expect(switcherBanner(panel)).toHaveProperty("hidden", false);
+      expect(panel.bubbleTexts()).not.toContain("Hi, need any help finding something?");
+    });
+
+    it("never connects the hub and never calls the server again, the identical restraint the fallback path already proves", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      const panel = await mountWidget();
+      const fetchMock = fetch as unknown as { mock: { calls: unknown[] } };
+      const fetchCallsAtMount = fetchMock.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+      expect(hubs.length).toBe(0);
+      expect(fetchMock.mock.calls.length).toBe(fetchCallsAtMount);
+    });
+
+    it("shows the reveal only once for the same visitor identity, even across a fresh page load", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      document.body.innerHTML = "";
+      const secondPanel = await mountWidget();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      // `setAutoOpenGreetingShown` fires on this branch too - "opening is once" holds regardless of
+      // which invitation the visitor actually got.
+      expect(launcherRow(secondPanel)).toHaveProperty("hidden", true);
+    });
+
+    it("never fires on a coarse-pointer (touch-primary) device, the identical mobile gate", async () => {
+      const matchMedia = vi.fn().mockReturnValue({ matches: true });
+      vi.stubGlobal("matchMedia", matchMedia);
+
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      // A coarse-pointer device also answers `(hover: none)` `true` from this same blanket stub, so
+      // `isTouchRoutingDevice()` routes it to the touch sheet instead and neither renderer is ever
+      // built - the row is `null`, not merely hidden. What this test isolates is `scheduleAutoOpen`'s
+      // own `(pointer: coarse)` gate, which must stop the timer from ever firing regardless of what
+      // ends up built.
+      expect(launcherRow(panel)).toBeNull();
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(true);
+      expect(matchMedia).toHaveBeenCalledWith("(pointer: coarse)");
+    });
+
+    it("does not resume after the visitor opens and closes the panel themselves before the timer fires", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      joinQueue.push(joinResult([]));
+      const panel = await mountWidget();
+
+      panel.toggle.click(); // open, manually, before the timer ever fires
+      await flush();
+      panel.toggle.click(); // close
+      await flush();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+
+      // `isOpen` was true at schedule time (`scheduleAutoOpen`'s own first gate) - the timer was
+      // never even set, so the row never reveals itself once the visitor already interacted on
+      // their own.
+      expect(launcherRow(panel)).toHaveProperty("hidden", true);
+    });
+
+    /**
+     * `25-224`'s own stated default: no auto-hide timer of any kind. `autoRevealed` has nothing that
+     * ever clears it except a real hover (`enterHoverRegion`) or the panel actually opening -
+     * letting a full hover-leave grace period elapse with no hover at all must not touch it.
+     */
+    it("stays visible indefinitely with no hover at all - there is no auto-hide timer", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS * 100);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+    });
+
+    /**
+     * `25-224`'s own "graduation" rule: a real hover after an automatic reveal hands dismissal to
+     * the ordinary hover mechanism. Proven by the one thing that actually distinguishes the two
+     * states - before graduation nothing the hover-leave grace period does can hide the row (the
+     * test above proves it stays visible through a grace period with no hover at all); after a real
+     * `pointerenter`, a `pointerleave` followed by the grace period *does* hide it, which is only
+     * possible because `enterHoverRegion` cleared `autoRevealed` and left `isHoverRegionActive` as
+     * the row's only remaining reason to be visible.
+     */
+    it("a real hover after the auto-reveal graduates it into ordinary hover-driven dismissal", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+
+      hoverToggle(panel); // a real pointerenter - the visitor actually reached for it
+      expect(launcherRow(panel)).toHaveProperty("hidden", false); // still visible, now via real hover
+
+      unhoverToggle(panel);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false); // still within the grace period
+
+      await vi.advanceTimersByTimeAsync(HOVER_REGION_LEAVE_GRACE_MS);
+      // Hidden now - had graduation not happened, `autoRevealed` would still be `true` and the row
+      // would still be visible, exactly as the previous test proves for the ungraduated case.
+      expect(launcherRow(panel)).toHaveProperty("hidden", true);
+    });
+
+    it("the panel opening for real always wins, the identical rule hover already follows", async () => {
+      stubHandshake({ channelLinks: CHANNEL_LINKS, widgetChannelSwitcherPlacement: "BelowLauncher" });
+      joinQueue.push(joinResult([]));
+      const panel = await mountWidget();
+
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
+      expect(launcherRow(panel)).toHaveProperty("hidden", false);
+
+      panel.toggle.click(); // the visitor opens the panel for real, from the reveal
+      await flush();
+
+      expect(launcherRow(panel)).toHaveProperty("hidden", true);
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+    });
   });
 
   /**
-   * `25-140`: the bug report itself - the status line was born with `this.strings.connecting`
-   * ("Подключение…") as its construction-time text, and nothing ever corrected it on this path
-   * because `openForAutoGreeting` deliberately never calls `connect()` (this describe block's own
-   * "without connecting or calling the server again" test, above, proves that half already). Nothing
-   * is actually trying to connect here, so the fix clears the text rather than leaving it lying.
+   * `25-224`'s own "real ordering hazard": `loadChannelSwitcher()` builds
+   * `channelSwitcherLauncherRow`/`channelSwitcherBanner` off the same handshake `sessionPromise`
+   * `scheduleAutoOpen` does, fire-and-forget from the constructor, unawaited. Confirmed unreachable
+   * in real execution (`triggerAutoOpen`'s own doc comment has the full reasoning: the auto-open
+   * timer's `setTimeout` is registered synchronously inside the same continuation that resolves
+   * `sessionPromise`, so `loadChannelSwitcher`'s own synchronous build runs a microtask turn later -
+   * nowhere near the shortest real fifteen-second delay). Proven here anyway, deliberately
+   * artificially: `ChatWidget.prototype.loadChannelSwitcher` is monkey-patched to finish long after
+   * the auto-open timer would have fired, forcing the exact race the backlog item asks to be handled
+   * rather than assumed away - and asserting the chosen fallback (treat "not built yet" identically
+   * to "never will exist") actually happens, not merely reasoned about.
    */
-  it("25-140: shows no status text at all right after auto-opening, since nothing is trying to connect yet", async () => {
-    stubHandshake();
-    const panel = await mountWidget();
-
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
-
-    expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
-    expect(panel.status.textContent).toBe("");
-  });
-
-  /**
-   * `25-140`'s own "Where this is likely to go wrong": confirms the fix does not also suppress the
-   * later, *true* "Подключение…" the visitor's first send triggers - `completeSend`'s lazy
-   * `connect()` call, `adr/0148`. The join answer is a deferred promise so this test can observe the
-   * connecting state before it resolves, the same technique `25-140: connecting text only where a
-   * connection is actually happening` uses for the ordinary `open()` path.
-   */
-  it("25-140: still shows the real \"Connecting…\" once the visitor's first send triggers the real connect", async () => {
-    stubHandshake();
-    let resolveJoin: (value: VisitorJoinResult) => void = () => {
-      throw new Error("resolveJoin called before it was assigned");
+  it("25-224: falls back to opening the panel if the channel-switcher has not finished building when the timer fires", async () => {
+    type ChatWidgetInternals = { loadChannelSwitcher: (this: ChatWidgetInternals) => Promise<void> };
+    const prototype = ChatWidget.prototype as unknown as ChatWidgetInternals;
+    const originalLoadChannelSwitcher = prototype.loadChannelSwitcher;
+    const DELAYED_BUILD_MS = AUTO_OPEN_DELAY_MS + 5_000;
+    prototype.loadChannelSwitcher = function (this: ChatWidgetInternals): Promise<void> {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(originalLoadChannelSwitcher.call(this));
+        }, DELAYED_BUILD_MS);
+      });
     };
-    const joinPromise = new Promise<VisitorJoinResult>((resolve) => {
-      resolveJoin = resolve;
-    });
-    joinQueue.push(() => joinPromise);
 
-    const panel = await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
-    expect(panel.status.textContent).toBe("");
+    try {
+      stubHandshake({
+        channelLinks: [{ kind: "Telegram", url: "https://t.me/tenant_bot?start=abc123" }],
+        widgetChannelSwitcherPlacement: "BelowLauncher",
+      });
+      const panel = await mountWidget();
 
-    type(panel, "Yes, do you have this in blue?");
-    pressEnter(panel);
-    await flush();
+      await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
 
-    expect(panel.status.textContent).toBe(en.connecting);
+      // Neither field is built yet - `triggerAutoOpen` treats this identically to "never will exist"
+      // and falls back to the old panel-opening behaviour rather than doing nothing.
+      expect(panel.root.querySelector(".ago-panel")?.hasAttribute("hidden")).toBe(false);
+      expect(panel.bubbleTexts()).toContain("Hi, need any help finding something?");
 
-    resolveJoin(joinResult([]));
-    await flush();
+      // The delayed build finishes afterwards - it must not un-hide the row out from under an
+      // already-open panel (`buildChannelSwitcherLauncherRow`'s own trailing
+      // `updateChannelSwitcherLauncherVisibility()` call, re-evaluated against `this.isOpen`).
+      await vi.advanceTimersByTimeAsync(DELAYED_BUILD_MS - AUTO_OPEN_DELAY_MS);
+      await flush();
 
-    expect(panel.status.textContent).toBe("");
-  });
-
-  it("25-141: the auto-open reveal counts as read too, same as the ordinary open() path", async () => {
-    stubHandshake();
-    const panel = await mountWidget();
-
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
-
-    const badge = panel.root.querySelector<HTMLElement>(".ago-unread-badge");
-    if (badge === null) {
-      throw new Error("the toggle has no .ago-unread-badge");
+      expect(launcherRow(panel)).toHaveProperty("hidden", true);
+    } finally {
+      prototype.loadChannelSwitcher = originalLoadChannelSwitcher;
     }
-
-    expect(badge.hidden).toBe(true);
-    expect(panel.toggle.getAttribute("aria-label")).toBe(en.closeChat);
-  });
-
-  /**
-   * `23-53`'s own cautionary tale, proven directly: the real, materialised greeting arriving over
-   * the connection must replace the drawn placeholder in place - never a duplicate, and never at
-   * the bottom of the transcript merely because it happened to arrive after the visitor's own local
-   * echo (`appendMessageBubble`'s own remarks on why arrival order alone is not enough).
-   */
-  it("replaces the drawn greeting with the real one in place, never as a duplicate or out of order", async () => {
-    stubHandshake();
-    joinQueue.push(joinResult([]));
-    const panel = await mountWidget();
-    await vi.advanceTimersByTimeAsync(AUTO_OPEN_DELAY_MS);
-
-    type(panel, "Yes please");
-    pressEnter(panel);
-    await flush();
-
-    // The real, server-materialised greeting arrives over the connection, after the visitor's own
-    // local echo already rendered - the exact ordering hazard this widget has to defend against.
-    currentHub().push({
-      id: "aaaaaaaa-0000-0000-0000-000000000001",
-      sequence: 1,
-      authorKind: "AutoGreeting",
-      authorId: "00000000-0000-0000-0000-000000000000",
-      body: "Hi, need any help finding something?",
-      createdAt: "2026-08-25T09:00:00+00:00",
-    });
-    await flush();
-
-    const texts = panel.bubbleTexts();
-    // Exactly one greeting bubble - the drawn placeholder was removed, not left beside the real one.
-    expect(texts.filter((t) => t === "Hi, need any help finding something?")).toHaveLength(1);
-    // And it is first, ahead of the visitor's own message, whatever order the two arrived in.
-    expect(texts[0]).toBe("Hi, need any help finding something?");
-    expect(texts).toContain("Yes please");
-    expect(texts.indexOf("Hi, need any help finding something?")).toBeLessThan(texts.indexOf("Yes please"));
   });
 });

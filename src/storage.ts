@@ -227,7 +227,7 @@ export const WIDGET_STORAGE_DISCLOSURE: readonly StorageDisclosureEntry[] = [
     holds: "The highest message sequence number this browser had actually seen the moment the visitor last opened the panel - a read watermark, never message text. Distinct from `last-sequence:<conversationId>` above, which advances on every message this browser receives whether or not the panel is open.",
     why: "`25-143`: lets the next page load ask the server how many messages have arrived since this visitor last looked, so the closed launcher's own unread badge (`25-141`) starts at the true count instead of zero on every reload.",
     lifetime:
-      "Set every time `open()`/`openForAutoGreeting()` clear the in-memory unread count, to whatever `last-sequence:<conversationId>` holds at that moment. The entry for whichever conversation id was current is removed when the stored identity itself is replaced (`17-07`), the same event `last-sequence:<conversationId>` above is cleared on; an entry for an earlier, already-superseded conversation is not otherwise cleared.",
+      "Set every time `open()`/`triggerAutoOpen()`'s fallback branch clear the in-memory unread count, to whatever `last-sequence:<conversationId>` holds at that moment (`25-224`'s channel-switcher branch never touches unread count, so it never writes this either). The entry for whichever conversation id was current is removed when the stored identity itself is replaced (`17-07`), the same event `last-sequence:<conversationId>` above is cleared on; an entry for an earlier, already-superseded conversation is not otherwise cleared.",
     survivesTabClose: true,
   },
 ];
@@ -644,7 +644,7 @@ export class WidgetStorage {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  /** Called only from `open()`/`openForAutoGreeting()` (`ui/widget.ts`), the same two places that
+  /** Called only from `open()`/`triggerAutoOpen()`'s fallback branch (`ui/widget.ts`), the same two places that
    * reset the in-memory `unreadCount` to zero - `sequence` is the latest sequence this browser has
    * actually seen at that exact moment, read from `getLastKnownSequence` above rather than tracked a
    * second time: `connection.ts`'s `rememberSequence` already writes that key through to storage,

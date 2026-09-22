@@ -58,8 +58,9 @@ test.describe("the emoji picker, proved against a real browser", () => {
     await page.goto("/demo/index.html");
 
     const input = page.locator("textarea.ago-input");
-    // Real elapsed time, not a faked clock - `openForAutoGreeting` reveals the panel and enables the
-    // composer from a real `setTimeout`, and this is the shortest delay the server-side enum allows.
+    // Real elapsed time, not a faked clock - `triggerAutoOpen`'s fallback branch (no channel-switcher
+    // is configured in `SESSION_RESPONSE` below) reveals the panel and enables the composer from a
+    // real `setTimeout`, and this is the shortest delay the server-side enum allows.
     await input.waitFor({ state: "visible", timeout: (AUTO_OPEN_DELAY_SECONDS + 10) * 1000 });
     await expect(input).toBeEnabled();
 

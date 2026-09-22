@@ -1365,7 +1365,7 @@ describe("the panel's own title", () => {
 
     const root = await mountAndWait();
 
-    expect(root.querySelector(".ago-header h1")?.textContent).toBe("Чем мы могли бы вам помочь?");
+    expect(root.querySelector(".ago-header h1")?.textContent).toBe("Напишите нам...");
   });
 
   it("renders the site's own configured override instead of the built-in default", async () => {

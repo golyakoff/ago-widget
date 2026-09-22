@@ -22,7 +22,7 @@ export const ru: WidgetStrings = {
   },
   closeChat: "Закрыть чат",
   chatLabel: "Чат",
-  chatWithUs: "Чем мы могли бы вам помочь?",
+  chatWithUs: "Напишите нам...",
   connecting: "Подключение…",
   reconnecting: "Переподключение…",
   disconnectedReconnecting: "Соединение потеряно. Пытаемся переподключиться…",

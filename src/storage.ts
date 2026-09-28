@@ -371,6 +371,19 @@ export class WidgetStorage {
     }
   }
 
+  /**
+   * `26-271`: the raw cached accent colour alone, readable before a full `VisitorSession` exists to
+   * ask for it - `ui/widget.ts`'s constructor calls this synchronously, before the handshake that
+   * `getVisitorSession()`'s own `token`/`visitorId` fields would otherwise gate it behind, so a
+   * returning visitor's launcher can paint in the tenant's real colour on its very first frame
+   * instead of the widget's own built-in default blue. `null` for a site that has never configured
+   * one, or that this browser has not cached yet - the identical "not set" answer `getVisitorSession`
+   * gives the same key.
+   */
+  getCachedWidgetColor(): string | null {
+    return this.readSafe("widget-color");
+  }
+
   getVisitorSession(): VisitorSession | null {
     const token = this.readSafe("visitor-token");
     const visitorId = this.readSafe("visitor-id");

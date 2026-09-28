@@ -3,6 +3,7 @@ import type { MessageDto, VisitorJoinResult } from "../protocol/types.js";
 import type { WidgetConfig } from "../config.js";
 import { HubConnectionState, currentHub, hubs, joinQueue, resetFakeSignalR } from "../testing/fakeSignalR.js";
 import { en } from "../i18n/en.js";
+import { WidgetStorage } from "../storage.js";
 
 /**
  * `11-08`: the visitor-facing half of reconnect and resume - what a person looking at the panel sees
@@ -1312,6 +1313,149 @@ describe("the panel's processing notice", () => {
     const root = await mountAndWait();
 
     expect(root.querySelector(".ago-processing-notice__link")?.textContent).toBe("Подробнее");
+  });
+});
+
+/**
+ * `26-271`: found live on `golyakov.net` - a hard reload painted the widget with `ui/styles.css`'s
+ * own built-in default blue accent and switched to the tenant's real colour (a grey, `#2c3e50`)
+ * about 500ms later, once `bootstrapSession` resolved. Fixed two ways, both exercised here: a
+ * returning visitor's cached `widget-color` (`storage.ts`) is applied to the host's `--ago-accent`
+ * synchronously in the constructor, before a single element is built or the host is ever mounted, so
+ * that visitor's very first frame is already correct and needs no hiding at all; a first-ever
+ * visitor, with nothing cached yet, has their host held `visibility: hidden` until the handshake
+ * resolves - a later reveal, never the wrong colour first.
+ */
+describe("26-271: no default-accent flash before the tenant colour is known", () => {
+  function stubHandshake(overrides: Record<string, unknown> = {}): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              token: "visitor-token",
+              visitorId: "99999999-9999-9999-9999-999999999999",
+              widgetPrimaryColorHex: "#2c3e50",
+              widgetPosition: "BottomRight",
+              enabledModules: [],
+              ...overrides,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+  }
+
+  function mountedHost(): HTMLElement {
+    const host = document.querySelector<HTMLElement>("[data-ago-chat-widget]");
+    if (host === null) {
+      throw new Error("the widget did not mount");
+    }
+
+    return host;
+  }
+
+  /** A full, valid `VisitorSession` fixture - every field `WidgetStorage.setVisitorSession` writes
+   * needs a value, and only `widgetPrimaryColorHex`/`token` matter to the tests below. The token is
+   * not a real JWT, so `readTokenLifetime` reads it as opaque: `VisitorSessionManager.start` then
+   * finds it neither in the renewal window nor config-stale (both default to `false` for a lifetime
+   * it cannot read) and returns the stored session with no network call at all - which is exactly the
+   * "resolves synchronously-fast from storage" case this item's fix is for. */
+  function seedCachedSession(colorHex: string): void {
+    new WidgetStorage(config.siteKey).setVisitorSession({
+      token: "cached-token",
+      visitorId: "cached-visitor",
+      widgetPrimaryColorHex: colorHex,
+      widgetPosition: null,
+      widgetLocale: null,
+      widgetNoticeText: null,
+      widgetNoticeUrl: null,
+      enabledModules: [],
+      enabledModuleTriggerWords: {},
+      channelLinks: [],
+      widgetAttractAttention: false,
+      widgetAutoOpenEnabled: false,
+      widgetAutoOpenDelaySeconds: 30,
+      widgetAutoOpenGreetingText: null,
+      widgetContactCaptureConfirmationText: null,
+      widgetChannelSwitcherPlacement: null,
+      widgetChannelSwitcherIconSize: null,
+      widgetPanelTitle: null,
+    });
+  }
+
+  it("applies a returning visitor's cached colour before the host is even mounted - no hiding, no flash", async () => {
+    seedCachedSession("#2c3e50");
+    stubHandshake();
+
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+
+    // Nothing has awaited yet - only the constructor's own synchronous work has run. A widget that
+    // still had to wait for the handshake before applying even a cached colour would fail this.
+    const host = mountedHost();
+    expect(host.style.getPropertyValue("--ago-accent")).toBe("#2c3e50");
+    expect(host.style.visibility).not.toBe("hidden");
+
+    await flush();
+
+    // Unchanged once the handshake settles too - this token is not in its renewal window, so
+    // `VisitorSessionManager.start` never even made a request.
+    expect(host.style.getPropertyValue("--ago-accent")).toBe("#2c3e50");
+    expect(host.style.visibility).not.toBe("hidden");
+  });
+
+  it("holds a first-ever visitor's host invisible rather than paint the default blue, then reveals it once the tenant colour resolves", async () => {
+    stubHandshake({ widgetPrimaryColorHex: "#2c3e50" });
+
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+
+    // Nothing cached yet (`beforeEach`'s own `localStorage.clear()`) - the constructor has no colour
+    // to apply, so the host is hidden outright rather than left to paint the default blue for even
+    // one frame.
+    const host = mountedHost();
+    expect(host.style.visibility).toBe("hidden");
+    expect(host.style.getPropertyValue("--ago-accent")).toBe("");
+
+    await flush();
+
+    // The handshake has now resolved: the tenant's real colour is applied and the host is visible -
+    // the default blue was never shown at any point in between.
+    expect(host.style.getPropertyValue("--ago-accent")).toBe("#2c3e50");
+    expect(host.style.visibility).toBe("");
+  });
+
+  it("still reveals a first-ever visitor's host, with the built-in default, when the handshake itself fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("network error"))));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+
+    const host = mountedHost();
+    expect(host.style.visibility).toBe("hidden");
+
+    await flush();
+
+    // "Never break the host page" (embeddable-widget skill): a widget that could not learn the real
+    // colour still has to become visible eventually, with whatever it has - the built-in default
+    // here - rather than stay hidden forever because one request failed.
+    expect(host.style.visibility).toBe("");
+    expect(host.style.getPropertyValue("--ago-accent")).toBe("");
+    expect(logged).toHaveBeenCalled();
+  });
+
+  it("caches the resolved colour so the next load is instant-correct - already true of the existing mint/renew path", async () => {
+    stubHandshake({ widgetPrimaryColorHex: "#2c3e50" });
+
+    const widget = new ChatWidget(config);
+    widget.mount(document.body);
+    await flush();
+
+    expect(new WidgetStorage(config.siteKey).getCachedWidgetColor()).toBe("#2c3e50");
   });
 });
 

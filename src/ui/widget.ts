@@ -893,6 +893,21 @@ export class ChatWidget {
     this.host = host;
     this.root = root;
 
+    // `26-271`: a returning visitor's own cached accent colour, applied here - before a single
+    // element is even built, let alone mounted - so the very first frame this host ever paints
+    // already carries the tenant's real colour rather than `ui/styles.css`'s own built-in default
+    // blue. A first-ever visitor has nothing cached yet (`getCachedWidgetColor` returns `null`,
+    // `parseWidgetColor` then `undefined`): rather than let that default blue paint for the ~500ms
+    // this widget's handshake typically takes, this host is held invisible instead - `revealHost`'s
+    // own doc comment is the other half, and `bootstrapSession`'s `finally` is what guarantees it
+    // always eventually shows *something*, even if the handshake itself fails outright.
+    const cachedAccentColor = parseWidgetColor(this.storage.getCachedWidgetColor());
+    if (cachedAccentColor !== undefined) {
+      this.host.style.setProperty("--ago-accent", cachedAccentColor);
+    } else {
+      this.host.style.visibility = "hidden";
+    }
+
     const container = document.createElement("div");
     container.className = "ago-root";
     this.container = container;
@@ -1196,12 +1211,17 @@ export class ChatWidget {
    * would reveal. Reuses `VisitorSessionManager.start`'s storage short-circuit for a returning
    * visitor (that method's own doc comment states the three paths it can take).
    *
-   * The brief window between mount and this promise resolving renders with the widget's own built-in
-   * appearance (this class's own CSS defaults) - for a first-time visitor this is a real network
-   * round trip, typically well under the time it takes a person to notice or react, and for a
-   * returning visitor with a token nowhere near expiry it resolves synchronously-fast from storage
-   * with no request at all.
+   * `26-271`: the brief window between mount and this promise resolving used to render with the
+   * widget's own built-in appearance (this class's own CSS defaults) regardless of who was looking -
+   * a real, visible flash of the default blue accent for a first-time visitor's real network round
+   * trip, corrected a moment later once this method reached the `color` block below. The constructor
+   * now applies a returning visitor's cached colour before this host is ever mounted (so that visitor
+   * never sees the default at all) and holds a first-ever visitor's host invisible instead (so nobody
+   * sees the wrong colour, only a slightly later reveal) - `revealHost`, called from this method's own
+   * `finally`, is the moment that visitor's host actually appears, in this handshake's resolved colour
+   * or, failing that, the built-in default.
    *
+
    * `17-07`: this is also where the widget says something when a returning visitor's identity could
    * not be carried over. `restarted` means the stored token was past renewing, so a *new*
    * `VisitorId` was minted and the previous conversation is not reachable from this browser any
@@ -1225,52 +1245,74 @@ export class ChatWidget {
    * conversation for the server to answer about regardless.
    */
   private async bootstrapSession(): Promise<VisitorSession> {
-    const { session, restarted } = await this.sessionManager.start();
-    this.session = session;
+    // `26-271`: everything below runs inside `try`/`finally` so `revealHost` always fires exactly
+    // once this method is done - on the ordinary path, once the resolved colour (if any) has already
+    // been applied a few lines down, and on *any* failure (a rejected mint, a network error) just the
+    // same. A first-ever visitor's host was left `visibility: hidden` by the constructor above; never
+    // revealing it again on a failed handshake would be strictly worse than the flash this item
+    // exists to fix - "never break the host page" means failing open with the built-in default blue,
+    // not disappearing forever.
+    try {
+      const { session, restarted } = await this.sessionManager.start();
+      this.session = session;
 
-    const storedConversationId = this.storage.getConversationId();
-    if (storedConversationId !== null) {
-      const afterSequence = this.storage.getLastReadSequence(storedConversationId);
-      this.unreadCount = await getUnreadCount(this.config, session.token, storedConversationId, afterSequence);
-      this.renderUnreadBadge();
+      const storedConversationId = this.storage.getConversationId();
+      if (storedConversationId !== null) {
+        const afterSequence = this.storage.getLastReadSequence(storedConversationId);
+        this.unreadCount = await getUnreadCount(this.config, session.token, storedConversationId, afterSequence);
+        this.renderUnreadBadge();
+      }
+
+      const locale = parseWidgetLocale(session.widgetLocale);
+      this.locale = locale;
+      this.applyStrings(locale);
+
+      if (restarted) {
+        this.renderSystemNote(this.strings.previousChatExpired);
+      }
+
+      this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
+      const color = parseWidgetColor(session.widgetPrimaryColorHex);
+      if (color) {
+        this.host.style.setProperty("--ago-accent", color);
+      }
+
+      this.applyProcessingNotice(session.widgetNoticeText, session.widgetNoticeUrl);
+
+      // `23-63`: last, and gated on the resolved config rather than started unconditionally - a tenant
+      // who never turned «Привлекать внимание» on gets a launcher that has never once considered
+      // animating. `scheduleAttractAttention` itself re-checks `isOpen`/`attentionExhausted`, which
+      // matters here specifically because a visitor can click the (already-rendered) launcher before
+      // this handshake resolves - see that method's own doc comment.
+      if (parseAttractAttention(session.widgetAttractAttention)) {
+        this.scheduleAttractAttention();
+      }
+
+      // `23-64`/`adr/0148`: also last, and gated the identical way - a tenant who never turned
+      // «Раскрывать виджет автоматически» on gets a panel that has never once considered opening
+      // itself. `parseAutoOpenEnabled` requires *both* the flag and a usable greeting
+      // (`parseAutoOpenGreetingText`) before this schedules anything - an enabled flag with nothing to
+      // say has nothing this method could draw.
+      const autoOpenGreetingText = parseAutoOpenGreetingText(session.widgetAutoOpenGreetingText);
+      if (parseAutoOpenEnabled(session.widgetAutoOpenEnabled, autoOpenGreetingText)) {
+        this.scheduleAutoOpen(autoOpenGreetingText!, parseAutoOpenDelaySeconds(session.widgetAutoOpenDelaySeconds));
+      }
+
+      return session;
+    } finally {
+      this.revealHost();
     }
+  }
 
-    const locale = parseWidgetLocale(session.widgetLocale);
-    this.locale = locale;
-    this.applyStrings(locale);
-
-    if (restarted) {
-      this.renderSystemNote(this.strings.previousChatExpired);
-    }
-
-    this.container.classList.toggle("ago-position-left", parseWidgetPosition(session.widgetPosition) === "bottom-left");
-    const color = parseWidgetColor(session.widgetPrimaryColorHex);
-    if (color) {
-      this.host.style.setProperty("--ago-accent", color);
-    }
-
-    this.applyProcessingNotice(session.widgetNoticeText, session.widgetNoticeUrl);
-
-    // `23-63`: last, and gated on the resolved config rather than started unconditionally - a tenant
-    // who never turned «Привлекать внимание» on gets a launcher that has never once considered
-    // animating. `scheduleAttractAttention` itself re-checks `isOpen`/`attentionExhausted`, which
-    // matters here specifically because a visitor can click the (already-rendered) launcher before
-    // this handshake resolves - see that method's own doc comment.
-    if (parseAttractAttention(session.widgetAttractAttention)) {
-      this.scheduleAttractAttention();
-    }
-
-    // `23-64`/`adr/0148`: also last, and gated the identical way - a tenant who never turned
-    // «Раскрывать виджет автоматически» on gets a panel that has never once considered opening
-    // itself. `parseAutoOpenEnabled` requires *both* the flag and a usable greeting
-    // (`parseAutoOpenGreetingText`) before this schedules anything - an enabled flag with nothing to
-    // say has nothing this method could draw.
-    const autoOpenGreetingText = parseAutoOpenGreetingText(session.widgetAutoOpenGreetingText);
-    if (parseAutoOpenEnabled(session.widgetAutoOpenEnabled, autoOpenGreetingText)) {
-      this.scheduleAutoOpen(autoOpenGreetingText!, parseAutoOpenDelaySeconds(session.widgetAutoOpenDelaySeconds));
-    }
-
-    return session;
+  /**
+   * `26-271`: the other half of the constructor's own cached-colour check - undoes its
+   * `visibility: hidden` (a no-op, via `removeProperty`, on the path that never set it in the first
+   * place: a returning visitor whose cached colour was applied immediately, with nothing to hide).
+   * Called from `bootstrapSession`'s own `finally`, once per instance in practice, but idempotent
+   * either way - nothing here depends on being called exactly once.
+   */
+  private revealHost(): void {
+    this.host.style.removeProperty("visibility");
   }
 
   /**

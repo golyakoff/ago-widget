@@ -139,6 +139,19 @@ survives being embedded on somebody else's origin.
 
 ## Bundle size
 
+**39.4 KB gzipped** (152.8 KB raw, minified), `26-327` measured 2026-09-30 against a clean build of
+this commit (`AGO_API_BASE_URL=http://localhost:5009 AGO_POLICY_BASE_URL=http://localhost:5173 npm
+run build`) - **+0.2 KB gzipped** over the 39.2 KB baseline immediately before this item's own
+changes, checked directly the same way this section already asks for (stash this item's own changes,
+build, unstash, build again) rather than trusted against the `37.7 KB` entry below, which several
+unlogged items since 2026-09-21 had already moved past. The `+0.2 KB` is the whole of this item:
+`phoneFormat.ts`'s inline `+7 (XXX) XXX-XX-XX` mask (mirroring Android's `RuPhoneField.kt` byte for
+byte - `docs/backlog/26-325-web-phone-input-mirrors-android-ruphonefield.md`) replaces the old
+subscriber-only mask plus `contactCapture.ts`'s own non-interactive `🇷🇺 +7` chip and its CSS
+(`.ago-contact-capture-phone-wrap`/`-phone-prefix`, now removed) - a net addition of the caret-offset
+mapping and the `formatRuPhoneForDisplay`/`canonicalPhoneValue`/`isPhoneInputComplete` functions, no
+new dependency. Leaves 6.6 KB of the 46 KB budget unused.
+
 **37.7 KB gzipped** (145.7 KB raw, minified), the CSS/JS minification item measured 2026-09-21
 against a clean build of this commit (`AGO_API_BASE_URL=http://localhost:5009
 AGO_POLICY_BASE_URL=http://localhost:5173 npm run build`) - **-8.3 KB gzipped** against a fresh

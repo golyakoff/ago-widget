@@ -594,24 +594,31 @@ describe("answering the phone-collection step with the contact-capture form (25-
     form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
     await flush();
 
-    // Recorded exactly as `25-136` already did.
+    // Recorded exactly as `25-136` already did, except for the value itself: `26-325` fixed a latent
+    // gap this same test used to enshrine - before it, the field's own value never carried a `+7` at
+    // all (the now-removed chip showed it, but the two were never concatenated before
+    // `recordContactDetail` sent it), so the recorded phone was missing its own country code. The
+    // canonical value recorded now is `+7` plus the 10 bare national digits.
     const fetchMock = vi.mocked(globalThis.fetch);
     const contactDetailCalls = fetchMock.mock.calls.filter((call) => urlOf(call[0]).includes("/contact-details"));
-    const sentKinds = contactDetailCalls.map((call) => {
+    const sentContactDetails = contactDetailCalls.map((call) => {
       const body = (call[1] as RequestInit).body;
-      const parsed = JSON.parse(typeof body === "string" ? body : "") as { kind: string };
-      return parsed.kind;
+      return JSON.parse(typeof body === "string" ? body : "") as { kind: string; value: string };
     });
-    expect(sentKinds).toEqual(["Phone", "Name", "Email"]);
+    expect(sentContactDetails.map((detail) => detail.kind)).toEqual(["Phone", "Name", "Email"]);
+    expect(sentContactDetails[0]!.value).toBe("+70000000001");
 
     // And the step's own reply - the identical `SendStructuredMessageAsync` shape a plain `form`
     // step's own submit already uses (the "renders choice_list..." test above proves the shape;
-    // `contentKind` here is `"form"`, the kind actually being answered), with the just-submitted
-    // phone number as both the wire value and the visitor's own displayed text.
+    // `contentKind` here is `"form"`, the kind actually being answered). `26-325`: the wire `value`
+    // (`args[5]`'s own `content` JSON) is the same canonical phone `ReplyToModuleTaskHandler.
+    // HandlePhoneProvidedAsync` needs, but the visitor's own displayed bubble text (`args[1]`, the
+    // `body`) now runs through `formatRuPhoneForDisplay` - `+7 (000) 000-00-01`, not the bare wire
+    // value - matching every other phone-display site this item touches.
     const invocation = currentHub().invocationAt("SendStructuredMessageAsync", 0);
-    expect(invocation.args[1]).toBe("+7 000 000-00-01");
+    expect(invocation.args[1]).toBe("+7 (000) 000-00-01");
     expect(invocation.args[4]).toBe("form");
-    expect(invocation.args[5]).toBe(JSON.stringify({ value: "+7 000 000-00-01" }));
+    expect(invocation.args[5]).toBe(JSON.stringify({ value: "+70000000001" }));
 
     // `17-07`/`25-136`: the same stored-identity flag `submitContactCapture` always sets, unchanged by
     // this item's own move.

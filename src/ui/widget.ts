@@ -35,6 +35,7 @@ import {
 } from "./appearance.js";
 import { renderPrimitiveContent } from "./primitives/render.js";
 import { renderContactCaptureControl, type ContactCaptureResult } from "./contactCapture.js";
+import { formatRuPhoneForDisplay } from "./phoneFormat.js";
 import { loadModule } from "./moduleLoader.js";
 import { en } from "../i18n/en.js";
 import { getStrings, parseWidgetLocale, type SupportedLocale } from "../i18n/resolve.js";
@@ -3240,7 +3241,12 @@ export class ChatWidget {
           // case byte-for-byte: `contentKind` echoed back, the typed value as both `value` and
           // `displayText`), so `ReplyToModuleTaskHandler.HandlePhoneProvidedAsync` proceeds exactly as
           // it does today for an ordinary typed phone reply.
-          (result) => this.sendStructuredReply("form", result.phone, result.phone),
+          // `26-325`: `value` stays the canonical wire form `submitContactCapture` just recorded
+          // (`ReplyToModuleTaskHandler.HandlePhoneProvidedAsync` needs the same shape an ordinary typed
+          // reply would send), but `displayText` - what the visitor's own bubble shows back to them -
+          // now runs through `formatRuPhoneForDisplay` so it reads `+7 (916) 222-22-22`, matching every
+          // other phone-display site this item touches, rather than the bare digits-only wire value.
+          (result) => this.sendStructuredReply("form", result.phone, formatRuPhoneForDisplay(result.phone)),
         ),
       );
     }

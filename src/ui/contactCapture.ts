@@ -1,7 +1,7 @@
 import type { ConsentDocumentSummary, ConsentRequirement } from "../consent.js";
 import type { WidgetStrings } from "../i18n/strings.js";
 import { isValidEmail } from "./emailValidation.js";
-import { formatPhoneInput, isExplicitNonRussianPhoneValue } from "./phoneFormat.js";
+import { canonicalPhoneValue, editPhoneInput, isPhoneInputComplete } from "./phoneFormat.js";
 
 /**
  * `23-09`/`docs/design/decisions.md` §4: the visitor's own name-and-phone control - a widget-native
@@ -121,51 +121,26 @@ export function renderContactCaptureControl(
 
   const phoneInput = document.createElement("input");
   phoneInput.type = "tel";
-  phoneInput.className = "ago-contact-capture-input ago-contact-capture-phone-input";
+  phoneInput.className = "ago-contact-capture-input";
   phoneInput.placeholder = strings.contactCapturePhonePlaceholder;
   phoneInput.setAttribute("aria-label", strings.contactCapturePhonePlaceholder);
   phoneInput.autocomplete = "tel";
   phoneInput.required = true;
 
-  // `25-28`: the +7 mask, live on every keystroke - `phoneFormat.ts`'s own doc comment carries the
-  // full reasoning (hand-rolled vs. library, and the "+<code>" escape hatch for a non-Russian
-  // visitor). Reformatting always moves the caret to the end; a hand-rolled mask this small does not
-  // attempt to preserve a mid-string cursor position (see that file's own remarks on the trade-off).
-  // `25-186` touches none of this - the mask's own input/output is unchanged, only what sits beside
-  // the field in the DOM changed. `25-209`: the mask's own Russian-shaped output no longer repeats
-  // the `+7` the prefix chip below already shows, and every reformat also re-checks whether that
-  // chip should still be showing at all - see `updatePhonePrefixVisibility` below.
+  // `26-325`/`26-327`: the mask is now inline, mirroring Android's `RuPhoneField` byte-for-byte
+  // (`phoneFormat.ts`'s own top doc comment carries the full reasoning) - a fixed, non-deletable `+7`
+  // lives inside the field itself, not in a separate chip beside it (`25-186`/`25-209`'s own
+  // `🇷🇺 +7` chip is gone; see `styles.css` for the matching CSS removal). `editPhoneInput` recomputes
+  // both the field's text and its caret offset from whatever the browser's own default keystroke/paste
+  // handling already produced - one path for both, per the backlog item's own requirement - and this
+  // handler applies the result back onto the field. The non-Russian escape hatch (`+<code>` other than
+  // `+7`) is unchanged: `editPhoneInput` still recognises it and leaves that value unmasked.
   phoneInput.addEventListener("input", () => {
-    phoneInput.value = formatPhoneInput(phoneInput.value);
-    updatePhonePrefixVisibility();
+    const caret = phoneInput.selectionStart ?? phoneInput.value.length;
+    const edit = editPhoneInput(phoneInput.value, caret);
+    phoneInput.value = edit.value;
+    phoneInput.setSelectionRange(edit.caret, edit.caret);
   });
-
-  // `25-186`: the mask above already, functionally, locks this field to Russia by default - what was
-  // missing was purely visual, nothing told a visitor *that* before they started typing. A
-  // non-interactive flag+dialling-code prefix to the left of the field, the same treatment
-  // `ago-console`'s new `PhoneInput.tsx` gives its own phone fields - there is no React here, so this
-  // is a parallel small piece of markup/CSS rather than a shared import. `aria-hidden` on the prefix:
-  // it is decorative, and `phoneInput`'s own `aria-label` above already names the field for a screen
-  // reader without it.
-  //
-  // `25-209`: the chip asserts "Russia" via `🇷🇺 +7`, which stops being true the moment a visitor
-  // engages `phoneFormat.ts`'s own non-Russian escape hatch - a value like `+1 555 019 4567` sitting
-  // next to a `🇷🇺 +7` chip would assert a country the typed number itself contradicts. So the chip
-  // hides (`.hidden`, the same toggle `errorNote` above already uses for a conditionally-shown
-  // element) the moment `isExplicitNonRussianPhoneValue` says the field's current value has left the
-  // RU-default shape; `updatePhonePrefixVisibility` re-runs that check after every reformat rather
-  // than re-deriving the escape-hatch condition here a second time.
-  const phoneWrap = document.createElement("div");
-  phoneWrap.className = "ago-contact-capture-phone-wrap";
-  const phonePrefix = document.createElement("span");
-  phonePrefix.className = "ago-contact-capture-phone-prefix";
-  phonePrefix.setAttribute("aria-hidden", "true");
-  phonePrefix.textContent = "🇷🇺 +7";
-  phoneWrap.append(phonePrefix, phoneInput);
-
-  function updatePhonePrefixVisibility(): void {
-    phonePrefix.hidden = isExplicitNonRussianPhoneValue(phoneInput.value);
-  }
 
   // `23-58`: the third required field - `VisitorContactDetailKind.Email` on the wire
   // (`recordContactDetail(..., "Email", ...)`, `ui/widget.ts`'s `submitContactCapture`), a kind that
@@ -210,7 +185,7 @@ export function renderContactCaptureControl(
   errorNote.hidden = true;
   errorNote.setAttribute("role", "alert");
 
-  form.append(nameInput, phoneWrap, emailInput);
+  form.append(nameInput, phoneInput, emailInput);
   if (contactCheckbox && consent?.contact) {
     form.appendChild(buildConsentLabel(contactCheckbox, consent.contact, requirePolicyBaseUrl(policyBaseUrl)));
   }
@@ -229,7 +204,6 @@ export function renderContactCaptureControl(
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = nameInput.value.trim();
-    const phone = phoneInput.value.trim();
     const email = emailInput.value.trim();
 
     // `23-58`: all three are required (`nameInput.required`/`phoneInput.required`/
@@ -237,9 +211,17 @@ export function renderContactCaptureControl(
     // validation only runs for a *user-driven* submit - a programmatically dispatched `submit` event
     // skips it entirely, the same gap `24-05`'s own consent-checkbox guard below already exists to
     // close - so every required field is re-checked here too, never left to the DOM alone.
-    if (!name || !phone || !email) {
+    //
+    // `26-325`: the phone gate is `isPhoneInputComplete`, not `Boolean(phone)` - a fixed `+7` with one
+    // digit typed is already non-blank but nowhere near dialable (the spec's own "Completeness = exactly
+    // 10 national digits", the web equivalent of Android's `isRuPhoneComplete`). `phone` itself is the
+    // canonical value (`phoneFormat.ts`'s own `canonicalPhoneValue`) - `+7` plus the national digits, no
+    // punctuation - not the masked display text the field shows while being typed.
+    if (!name || !isPhoneInputComplete(phoneInput.value) || !email) {
       return;
     }
+
+    const phone = canonicalPhoneValue(phoneInput.value);
 
     // `25-28`: a real, named regex check (`emailValidation.ts`'s own doc comment names the pattern
     // and why), not `type="email"`'s own loose native checking alone - and, unlike the empty-field

@@ -88,19 +88,26 @@ describe("renderContactCaptureControl", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("submits the trimmed name, phone and email, and shows a confirmation once it resolves", async () => {
+  it("submits the trimmed name, canonical phone and email, and shows a confirmation once it resolves", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const control = renderContactCaptureControl(en, onSubmit);
     const form = control.querySelector("form")!;
 
     setValue(nameInput(control), "  Ivan  ");
+    // `26-325`: submitted directly via `setValue` (the native property setter), bypassing the `input`
+    // listener entirely - the same "no `input` event fires" gap the test file's own `setValue` helper
+    // doc names below. `canonicalPhoneValue` still recovers the right wire value from whatever
+    // punctuation the field happens to hold at submit time, mask-applied or not.
     setValue(phoneInput(control), "  +7 000 000-00-01  ");
     setValue(emailInput(control), "  ivan@example.invalid  ");
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
+    // `26-325`: the submitted value is now the canonical `+7` + 10 bare national digits - no
+    // punctuation - not the punctuated text the field happened to hold, mirroring Android's own
+    // "already what a search/submit/save call sends the server" canonical form.
     expect(onSubmit).toHaveBeenCalledWith({
       name: "Ivan",
-      phone: "+7 000 000-00-01",
+      phone: "+70000000001",
       email: "ivan@example.invalid",
       acceptContact: false,
       acceptMarketing: false,
@@ -135,23 +142,33 @@ describe("renderContactCaptureControl", () => {
     expect(control.textContent).not.toContain(en.contactCaptureConfirmation.replaceAll("{name}", "Ivan"));
   });
 
-  // `25-28`/`25-209`: the +7 mask, wired via a live `input` listener - `phoneFormat.ts`'s own tests
-  // cover the formatting logic in isolation; this is the wiring proof that it actually runs as the
-  // visitor types, not just that the pure function is correct. The value itself no longer repeats the
-  // `+7` the prefix chip beside it already shows (`25-209`) - `wraps the phone field...` below covers
-  // that chip.
-  it("masks a bare digit into the Russian shape as the visitor types, without repeating +7", () => {
+  // `26-325`/`26-327`: the mask is now wired via `phoneFormat.ts`'s own `editPhoneInput`, mirroring
+  // Android's `RuPhoneField` byte-for-byte - `phoneFormat.test.ts` covers that function's own logic in
+  // isolation; this is the wiring proof that it actually runs as the visitor types. The fixed `+7` now
+  // lives inside the field itself, not in a separate chip beside it (`25-186`/`25-209`'s own chip is
+  // gone - there is no longer a `.ago-contact-capture-phone-wrap`/`-phone-prefix` element to test).
+  it("masks a bare digit into the Russian shape as the visitor types, with the fixed +7 inline", () => {
     const control = renderContactCaptureControl(en, vi.fn());
     const input = phoneInput(control);
 
     setValue(input, "9");
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
-    expect(input.value).toBe("(9");
+    expect(input.value).toBe("+7 (9");
   });
 
-  // `25-28`: the stated escape hatch - an explicit "+" followed by a country code other than 7 is
-  // left as digits only, never forced into the +7 (9XX) shape.
+  it("builds the full inline mask as digits accumulate", () => {
+    const control = renderContactCaptureControl(en, vi.fn());
+    const input = phoneInput(control);
+
+    setValue(input, "9161234567");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(input.value).toBe("+7 (916) 123-45-67");
+  });
+
+  // `25-209`, unchanged by `26-325`: the stated escape hatch - an explicit "+" followed by a country
+  // code other than 7 is left as digits only, never forced into the +7 (9XX) shape.
   it("lets an explicit non-Russian country code through the mask unformatted", () => {
     const control = renderContactCaptureControl(en, vi.fn());
     const input = phoneInput(control);
@@ -162,91 +179,38 @@ describe("renderContactCaptureControl", () => {
     expect(input.value).toBe("+1555");
   });
 
-  // `25-209`: the resolution the backlog item states explicitly - once the visitor's own typed value
-  // leaves the RU-default shape, the "🇷🇺 +7" chip stops asserting a country the value contradicts.
-  describe("the 🇷🇺 +7 prefix hides once the non-Russian escape hatch engages", () => {
-    function phonePrefix(root: HTMLElement): HTMLElement {
-      const prefix = root.querySelector<HTMLElement>(".ago-contact-capture-phone-prefix");
-      if (prefix === null) {
-        throw new Error("no phone prefix");
-      }
+  // `26-325`'s own completeness gate - a submit is blocked while the RU number is short of the full
+  // 10 national digits, not merely "non-blank" (`phoneFormat.test.ts`'s `isPhoneInputComplete` covers
+  // the pure logic; this is the wiring proof at the form level).
+  it("does not call onSubmit while the phone is Russian-shaped but incomplete", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit);
+    const form = control.querySelector("form")!;
+    const input = phoneInput(control);
 
-      return prefix;
-    }
-
-    it("is visible by default, before anything is typed", () => {
-      const control = renderContactCaptureControl(en, vi.fn());
-
-      expect(phonePrefix(control).hidden).toBe(false);
-    });
-
-    it("stays visible while the value is still Russian-shaped", () => {
-      const control = renderContactCaptureControl(en, vi.fn());
-      const input = phoneInput(control);
-
-      setValue(input, "9161234567");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-
-      expect(phonePrefix(control).hidden).toBe(false);
-    });
-
-    it("hides the moment an explicit non-Russian country code is typed", () => {
-      const control = renderContactCaptureControl(en, vi.fn());
-      const input = phoneInput(control);
-
-      setValue(input, "+1555");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-
-      expect(phonePrefix(control).hidden).toBe(true);
-    });
-
-    it("reappears if the visitor clears the field back to the RU-default shape", () => {
-      const control = renderContactCaptureControl(en, vi.fn());
-      const input = phoneInput(control);
-
-      setValue(input, "+1555");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      expect(phonePrefix(control).hidden).toBe(true);
-
-      setValue(input, "");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-
-      expect(phonePrefix(control).hidden).toBe(false);
-    });
-  });
-
-  // `25-186`: the flag+dialling-code prefix - `ago-console`'s own `PhoneInput.tsx` gets the identical
-  // treatment; there is no React here, so this is the parallel plain-DOM markup/CSS instead of a
-  // shared import (`contactCapture.ts`'s own remarks on the phone field say why).
-  it("wraps the phone field in .ago-contact-capture-phone-wrap with a 🇷🇺 +7 prefix beside it", () => {
-    const control = renderContactCaptureControl(en, vi.fn());
-
-    const wrap = control.querySelector<HTMLDivElement>(".ago-contact-capture-phone-wrap");
-    expect(wrap).not.toBeNull();
-    const prefix = wrap!.querySelector(".ago-contact-capture-phone-prefix");
-    expect(prefix).not.toBeNull();
-    expect(prefix!.textContent).toBe("🇷🇺 +7");
-    expect(prefix!.getAttribute("aria-hidden")).toBe("true");
-    // The real phone input lives inside that same wrapper, not as a sibling beside it - the mask's
-    // own wiring below only means anything if this is the same element the mask listener is on.
-    expect(wrap!.contains(phoneInput(control))).toBe(true);
-  });
-
-  // `25-186`'s own regression risk, stated explicitly: the mask above (`25-28`) is wired directly on
-  // the phone `<input>`, but that input now sits one level deeper in the DOM - nested inside
-  // `.ago-contact-capture-phone-wrap` rather than a direct child of the form. Typing through the
-  // wrapper's own reference to the input, not the flat `phoneInput(control)` helper the pre-25-186
-  // tests above use, is what makes this a real proof that the new nesting did not silently detach the
-  // `input` listener - a fails-before check against a build that mounted the listener on the wrong node.
-  it("still reformats through the mask once the field is nested inside the new wrapper", () => {
-    const control = renderContactCaptureControl(en, vi.fn());
-    const wrap = control.querySelector<HTMLDivElement>(".ago-contact-capture-phone-wrap")!;
-    const input = wrap.querySelector<HTMLInputElement>('input[type="tel"]')!;
-
-    setValue(input, "9");
+    setValue(nameInput(control), "Ivan");
+    setValue(input, "9161234"); // 7 of the 10 national digits
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    setValue(emailInput(control), "ivan@example.invalid");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await Promise.resolve();
 
-    expect(input.value).toBe("(9");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("calls onSubmit with the canonical phone once the 10th national digit lands", () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const control = renderContactCaptureControl(en, onSubmit);
+    const form = control.querySelector("form")!;
+    const input = phoneInput(control);
+
+    setValue(nameInput(control), "Ivan");
+    setValue(input, "9161234567");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    setValue(emailInput(control), "ivan@example.invalid");
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ phone: "+79161234567" }));
   });
 
   // `25-28`: a real, named regex check runs before submit - not just `type="email"`'s own loose
@@ -391,8 +355,11 @@ describe("renderContactCaptureControl - consent", () => {
     consentCheckboxes(control)[0]!.checked = true;
     form.dispatchEvent(new Event("submit", { cancelable: true }));
 
+    // `26-325`: the canonical wire value - see the earlier "submits the trimmed name, canonical
+    // phone and email" test for why "+7 000 000-00-01" (set directly via `setValue`, no `input` event)
+    // becomes "+70000000001" at submit time.
     expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ phone: "+7 000 000-00-01", acceptContact: true, acceptMarketing: false }),
+      expect.objectContaining({ phone: "+70000000001", acceptContact: true, acceptMarketing: false }),
     );
   });
 
